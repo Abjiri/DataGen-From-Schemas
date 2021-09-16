@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns="http://www.ibm.com" xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.ibm.com">
+   
+    <xsd:element name="ÁRVoRe-01" type="xsd:string" block   ="substitution" default="boas Matos&amp;
+        ''vcxv+*|\|fds0f0s==?#$#$%#/%/1_nhos" id="ÓlÁ-3"/>
+    
+</xsd:schema>
