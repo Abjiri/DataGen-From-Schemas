@@ -3,12 +3,14 @@
 {
   // Geral ------------------------------
 
+  // verificar se o elemento pai é o <schema>
+  const atRoot = () => !elem_depth || !attr_depth
   // verificar se não foi definido um prefixo para a schema
   const noSchemaPrefix = () => default_prefix === null
   // verificar se o prefixo usado foi declarado na definição da schema
   const existsPrefix = p => prefixes.includes(p) ? true : error("Este prefixo não foi declarado no início da schema!")
   // verificar se as aspas/apóstrofes são fechados consistentemente
-  const checkQuotes = (q1,q2) => q1 === q2 ? true : error("Deve encapsular o valor em aspas ou em apóstrofes. Não pode usar um de cada!")
+  const checkQM = (q1,q2) => q1 === q2 ? true : error("Deve encapsular o valor em aspas ou em apóstrofes. Não pode usar um de cada!")
   // criar um objeto de boleanos a partir de um array com os nomes das propriedades pretendidas
   const createObjectFrom = arr => arr.reduce((obj,item) => { obj[item] = 0; return obj }, {})
   // juntar todos os atributos do elemento num só objeto
@@ -73,16 +75,16 @@
   }
   
 
-  // Elementos ------------------------------
+  // <element> ------------------------------
 
-  // número de elementos de tipo complexo aninhados correntemente
+  // número de elementos aninhados correntemente
   let elem_depth = 0
+  // número de atributos aninhados correntemente
+  let attr_depth = 0
   // nomes dos elementos globais declarados na schema, para verificar a validade dos atributos "ref"
   let global_elems = []
   // atributos "id" de elementos da schema - têm de ser únicos
   let elem_ids = []
-  // nomes dos simple/complexTypes definidos na schema
-  let local_types = []
 
   // validar um elemento básico (sem simple/complexType) - verificar que tem os atributos essenciais
   const validateBasicElement = attrs => "ref" in attrs || ("name" in attrs && "type" in attrs)
@@ -141,6 +143,49 @@
 
     return attrs
   }
+
+  // validar os prefixos de abertura e fecho de um elemento
+  function check_elemPrefixes(merged, prefix, close_prefix, elem_name) {
+    // merged é um boleano que indica se a abertura e fecho são feitos no mesmo elemento (pode acontecer com <element/>) ou não
+    if (!merged && prefix !== close_prefix) return error(`O prefixo do elemento de fecho do <${elem_name}> tem de ser igual ao prefixo do elemento de abertura!`)
+    if (prefix !== null && prefix !== default_prefix) return error("Prefixo inválido!")
+    if (prefix === null && !noSchemaPrefix()) return error("Precisa de prefixar o elemento com o prefixo do respetivo namespace!")
+    return true
+  }
+
+
+  // <simpleType> e <complexType> ------------------------------
+  
+  // nomes dos novos tipos definidos na schema - têm de ser únicos
+  let local_types = []
+
+  // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes caso seja único
+  function newTypeName(name) {
+    if (local_types.includes(name)) return error("Já existe um simpleType/complexType com este nome nesta schema!")
+    local_types.push(name)
+    return true
+  }
+  
+  // validar os atributos de um elemento <simpleType>
+  function check_simpleTypeAttrs(arr) {
+    let keys = [], // array com os nomes dos atributos
+        attrs = {} // objeto com os valores dos atributos
+        
+    for (let i = 0; i < arr.length; i++) {
+      // verificar que não há atributos repetidos
+      if (keys.includes(arr[i].attr)) return error("O elemento <simpleType> não pode possuir atributos repetidos!")
+      else {
+        keys.push(arr[i].attr)
+        attrs[arr[i].attr] = arr[i].val
+      }
+    }
+
+    // restrições relativas à profundidade dos elementos
+    if (atRoot() && !keys.includes("name")) return error("O atributo 'name' é requirido se o pai do elemento <simpleType> for o <schema>!")
+    if (!atRoot() && keys.includes("name")) return error("O atributo 'name' é proibido se o pai do elemento <simpleType> não for o <schema>!")
+
+    return attrs
+  }
 }
 
 DSL_text = ws xml:XML_declaration ws schema { return prefixes }
@@ -148,33 +193,22 @@ DSL_text = ws xml:XML_declaration ws schema { return prefixes }
 
 // ----- Declaração XML -----
 
-XML_declaration = "<?xml" ws XML_version XML_encoding? XML_standalone? '?>'
+XML_declaration = "<?xml" XML_version XML_encoding? XML_standalone? ws '?>'
 
-XML_version = "version" ws "=" ws q1:QM "1.0" q2:QM ws &{return checkQuotes(q1,q2)}
+XML_version = ws2 "version" ws "=" ws q1:QM "1.0" q2:QM &{return checkQM(q1,q2)}
 
-XML_encoding = "encoding" ws "=" ws q1:QM XML_encoding_value q2:QM ws &{return checkQuotes(q1,q2)}
+XML_encoding = ws2 "encoding" ws "=" ws q1:QM XML_encoding_value q2:QM &{return checkQM(q1,q2)}
 XML_encoding_value = "UTF-"("8"/"16") / "ISO-10646-UCS-"("2"/"4") / "ISO-8859-"[1-9] / "ISO-2022-JP" / "Shift_JIS" / "EUC-JP"
 
-XML_standalone = "standalone" ws "=" ws q1:QM XML_standalone_value q2:QM ws &{return checkQuotes(q1,q2)}
+XML_standalone = ws2 "standalone" ws "=" ws q1:QM XML_standalone_value q2:QM &{return checkQM(q1,q2)}
 XML_standalone_value = "yes" / "no"
 
 
 // ----- Declaração da Schema -----
 
-schema = begin_schema element* end_schema
+schema = begin_schema schema_content end_schema
 
-begin_schema =  "<" (p:NCName ":" {default_prefix = p})? "schema" ws schema_declaration ">" ws
-schema_declaration = el:(formDefault / blockDefault / finalDefault / namespace /
-                     schema_id / schema_lang / schema_version / targetNamespace)+ &{return check_schemaAttrs(el)} {return el}
-
-formDefault = attr:$(("attribute"/"element")"FormDefault") ws "=" ws q1:QM val:form_values q2:QM ws &{return checkQuotes(q1,q2)} {return {attr, val}}
-blockDefault = "blockDefault" ws "=" ws q1:QM val:elem_block_values q2:QM ws                        &{return checkQuotes(q1,q2)} {return {attr: "blockDefault", val}}
-finalDefault = "finalDefault" ws "=" ws q1:QM val:finalDefault_values q2:QM ws                      &{return checkQuotes(q1,q2)} {return {attr: "finalDefault", val}}
-namespace = "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws q1:QM val:url q2:QM ws              &{return checkQuotes(q1,q2)} {prefixes.push(prefix); return {attr: "namespace", prefix, val}}
-schema_id = "id" ws "=" ws q1:QM val:ID q2:QM ws                                                    &{return checkQuotes(q1,q2)} {return {attr: "id", val}}
-schema_lang = "xml:lang" ws "=" ws val:language ws                                                                               {return {attr: "lang", val}}
-schema_version = "version" ws "=" ws val:string ws                                                                               {return {attr: "version", val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
-targetNamespace = "targetNamespace" ws "=" ws q1:QM val:url q2:QM ws                                &{return checkQuotes(q1,q2)} {return {attr: "targetNamespace", val}}
+begin_schema = "<" (p:NCName ":" {default_prefix = p})? "schema" schema_attrs ws ">" ws
 
 end_schema = "</" prefix:(p:NCName ":" {return p})? "schema" ws ">" ws &{
   if (!noSchemaPrefix() && prefix === null) return error("Precisa de prefixar o elemento de fecho da schema!")
@@ -183,53 +217,115 @@ end_schema = "</" prefix:(p:NCName ":" {return p})? "schema" ws ">" ws &{
   return true
 }
 
+schema_attrs = el:(formDefault / blockDefault / finalDefault / namespace /
+                     elem_id / elem_lang / schema_version / targetNamespace)+ &{return check_schemaAttrs(el)} {return el}
+
+formDefault = ws2 attr:$(("attribute"/"element")"FormDefault") ws "=" ws q1:QM val:form_values q2:QM &{return checkQM(q1,q2)} {return {attr, val}}
+blockDefault = ws2 "blockDefault" ws "=" ws q1:QM val:elem_block_values q2:QM                        &{return checkQM(q1,q2)} {return {attr: "blockDefault", val}}
+finalDefault = ws2 "finalDefault" ws "=" ws q1:QM val:finalDefault_values q2:QM                      &{return checkQM(q1,q2)} {return {attr: "finalDefault", val}}
+namespace = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws q1:QM val:url q2:QM              &{return checkQM(q1,q2)} {prefixes.push(prefix); return {attr: "namespace", prefix, val}}
+schema_version = ws2 "version" ws "=" ws val:string                                                                           {return {attr: "version", val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
+targetNamespace = ws2 "targetNamespace" ws "=" ws q1:QM val:url q2:QM                                &{return checkQM(q1,q2)} {return {attr: "targetNamespace", val}}
+
+schema_content = ((/* include / import / redefine / */ annotation)* (((simpleType /* / complexType / group / attributeGroup */) / element /* / attribute / notation */) annotation*)*)
+
 
 // ----- <element> -----
 
-element = "<" prefix:(p:NCName ":" {return p})? "element" ws attrs:elem_attributes 
-          close:("/>" ws {return {basic: true}} / ">" ws /* element_content */ close_prefix:close_element {return {basic: false, close_prefix}}) &{
-  if (close && !validateBasicElement(attrs)) return error("Um elemento básico deve ter, pelo menos, os atributos 'name' e 'type' ou o atributo 'ref'!")
-  if (!close && prefix !== close.close_prefix) return error("O prefixo do elemento de fecho do <element> tem de ser igual ao prefixo do elemento de abertura!")
-  if (prefix !== null && prefix !== default_prefix) return error("Prefixo inválido!")
-  if (prefix === null && !noSchemaPrefix()) return error("Precisa de prefixar o elemento com o prefixo do respetivo namespace!")
-  return true
+element = "<" prefix:(p:NCName ":" {return p})? "element" attrs:element_attrs ws
+          close:("/>" ws {return {basic: true}} / (">" {elem_depth++}) ws element_content close_prefix:close_element {return {basic: false, close_prefix}}) &{
+  if (close.basic && !validateBasicElement(attrs)) return error("Um elemento básico deve ter, pelo menos, os atributos 'name' e 'type' ou o atributo 'ref'!")
+  return check_elemPrefixes(close.basic, prefix, close.close_prefix, "element")
 }
 
 close_element = "</" prefix:(p:NCName ":" {return p})? "element" ws ">" ws {return prefix}
 
-complex_element = begin_complexElem ws end_complexElem 
+element_attrs = el:(elem_abstract / elem_block / elem_default / elem_substitutionGroup /
+                elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
+                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)+ &{return check_elemAttrs(el)} {return mergeElementAttrs(el)}
 
-begin_complexElem = "<" (p:NCName { return existsPrefix(p) }) ":element" ws /* atributos */ ">"
-end_complexElem = "</" (p:NCName { return existsPrefix(p) }) ":element" ws "/>" // é preciso verificar se é o mesmo prefixo com que o elemento foi aberto
+elem_abstract = ws2 "abstract" ws "=" ws q1:QM val:boolean q2:QM                 &{return checkQM(q1,q2)}                     {return {attr: "abstract", val}}
+elem_block = ws2 "block" ws "=" ws q1:QM val:elem_block_values q2:QM             &{return checkQM(q1,q2)}                     {return {attr: "block", val}}
+elem_default = ws2 "default" ws "=" ws val:string                                                                             {return {attr: "default", val}}
+elem_final = ws2 "final" ws "=" ws q1:QM val:elem_final_values q2:QM             &{return checkQM(q1,q2)}                     {return {attr: "final", val}}
+elem_fixed = ws2 "fixed" ws "=" ws val:string                                                                                 {return {attr: "fixed", val}}
+elem_form = ws2 "form" ws "=" ws q1:QM val:form_values q2:QM                     &{return checkQM(q1,q2)}                     {return {attr: "form", val}}
+elem_id = ws2 "id" ws "=" ws q1:QM val:ID q2:QM                                  &{return checkQM(q1,q2)}                     {return {attr: "id", val}}
+elem_maxOccurs = ws2 "maxOccurs" ws "=" ws q1:QM val:(int/"unbounded") q2:QM     &{return checkQM(q1,q2)}                     {return {attr: "maxOccurs", val}}
+elem_minOccurs = ws2 "minOccurs" ws "=" ws q1:QM val:int q2:QM                   &{return checkQM(q1,q2)}                     {return {attr: "minOccurs", val}}
+elem_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM                          &{return checkQM(q1,q2)}                     {if (!elem_depth) global_elems.push(val); return {attr: "name", val}}
+elem_nillable = ws2 "nillable" ws "=" ws q1:QM val:boolean q2:QM                 &{return checkQM(q1,q2)}                     {return {attr: "nillable", val}}
+elem_lang = ws2 "xml:lang" ws "=" ws q1:QM val:language q2:QM                    &{return checkQM(q1,q2)}                     {return {attr: "lang", val}}
+elem_ref = ws2 "ref" ws "=" ws q1:QM val:QName q2:QM                             &{return checkQM(q1,q2) && validateRef(val)} {return {attr: "ref", val}}
+elem_source = ws2 "source" ws "=" ws q1:QM val:url q2:QM                         &{return checkQM(q1,q2)}                     {return {attr: "source", val}}
+elem_substitutionGroup = ws2 "substitutionGroup" ws "=" ws q1:QM val:QName q2:QM &{return checkQM(q1,q2)}                     {return {attr: "substitutionGroup", val}}
+elem_type = ws2 "type" ws "=" ws q1:QM val:elem_type_value q2:QM                 &{return checkQM(q1,q2)}                     {return {attr: "type", val}}
 
-complexType = "<" close:"/"? (p:NCName { return existsPrefix(p) }) ":complexType" ws ">" { element_depth += (close === null ? 1 : -1) }
-
-elem_attributes = el:(elem_abstract / elem_block / elem_default / elem_substitutionGroup /
-                  elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
-                  elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)+ &{return check_elemAttrs(el)} {return mergeElementAttrs(el)}
-
-elem_abstract = "abstract" ws "=" ws q1:QM val:boolean q2:QM ws                 &{return checkQuotes(q1,q2)}                     {return {attr: "abstract", val}}
-elem_block = "block" ws "=" ws q1:QM val:elem_block_values q2:QM ws             &{return checkQuotes(q1,q2)}                     {return {attr: "block", val}}
-elem_default = "default" ws "=" ws val:string ws                                                                                 {return {attr: "default", val}}
-elem_final = "final" ws "=" ws q1:QM val:elem_final_values q2:QM ws             &{return checkQuotes(q1,q2)}                     {return {attr: "final", val}}
-elem_fixed = "fixed" ws "=" ws val:string ws                                                                                     {return {attr: "fixed", val}}
-elem_form = "form" ws "=" ws q1:QM val:form_values q2:QM ws                     &{return checkQuotes(q1,q2)}                     {return {attr: "form", val}}
-elem_id = "id" ws "=" ws q1:QM val:ID q2:QM ws                                  &{return checkQuotes(q1,q2)}                     {return {attr: "id", val}}
-elem_maxOccurs = "maxOccurs" ws "=" ws q1:QM val:(int/"unbounded") q2:QM ws     &{return checkQuotes(q1,q2)}                     {return {attr: "maxOccurs", val}}
-elem_minOccurs = "minOccurs" ws "=" ws q1:QM val:int q2:QM ws                   &{return checkQuotes(q1,q2)}                     {return {attr: "minOccurs", val}}
-elem_name = "name" ws "=" ws q1:QM val:NCName q2:QM ws                                                                           {if (!elem_depth) global_elems.push(val); return {attr: "name", val}}
-elem_nillable = "nillable" ws "=" ws q1:QM val:boolean q2:QM ws                 &{return checkQuotes(q1,q2)}                     {return {attr: "nillable", val}}
-elem_ref = "ref" ws "=" ws q1:QM val:QName q2:QM ws                             &{return checkQuotes(q1,q2) && validateRef(val)} {return {attr: "ref", val}}
-elem_substitutionGroup = "substitutionGroup" ws "=" ws q1:QM val:QName q2:QM ws                                                  {return {attr: "substitutionGroup", val}}
-elem_type = "type" ws "=" ws q1:QM val:elem_type_value q2:QM ws                 &{return checkQuotes(q1,q2)}                     {return {attr: "type", val}}
+element_content = (annotation? ((simpleType /* / complexType */)? /* (unique / key / keyref)* */))
 
 
 // ----- <simpleType> -----
+
+simpleType = "<" prefix:(p:NCName ":" {return p})? "simpleType" simpleType_attrs ws ">" ws simpleType_content
+             "</" close_prefix:(p:NCName ":" {return p})? "simpleType" ws ">" ws
+             &{return check_elemPrefixes(false, prefix, close_prefix, "simpleType")}
+
+simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* &{return check_simpleTypeAttrs(el)} {return el}
+
+simpleType_final = ws2 "final" ws "=" ws q1:QM val:simpleType_final_values q2:QM ws &{return checkQM(q1,q2)}                     {return {attr: "final", val}}
+simpleType_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM ws                    &{return checkQM(q1,q2) && newTypeName(val)} {return {attr: "name", val}}
+
+simpleType_content = (annotation? /* (restriction / list / union) */)
+
+
+// ----- <annotation> -----
+
+annotation = "<" prefix:(p:NCName ":" {return p})? "annotation" elem_id? ws ">" ws annotation_content
+             "</" close_prefix:(p:NCName ":" {return p})? "annotation" ws ">" ws
+             &{return check_elemPrefixes(false, prefix, close_prefix, "annotation")}
+
+annotation_content = (appinfo / documentation)*
+
+
+// ----- <appinfo> -----
+
+appinfo = appinfo_simple / appinfo_prefix
+
+appinfo_simple = "<appinfo" elem_source? ws ">" ws content:appinfo_content_simple? close_appinfo_simple {return content}
+appinfo_prefix = "<" prefix:(p:NCName ":" {return p})? "appinfo" elem_source? ws ">" ws
+                 content:appinfo_content_prefix? close_prefix:close_appinfo_prefix
+                 &{return check_elemPrefixes(false, prefix, close_prefix, "appinfo")} {return content}
+
+appinfo_content_simple = $((!close_appinfo_simple). appinfo_content_simple*)
+appinfo_content_prefix = $((!close_appinfo_prefix). appinfo_content_prefix*)
+
+close_appinfo_simple = "</appinfo" ws ">" ws
+close_appinfo_prefix = "</" close_prefix:(p:NCName ":" {return p})? "appinfo" ws ">" ws {return close_prefix}
+
+
+// ----- <documentation> -----
+
+documentation = doc_simple / doc_prefix
+
+documentation_attrs = elem_source elem_lang? / elem_lang elem_source?
+
+doc_simple = "<documentation" documentation_attrs? ws ">" ws content:doc_content_simple? close_doc_simple {return content}
+doc_prefix = "<" prefix:(p:NCName ":" {return p})? "documentation" documentation_attrs? ws ">" ws 
+             content:doc_content_prefix? close_prefix:close_doc_prefix
+             &{return check_elemPrefixes(false, prefix, close_prefix, "documentation")} {return content}
+
+doc_content_simple = $((!close_doc_simple). doc_content_simple*)
+doc_content_prefix = $((!close_doc_prefix). doc_content_prefix*)
+
+close_doc_simple = "</documentation" ws ">" ws
+close_doc_prefix = "</" close_prefix:(p:NCName ":" {return p})? "documentation" ws ">" ws {return close_prefix}
+
 
 
 // ----- Valores -----
 
 ws "whitespace" = [ \t\n\r]*
+ws2 = [ \t\n\r]+
 QM = '"' / "'"
 
 boolean = true / false
@@ -247,12 +343,13 @@ url = $(("http"("s")?"://".)?("www.")?[-a-zA-Z0-9@:%_\+~#=]+"."[a-z]+([-a-zA-Z0-
 NCName = $(([a-zA-Z_]/[^\x00-\x7F])([a-zA-Z0-9.\-_]/[^\x00-\x7F])*)
 QName = $((p:NCName ":" &{return existsPrefix(p)})? NCName)
 ID = NCName &{return validateID(val)}
-language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8))
+language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8)?)
 
 form_values = $("un"?"qualified")
 elem_final_values = "#all" / "extension" / "restriction"
 elem_block_values = elem_final_values / "substitution"
 finalDefault_values = elem_final_values / "list" / "union"
+simpleType_final_values = "#all" / "list" / "union" / "restriction"
 
 elem_type_value = prefix:(p:NCName ":" {return p})? type:$(elem_primitive_types / elem_derived_types) &{
   return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
