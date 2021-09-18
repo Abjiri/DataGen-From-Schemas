@@ -4,7 +4,7 @@
   // Geral ------------------------------
 
   // verificar se o elemento pai é o <schema>
-  const atRoot = () => !elem_depth || !attr_depth
+  const atRoot = () => !elem_depth && !attr_depth
   // verificar se não foi definido um prefixo para a schema
   const noSchemaPrefix = () => default_prefix === null
   // verificar se o prefixo usado foi declarado na definição da schema
@@ -87,7 +87,7 @@
   let elem_ids = []
 
   // validar um elemento básico (sem simple/complexType) - verificar que tem os atributos essenciais
-  const validateBasicElement = attrs => attrs.some(p => p.attr === "ref") || attrs.some(p => p.attr === "name") && attrs.some(p => p.attr === "type")
+  const validateBasicElement = attrs => "ref" in attrs || "name" in attrs && "type" in attrs
   // verificar se o novo id é único na schema
   const validateID = id => !elem_ids.includes(id) ? true : error("O valor do atributo 'id' deve ser único!")
   // validar se o atributo "ref" está a referenciar um elemento global válido da schema ou de uma schema importada (só se valida o prefixo, neste caso)
@@ -150,7 +150,7 @@
 
   // validar os prefixos de abertura e fecho de um elemento
   function check_elemPrefixes(merged, prefix, close_prefix, elem_name) {
-    // merged é um boleano que indica se a abertura e fecho são feitos no mesmo elemento (pode acontecer com <element/>) ou não
+    // merged é um boleano que indica se a abertura e fecho são feitos no mesmo elemento (<element/> ou <list/>) ou não
     if (!merged && prefix !== close_prefix) return error(`O prefixo do elemento de fecho do <${elem_name}> tem de ser igual ao prefixo do elemento de abertura!`)
     if (prefix !== null && prefix !== default_prefix) return error("Prefixo inválido!")
     if (prefix === null && !noSchemaPrefix()) return error("Precisa de prefixar o elemento com o prefixo do respetivo namespace!")
@@ -165,11 +165,15 @@
   // nome do simple/complexType a ser processado neste momento
   let current_type = null
   // nomes dos novos tipos definidos na schema - têm de ser únicos
-  let local_types = []
+  let local_types = {simple: [], complex: []}
+  // boleano para indicar se um tipo referenciado tem de corresponder a um tipo built-in ou simpleType apenas (false), ou pode ser um complexType também (true) 
+  let any_type = true
 
+  // verificar se já existe algum tipo local com este nome
+  const existsLocalType = type => local_types.simple.includes(type) || any_type && local_types.complex.includes(type)
   // verificar que o tipo local que está a ser referenciado existe
-  const validateLocalType = type => !local_types.includes(type) ? error("O tipo que está a tentar referenciar não existe!") : 
-                                                                  (type === current_type ? error("Não pode referenciar um tipo local dentro do seu próprio elemento!") : true)
+  const validateLocalType = type => !existsLocalType(type) ? error(`Tem de referenciar um tipo embutido${any_type ? ", simpleType ou complexType" : " ou simpleType"} válido!`) : 
+                                                             (type === current_type ? error("Não pode referenciar um tipo local dentro do seu próprio elemento!") : true)
   // validar um elemento <union> - verificar que referencia algum tipo
   const validateUnion = (attrs,content) => attrs.memberTypes.length + content.filter(e => e.element === "simpleType").length > 0 ? true : 
                                            error(`Um elemento <union> deve ter o atributo "memberTypes" não vazio ou pelo menos um elemento filho <simpleType>!`)
@@ -177,9 +181,9 @@
   // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes caso seja único
   function newSimpleType(name) {
     if (current_type !== null) return error(`Um elemento <simpleType> só pode ter o atributo "name" se for filho do elemento <schema>!`)
-    if (local_types.includes(name)) return error("Já existe um simpleType/complexType com este nome nesta schema!")
+    if (local_types.simple.includes(name)) return error("Já existe um simpleType/complexType com este nome nesta schema!")
 
-    local_types.push(name); current_type = name
+    local_types.simple.push(name); current_type = name
     return true
   }
   
@@ -203,6 +207,15 @@
 
     return attrs
   }
+
+  // validar um elemento <list> - tem de ter ou o atributo "itemType" ou um elemento filho <simpleType>
+  function check_listType(attrs, content) {
+    if ("itemType" in attrs && content !== null && content.some(x => x.element === "simpleType"))
+      return error(`A utilização do elemento filho <simpleType> e do atributo "itemType" é mutualmente exclusiva no elemento <list>!`)
+    if (!("itemType" in attrs) && content === null)
+      return error(`Um elemento <list> deve ter o atributo "itemType" ou um elemento filho <simpleType> para indicar o tipo a derivar!`)
+    return true
+  }
 }
 
 DSL_text = ws XML_declaration ws xsd:schema { return xsd }
@@ -221,7 +234,7 @@ XML_standalone = ws2 "standalone" ws "=" ws q1:QM XML_standalone_value q2:QM &{r
 XML_standalone_value = "yes" / "no"
 
 
-// ----- Declaração da Schema -----
+// ----- <schema> -----
 
 schema = "<" (p:NCName ":" {default_prefix = p})? "schema" attrs:schema_attrs ws ">" ws content:schema_content end_schema {return {element: "schema", attrs, content}}
 
@@ -248,13 +261,13 @@ schema_content = (/* include / import / redefine / */ annotation)* (((simpleType
 // ----- <element> -----
 
 element = "<" prefix:(p:NCName ":" {return p})? "element" attrs:element_attrs ws
-          close:("/>" ws {return {basic: true, content: null}} / 
+          close:("/>" ws {return {basic: true, content: []}} / 
                 (">" {elem_depth++}) ws content:element_content close_prefix:close_element {return {basic: false, close_prefix, content}}) &{
-  if (close.basic && !validateBasicElement(attrs)) return error("Um elemento básico deve ter, pelo menos, os atributos 'name' e 'type' ou o atributo 'ref'!")
+  if ((close.basic || !close.content.length) && !validateBasicElement(getAttrs(attrs))) return error("Um elemento básico deve ter, pelo menos, os atributos 'name' e 'type' ou o atributo 'ref'!")
   return check_elemPrefixes(close.basic, prefix, close.close_prefix, "element")
 } {return {element: "element", attrs, content: close.content}}
 
-close_element = "</" prefix:(p:NCName ":" {return p})? "element" ws ">" ws {return prefix}
+close_element = "</" prefix:(p:NCName ":" {return p})? "element" ws ">" ws {elem_depth--; return prefix}
 
 element_attrs = el:(elem_abstract / elem_block / elem_default / elem_substitutionGroup /
                 elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
@@ -279,6 +292,7 @@ elem_type = ws2 "type" ws "=" ws q1:QM val:type_value q2:QM                     
 
 element_content = c:(annotation? (simpleType /* / complexType */)? /* (unique / key / keyref)*) */) {return cleanContent(c)}
 
+
 // ----- <simpleType> -----
 
 simpleType = "<" prefix:(p:NCName ":" {return p})? "simpleType" attrs:simpleType_attrs ws (">" {type_depth++}) ws content:simpleType_content
@@ -290,7 +304,7 @@ simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* &{return c
 simpleType_final = ws2 "final" ws "=" ws q1:QM val:simpleType_final_values q2:QM &{return checkQM(q1,q2)}                     {return {attr: "final", val}}
 simpleType_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM                    &{return checkQM(q1,q2) && newSimpleType(val)} {return {attr: "name", val}}
 
-simpleType_content = c:(annotation? (/* restriction / list / */ union)) {return cleanContent(c)}
+simpleType_content = c:(annotation? (/* restriction / */ list / union)) {return cleanContent(c)}
 
 
 // ----- <annotation> -----
@@ -349,9 +363,28 @@ union = "<" prefix:(p:NCName ":" {return p})? "union" attrs:union_attrs ws ">" w
 
 union_attrs = attrs:(elem_id union_memberTypes? / union_memberTypes elem_id?)? {return attrs===null ? [] : cleanContent(attrs)}
 
-union_memberTypes = ws2 "memberTypes" ws "=" ws q1:QM val:list_types q2:QM &{return checkQM(q1,q2)} {return {attr: "memberTypes", val}}
+union_memberTypes = ws2 ("memberTypes" {any_type = false}) ws "=" ws q1:QM val:list_types q2:QM
+                    &{return checkQM(q1,q2)} {any_type = true; return {attr: "memberTypes", val}}
 
 union_content = fst:annotation? others:simpleType* {if (fst !== null) others.unshift(fst); return others}
+
+
+// ----- <list> -----
+
+list = "<" prefix:(p:NCName ":" {return p})? "list" attrs:list_attrs ws 
+       close:("/>" ws {return {basic: true, content: null}} / 
+              ">" ws content:list_content close_prefix:close_list {return {basic: false, close_prefix, content}})
+       &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "list") && check_listType(getAttrs(attrs), close.content)}
+       {return {element: "list", attrs, content}}
+
+close_list = "</" close_prefix:(p:NCName ":" {return p})? "list" ws ">" ws {return close_prefix}
+
+list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return attrs===null ? [] : cleanContent(attrs)}
+
+list_itemType = ws2 ("itemType" {any_type = false}) ws "=" ws q1:QM val:type_value q2:QM
+                &{return checkQM(q1,q2)} {any_type = true; return {attr: "itemType", val}}
+
+list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 
 // ----- Valores -----
@@ -384,12 +417,12 @@ finalDefault_values = elem_final_values / "list" / "union"
 simpleType_final_values = "#all" / "list" / "union" / "restriction"
 
 // um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
-type_value = prefix:(p:NCName ":" {return p})? type:$(elem_primitive_types / elem_derived_types) &{
+type_value = $(prefix:(p:NCName ":" {return p})? type:$(elem_primitive_types / elem_derived_types) &{
   return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
 } / p:NCName ":" name:NCName &{return existsPrefix(p) && (p !== default_prefix || validateLocalType(name))} // se for o prefixo desta schema, verifica-se que o tipo existe; se não for, assume-se que sim
-  / name:NCName &{return validateLocalType(name)}
+  / name:NCName &{return validateLocalType(name)})
 
 elem_primitive_types = "string"/"boolean"/"decimal"/"float"/"double"/"duration"/"dateTime"/"time"/"date"/"gYearMonth"/"gYear"/"gMonthDay"/"gDay"/"gMonth"/"hexBinary"/"base64Binary"/"anyURI"/"QName"/"NOTATION"
 elem_derived_types = "normalizedString"/"token"/"language"/"NMTOKEN"/"NMTOKENS"/"Name"/"NCName"/"ID"/"IDREF"/"IDREFS"/"ENTITY"/"ENTITIES"/"integer"/"nonPositiveInteger"/"negativeInteger"/"long"/"int"/"short"/"byte"/"nonNegativeInteger"/"unsignedLong"/"unsignedInt"/"unsignedShort"/"unsignedByte"/"positiveInteger"
 
-list_types = fst:type_value? others:(ws2 n:type_value {return n})* {if (fst !== null) others.unshift(fst); return others}
+list_types = fst:type_value? others:(ws2 n:type_value {return n})* ws {if (fst !== null) others.unshift(fst); return others}
