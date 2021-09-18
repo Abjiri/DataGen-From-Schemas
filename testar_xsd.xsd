@@ -1,7 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xsd:schema xmlns="http://www.ibm.com" xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.ibm.com">
+<xs:schema xmlns="http://www.ibm.com" xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.ibm.com">
    
-    <xsd:element name="ÁRVoRe-01" type="xsd:string" block   ="substitution" default="boas Matos&amp;
-        ''vcxv+*|\|fds0f0s==?#$#$%#/%/1_nhos" id="ÓlÁ-3"/>
+    <xs:attribute name="fontsize">
+        <xs:simpleType>
+            <xs:union memberTypes="" >
+                <xs:simpleType>
+                    <xs:restriction base="xs:positiveInteger">
+                        <xs:maxInclusive value="72"/>
+                    </xs:restriction>
+                </xs:simpleType>
+            </xs:union>
+        </xs:simpleType>
+    </xs:attribute>
     
-</xsd:schema>
+    <xs:simpleType name="fontbynumber">
+        <xs:restriction base="xs:positiveInteger">
+            <xs:maxInclusive value="72"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="fontbystringname">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="small"/>
+            <xs:enumeration value="medium"/>
+            <xs:enumeration value="large"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+</xs:schema>

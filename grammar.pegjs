@@ -87,11 +87,13 @@
   let elem_ids = []
 
   // validar um elemento básico (sem simple/complexType) - verificar que tem os atributos essenciais
-  const validateBasicElement = attrs => "ref" in attrs || ("name" in attrs && "type" in attrs)
+  const validateBasicElement = attrs => attrs.some(p => p.attr === "ref") || attrs.some(p => p.attr === "name") && attrs.some(p => p.attr === "type")
   // verificar se o novo id é único na schema
   const validateID = id => !elem_ids.includes(id) ? true : error("O valor do atributo 'id' deve ser único!")
   // validar se o atributo "ref" está a referenciar um elemento global válido da schema ou de uma schema importada (só se valida o prefixo, neste caso)
   const validateRef = ref => (ref.includes(":") || global_elems.includes(ref)) ? true : error("Está a tentar referenciar um elemento inexistente! Só é possível referenciar elementos globais.")
+  // para elementos com 1 só atributo possível, retorna um array com ou sem ele, conforme seja null ou não
+  const isNullAttr = attr => attr === null ? [] : [attr]
 
   // validar os atributos de um elemento <element>
   function check_elemAttrs(arr) {
@@ -188,7 +190,7 @@
   }
 }
 
-DSL_text = ws xml:XML_declaration ws schema { return prefixes }
+DSL_text = ws XML_declaration ws xsd:schema { return xsd }
 
 
 // ----- Declaração XML -----
@@ -206,9 +208,7 @@ XML_standalone_value = "yes" / "no"
 
 // ----- Declaração da Schema -----
 
-schema = begin_schema schema_content end_schema
-
-begin_schema = "<" (p:NCName ":" {default_prefix = p})? "schema" schema_attrs ws ">" ws
+schema = "<" (p:NCName ":" {default_prefix = p})? "schema" attrs:schema_attrs ws ">" ws content:schema_content end_schema {return {element: "schema", attrs, content}}
 
 end_schema = "</" prefix:(p:NCName ":" {return p})? "schema" ws ">" ws &{
   if (!noSchemaPrefix() && prefix === null) return error("Precisa de prefixar o elemento de fecho da schema!")
@@ -227,22 +227,23 @@ namespace = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws q1:QM val:ur
 schema_version = ws2 "version" ws "=" ws val:string                                                                           {return {attr: "version", val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
 targetNamespace = ws2 "targetNamespace" ws "=" ws q1:QM val:url q2:QM                                &{return checkQM(q1,q2)} {return {attr: "targetNamespace", val}}
 
-schema_content = ((/* include / import / redefine / */ annotation)* (((simpleType /* / complexType / group / attributeGroup */) / element /* / attribute / notation */) annotation*)*)
+schema_content = /* (include / import / redefine / annotation)* */ (((simpleType /* / complexType / group / attributeGroup */) / element /* / attribute / notation */) /* annotation* */)*
 
 
 // ----- <element> -----
 
 element = "<" prefix:(p:NCName ":" {return p})? "element" attrs:element_attrs ws
-          close:("/>" ws {return {basic: true}} / (">" {elem_depth++}) ws element_content close_prefix:close_element {return {basic: false, close_prefix}}) &{
+          close:("/>" ws {return {basic: true, content: null}} / 
+                (">" {elem_depth++}) ws content:element_content close_prefix:close_element {return {basic: false, close_prefix, content}}) &{
   if (close.basic && !validateBasicElement(attrs)) return error("Um elemento básico deve ter, pelo menos, os atributos 'name' e 'type' ou o atributo 'ref'!")
   return check_elemPrefixes(close.basic, prefix, close.close_prefix, "element")
-}
+} {return {element: "element", attrs, content: close.content}}
 
 close_element = "</" prefix:(p:NCName ":" {return p})? "element" ws ">" ws {return prefix}
 
 element_attrs = el:(elem_abstract / elem_block / elem_default / elem_substitutionGroup /
                 elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
-                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)+ &{return check_elemAttrs(el)} {return mergeElementAttrs(el)}
+                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)+ &{return check_elemAttrs(el)} {return el}
 
 elem_abstract = ws2 "abstract" ws "=" ws q1:QM val:boolean q2:QM                 &{return checkQM(q1,q2)}                     {return {attr: "abstract", val}}
 elem_block = ws2 "block" ws "=" ws q1:QM val:elem_block_values q2:QM             &{return checkQM(q1,q2)}                     {return {attr: "block", val}}
@@ -261,28 +262,28 @@ elem_source = ws2 "source" ws "=" ws q1:QM val:url q2:QM                        
 elem_substitutionGroup = ws2 "substitutionGroup" ws "=" ws q1:QM val:QName q2:QM &{return checkQM(q1,q2)}                     {return {attr: "substitutionGroup", val}}
 elem_type = ws2 "type" ws "=" ws q1:QM val:elem_type_value q2:QM                 &{return checkQM(q1,q2)}                     {return {attr: "type", val}}
 
-element_content = (annotation? ((simpleType /* / complexType */)? /* (unique / key / keyref)* */))
+element_content = annotation? ((simpleType /* / complexType */)? /* (unique / key / keyref)* */)
 
 
 // ----- <simpleType> -----
 
-simpleType = "<" prefix:(p:NCName ":" {return p})? "simpleType" simpleType_attrs ws ">" ws simpleType_content
+simpleType = "<" prefix:(p:NCName ":" {return p})? "simpleType" attrs:simpleType_attrs ws ">" ws content:simpleType_content
              "</" close_prefix:(p:NCName ":" {return p})? "simpleType" ws ">" ws
-             &{return check_elemPrefixes(false, prefix, close_prefix, "simpleType")}
+             &{return check_elemPrefixes(false, prefix, close_prefix, "simpleType")} {console.log({element: "simpleType", attrs, content}); return {element: "simpleType", attrs, content}}
 
 simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* &{return check_simpleTypeAttrs(el)} {return el}
 
-simpleType_final = ws2 "final" ws "=" ws q1:QM val:simpleType_final_values q2:QM ws &{return checkQM(q1,q2)}                     {return {attr: "final", val}}
-simpleType_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM ws                    &{return checkQM(q1,q2) && newTypeName(val)} {return {attr: "name", val}}
+simpleType_final = ws2 "final" ws "=" ws q1:QM val:simpleType_final_values q2:QM &{return checkQM(q1,q2)}                     {return {attr: "final", val}}
+simpleType_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM                    &{return checkQM(q1,q2) && newTypeName(val)} {return {attr: "name", val}}
 
-simpleType_content = (annotation? /* (restriction / list / union) */)
+simpleType_content = annotation? /* (restriction / list / union) */
 
 
 // ----- <annotation> -----
 
-annotation = "<" prefix:(p:NCName ":" {return p})? "annotation" elem_id? ws ">" ws annotation_content
+annotation = "<" prefix:(p:NCName ":" {return p})? "annotation" attr:elem_id? ws ">" ws content:annotation_content
              "</" close_prefix:(p:NCName ":" {return p})? "annotation" ws ">" ws
-             &{return check_elemPrefixes(false, prefix, close_prefix, "annotation")}
+             &{return check_elemPrefixes(false, prefix, close_prefix, "annotation")} {return {element: "annotation", attrs: isNullAttr(attr), content}}
 
 annotation_content = (appinfo / documentation)*
 
@@ -291,13 +292,13 @@ annotation_content = (appinfo / documentation)*
 
 appinfo = appinfo_simple / appinfo_prefix
 
-appinfo_simple = "<appinfo" elem_source? ws ">" ws content:appinfo_content_simple? close_appinfo_simple {return content}
-appinfo_prefix = "<" prefix:(p:NCName ":" {return p})? "appinfo" elem_source? ws ">" ws
+appinfo_simple = "<appinfo" attr:elem_source? ws ">" ws content:appinfo_content_simple? close_appinfo_simple {return {element: "appinfo", attrs: isNullAttr(attr), content}}
+appinfo_prefix = "<" prefix:(p:NCName ":" {return p})? "appinfo" attr:elem_source? ws ">" ws
                  content:appinfo_content_prefix? close_prefix:close_appinfo_prefix
-                 &{return check_elemPrefixes(false, prefix, close_prefix, "appinfo")} {return content}
+                 &{return check_elemPrefixes(false, prefix, close_prefix, "appinfo")} {return {element: "appinfo", attrs: isNullAttr(attr), content}}
 
-appinfo_content_simple = $((!close_appinfo_simple). appinfo_content_simple*)
-appinfo_content_prefix = $((!close_appinfo_prefix). appinfo_content_prefix*)
+appinfo_content_simple = (!close_appinfo_simple). appinfo_content_simple* {return text().trim()}
+appinfo_content_prefix = (!close_appinfo_prefix). appinfo_content_prefix* {return text().trim()}
 
 close_appinfo_simple = "</appinfo" ws ">" ws
 close_appinfo_prefix = "</" close_prefix:(p:NCName ":" {return p})? "appinfo" ws ">" ws {return close_prefix}
@@ -307,19 +308,31 @@ close_appinfo_prefix = "</" close_prefix:(p:NCName ":" {return p})? "appinfo" ws
 
 documentation = doc_simple / doc_prefix
 
-documentation_attrs = elem_source elem_lang? / elem_lang elem_source?
+documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return attrs===null ? [] : attrs.filter(x => x !== null)}
 
-doc_simple = "<documentation" documentation_attrs? ws ">" ws content:doc_content_simple? close_doc_simple {return content}
-doc_prefix = "<" prefix:(p:NCName ":" {return p})? "documentation" documentation_attrs? ws ">" ws 
+doc_simple = "<documentation" attrs:documentation_attrs ws ">" content:doc_content_simple? close_doc_simple {return {element: "documentation", attrs, content}}
+doc_prefix = "<" prefix:(p:NCName ":" {return p})? "documentation" attrs:documentation_attrs ws ">" 
              content:doc_content_prefix? close_prefix:close_doc_prefix
-             &{return check_elemPrefixes(false, prefix, close_prefix, "documentation")} {return content}
+             &{return check_elemPrefixes(false, prefix, close_prefix, "documentation")} {return {element: "documentation", attrs, content}}
 
-doc_content_simple = $((!close_doc_simple). doc_content_simple*)
-doc_content_prefix = $((!close_doc_prefix). doc_content_prefix*)
+doc_content_prefix = (!close_doc_prefix). doc_content_prefix* {return text().trim()}
+doc_content_simple = (!close_doc_simple). doc_content_simple* {return text().trim()}
 
 close_doc_simple = "</documentation" ws ">" ws
 close_doc_prefix = "</" close_prefix:(p:NCName ":" {return p})? "documentation" ws ">" ws {return close_prefix}
 
+
+// ----- <union> -----
+
+union = "<" prefix:(p:NCName ":" {return p})? "union" union_attrs? ws ">" ws union_content
+        "</" close_prefix:(p:NCName ":" {return p})? "union" ws ">" ws
+        &{return check_elemPrefixes(false, prefix, close_prefix, "union")}
+
+union_attrs = elem_id union_memberTypes? / union_memberTypes elem_id?
+
+union_memberTypes = ws2 "memberTypes" ws "=" ws q1:QM val:list_QNames q2:QM ws &{return checkQM(q1,q2)} {return {attr: "memberTypes", val}}
+
+union_content = annotation? simpleType*
 
 
 // ----- Valores -----
@@ -342,7 +355,8 @@ url = $(("http"("s")?"://".)?("www.")?[-a-zA-Z0-9@:%_\+~#=]+"."[a-z]+([-a-zA-Z0-
 
 NCName = $(([a-zA-Z_]/[^\x00-\x7F])([a-zA-Z0-9.\-_]/[^\x00-\x7F])*)
 QName = $((p:NCName ":" &{return existsPrefix(p)})? NCName)
-ID = NCName &{return validateID(val)}
+list_QNames = fst:QName? others:(ws2 n:QName {return n})*  {others.unshift(fst); return others.includes(null) ? [] : others}
+ID = id:NCName &{return validateID(id)} {elem_ids.push(id); return id}
 language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8)?)
 
 form_values = $("un"?"qualified")
