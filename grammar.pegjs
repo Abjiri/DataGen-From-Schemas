@@ -14,7 +14,7 @@
   // criar um objeto de boleanos a partir de um array com os nomes das propriedades pretendidas
   const createObjectFrom = arr => arr.reduce((obj,item) => { obj[item] = 0; return obj }, {})
   // juntar todos os atributos do elemento num só objeto
-  const mergeElementAttrs = objArr => objArr.reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
+  const getAttrs = objArr => objArr.reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
 
 
   // Schema ------------------------------
@@ -94,6 +94,8 @@
   const validateRef = ref => (ref.includes(":") || global_elems.includes(ref)) ? true : error("Está a tentar referenciar um elemento inexistente! Só é possível referenciar elementos globais.")
   // para elementos com 1 só atributo possível, retorna um array com ou sem ele, conforme seja null ou não
   const isNullAttr = attr => attr === null ? [] : [attr]
+  // remove os nulls que vierem na lista de filhos de um elemento
+  const cleanContent = content => content.filter(e => e !== null)
 
   // validar os atributos de um elemento <element>
   function check_elemAttrs(arr) {
@@ -158,13 +160,26 @@
 
   // <simpleType> e <complexType> ------------------------------
   
+  // número de simple/complexTypes aninhados correntemente
+  let type_depth = 0
+  // nome do simple/complexType a ser processado neste momento
+  let current_type = null
   // nomes dos novos tipos definidos na schema - têm de ser únicos
   let local_types = []
 
+  // verificar que o tipo local que está a ser referenciado existe
+  const validateLocalType = type => !local_types.includes(type) ? error("O tipo que está a tentar referenciar não existe!") : 
+                                                                  (type === current_type ? error("Não pode referenciar um tipo local dentro do seu próprio elemento!") : true)
+  // validar um elemento <union> - verificar que referencia algum tipo
+  const validateUnion = (attrs,content) => attrs.memberTypes.length + content.filter(e => e.element === "simpleType").length > 0 ? true : 
+                                           error(`Um elemento <union> deve ter o atributo "memberTypes" não vazio ou pelo menos um elemento filho <simpleType>!`)
+
   // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes caso seja único
-  function newTypeName(name) {
+  function newSimpleType(name) {
+    if (current_type !== null) return error(`Um elemento <simpleType> só pode ter o atributo "name" se for filho do elemento <schema>!`)
     if (local_types.includes(name)) return error("Já existe um simpleType/complexType com este nome nesta schema!")
-    local_types.push(name)
+
+    local_types.push(name); current_type = name
     return true
   }
   
@@ -227,7 +242,7 @@ namespace = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws q1:QM val:ur
 schema_version = ws2 "version" ws "=" ws val:string                                                                           {return {attr: "version", val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
 targetNamespace = ws2 "targetNamespace" ws "=" ws q1:QM val:url q2:QM                                &{return checkQM(q1,q2)} {return {attr: "targetNamespace", val}}
 
-schema_content = /* (include / import / redefine / annotation)* */ (((simpleType /* / complexType / group / attributeGroup */) / element /* / attribute / notation */) /* annotation* */)*
+schema_content = (/* include / import / redefine / */ annotation)* (((simpleType /* / complexType / group / attributeGroup */) / element /* / attribute / notation */) annotation*)*
 
 
 // ----- <element> -----
@@ -260,23 +275,22 @@ elem_lang = ws2 "xml:lang" ws "=" ws q1:QM val:language q2:QM                   
 elem_ref = ws2 "ref" ws "=" ws q1:QM val:QName q2:QM                             &{return checkQM(q1,q2) && validateRef(val)} {return {attr: "ref", val}}
 elem_source = ws2 "source" ws "=" ws q1:QM val:url q2:QM                         &{return checkQM(q1,q2)}                     {return {attr: "source", val}}
 elem_substitutionGroup = ws2 "substitutionGroup" ws "=" ws q1:QM val:QName q2:QM &{return checkQM(q1,q2)}                     {return {attr: "substitutionGroup", val}}
-elem_type = ws2 "type" ws "=" ws q1:QM val:elem_type_value q2:QM                 &{return checkQM(q1,q2)}                     {return {attr: "type", val}}
+elem_type = ws2 "type" ws "=" ws q1:QM val:type_value q2:QM                      &{return checkQM(q1,q2)}                     {return {attr: "type", val}}
 
-element_content = annotation? ((simpleType /* / complexType */)? /* (unique / key / keyref)* */)
-
+element_content = c:(annotation? (simpleType /* / complexType */)? /* (unique / key / keyref)*) */) {return cleanContent(c)}
 
 // ----- <simpleType> -----
 
-simpleType = "<" prefix:(p:NCName ":" {return p})? "simpleType" attrs:simpleType_attrs ws ">" ws content:simpleType_content
-             "</" close_prefix:(p:NCName ":" {return p})? "simpleType" ws ">" ws
-             &{return check_elemPrefixes(false, prefix, close_prefix, "simpleType")} {console.log({element: "simpleType", attrs, content}); return {element: "simpleType", attrs, content}}
+simpleType = "<" prefix:(p:NCName ":" {return p})? "simpleType" attrs:simpleType_attrs ws (">" {type_depth++}) ws content:simpleType_content
+             "</" close_prefix:(p:NCName ":" {return p})? "simpleType" ws (">" {if (!--type_depth) current_type = null}) ws
+             &{return check_elemPrefixes(false, prefix, close_prefix, "simpleType")} {return {element: "simpleType", attrs, content}}
 
 simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* &{return check_simpleTypeAttrs(el)} {return el}
 
 simpleType_final = ws2 "final" ws "=" ws q1:QM val:simpleType_final_values q2:QM &{return checkQM(q1,q2)}                     {return {attr: "final", val}}
-simpleType_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM                    &{return checkQM(q1,q2) && newTypeName(val)} {return {attr: "name", val}}
+simpleType_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM                    &{return checkQM(q1,q2) && newSimpleType(val)} {return {attr: "name", val}}
 
-simpleType_content = annotation? /* (restriction / list / union) */
+simpleType_content = c:(annotation? (/* restriction / list / */ union)) {return cleanContent(c)}
 
 
 // ----- <annotation> -----
@@ -292,10 +306,12 @@ annotation_content = (appinfo / documentation)*
 
 appinfo = appinfo_simple / appinfo_prefix
 
-appinfo_simple = "<appinfo" attr:elem_source? ws ">" ws content:appinfo_content_simple? close_appinfo_simple {return {element: "appinfo", attrs: isNullAttr(attr), content}}
-appinfo_prefix = "<" prefix:(p:NCName ":" {return p})? "appinfo" attr:elem_source? ws ">" ws
-                 content:appinfo_content_prefix? close_prefix:close_appinfo_prefix
-                 &{return check_elemPrefixes(false, prefix, close_prefix, "appinfo")} {return {element: "appinfo", attrs: isNullAttr(attr), content}}
+appinfo_simple = "<appinfo" attr:elem_source? ws ">" content:appinfo_content_simple? close_appinfo_simple
+                 {return {element: "appinfo", attrs: isNullAttr(attr), content: content===null ? "" : content}}
+
+appinfo_prefix = "<" prefix:(p:NCName ":" {return p})? "appinfo" attr:elem_source? ws ">" content:appinfo_content_prefix? close_prefix:close_appinfo_prefix
+                 &{return check_elemPrefixes(false, prefix, close_prefix, "appinfo")} 
+                 {return {element: "appinfo", attrs: isNullAttr(attr), content}}
 
 appinfo_content_simple = (!close_appinfo_simple). appinfo_content_simple* {return text().trim()}
 appinfo_content_prefix = (!close_appinfo_prefix). appinfo_content_prefix* {return text().trim()}
@@ -308,12 +324,14 @@ close_appinfo_prefix = "</" close_prefix:(p:NCName ":" {return p})? "appinfo" ws
 
 documentation = doc_simple / doc_prefix
 
-documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return attrs===null ? [] : attrs.filter(x => x !== null)}
+documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return attrs===null ? [] : cleanContent(attrs)}
 
-doc_simple = "<documentation" attrs:documentation_attrs ws ">" content:doc_content_simple? close_doc_simple {return {element: "documentation", attrs, content}}
-doc_prefix = "<" prefix:(p:NCName ":" {return p})? "documentation" attrs:documentation_attrs ws ">" 
-             content:doc_content_prefix? close_prefix:close_doc_prefix
-             &{return check_elemPrefixes(false, prefix, close_prefix, "documentation")} {return {element: "documentation", attrs, content}}
+doc_simple = "<documentation" attrs:documentation_attrs ws ">" content:doc_content_simple? close_doc_simple
+             {return {element: "documentation", attrs, content: content===null ? "" : content}}
+
+doc_prefix = "<" prefix:(p:NCName ":" {return p})? "documentation" attrs:documentation_attrs ws ">" content:doc_content_prefix? close_prefix:close_doc_prefix
+             &{return check_elemPrefixes(false, prefix, close_prefix, "documentation")}
+             {return {element: "documentation", attrs, content: content===null ? "" : content}}
 
 doc_content_prefix = (!close_doc_prefix). doc_content_prefix* {return text().trim()}
 doc_content_simple = (!close_doc_simple). doc_content_simple* {return text().trim()}
@@ -324,15 +342,16 @@ close_doc_prefix = "</" close_prefix:(p:NCName ":" {return p})? "documentation" 
 
 // ----- <union> -----
 
-union = "<" prefix:(p:NCName ":" {return p})? "union" union_attrs? ws ">" ws union_content
+union = "<" prefix:(p:NCName ":" {return p})? "union" attrs:union_attrs ws ">" ws content:union_content
         "</" close_prefix:(p:NCName ":" {return p})? "union" ws ">" ws
-        &{return check_elemPrefixes(false, prefix, close_prefix, "union")}
+        &{return check_elemPrefixes(false, prefix, close_prefix, "union") && validateUnion(getAttrs(attrs), content)}
+        {return {element: "union", attrs, content}}
 
-union_attrs = elem_id union_memberTypes? / union_memberTypes elem_id?
+union_attrs = attrs:(elem_id union_memberTypes? / union_memberTypes elem_id?)? {return attrs===null ? [] : cleanContent(attrs)}
 
-union_memberTypes = ws2 "memberTypes" ws "=" ws q1:QM val:list_QNames q2:QM ws &{return checkQM(q1,q2)} {return {attr: "memberTypes", val}}
+union_memberTypes = ws2 "memberTypes" ws "=" ws q1:QM val:list_types q2:QM &{return checkQM(q1,q2)} {return {attr: "memberTypes", val}}
 
-union_content = annotation? simpleType*
+union_content = fst:annotation? others:simpleType* {if (fst !== null) others.unshift(fst); return others}
 
 
 // ----- Valores -----
@@ -355,7 +374,6 @@ url = $(("http"("s")?"://".)?("www.")?[-a-zA-Z0-9@:%_\+~#=]+"."[a-z]+([-a-zA-Z0-
 
 NCName = $(([a-zA-Z_]/[^\x00-\x7F])([a-zA-Z0-9.\-_]/[^\x00-\x7F])*)
 QName = $((p:NCName ":" &{return existsPrefix(p)})? NCName)
-list_QNames = fst:QName? others:(ws2 n:QName {return n})*  {others.unshift(fst); return others.includes(null) ? [] : others}
 ID = id:NCName &{return validateID(id)} {elem_ids.push(id); return id}
 language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8)?)
 
@@ -365,9 +383,13 @@ elem_block_values = elem_final_values / "substitution"
 finalDefault_values = elem_final_values / "list" / "union"
 simpleType_final_values = "#all" / "list" / "union" / "restriction"
 
-elem_type_value = prefix:(p:NCName ":" {return p})? type:$(elem_primitive_types / elem_derived_types) &{
+// um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
+type_value = prefix:(p:NCName ":" {return p})? type:$(elem_primitive_types / elem_derived_types) &{
   return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
-} / QName / name:NCName &{return local_types.includes(name) ? true : error("O tipo que está a tentar referenciar não existe!")}
+} / p:NCName ":" name:NCName &{return existsPrefix(p) && (p !== default_prefix || validateLocalType(name))} // se for o prefixo desta schema, verifica-se que o tipo existe; se não for, assume-se que sim
+  / name:NCName &{return validateLocalType(name)}
 
 elem_primitive_types = "string"/"boolean"/"decimal"/"float"/"double"/"duration"/"dateTime"/"time"/"date"/"gYearMonth"/"gYear"/"gMonthDay"/"gDay"/"gMonth"/"hexBinary"/"base64Binary"/"anyURI"/"QName"/"NOTATION"
 elem_derived_types = "normalizedString"/"token"/"language"/"NMTOKEN"/"NMTOKENS"/"Name"/"NCName"/"ID"/"IDREF"/"IDREFS"/"ENTITY"/"ENTITIES"/"integer"/"nonPositiveInteger"/"negativeInteger"/"long"/"int"/"short"/"byte"/"nonNegativeInteger"/"unsignedLong"/"unsignedInt"/"unsignedShort"/"unsignedByte"/"positiveInteger"
+
+list_types = fst:type_value? others:(ws2 n:type_value {return n})* {if (fst !== null) others.unshift(fst); return others}
