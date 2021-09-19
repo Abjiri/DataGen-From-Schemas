@@ -1,19 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns="http://www.ibm.com" xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.ibm.com">
-   
-    <xs:attribute name="fontsize">
-        <xs:simpleType>
-            <xs:union memberTypes="" >
+    
+    <xs:annotation></xs:annotation>
+        <xs:simpleType name="boas">
+            <xs:list itemType="" >
                 <xs:simpleType>
                     <xs:restriction base="xs:positiveInteger">
                         <xs:maxInclusive value="72"/>
                     </xs:restriction>
                 </xs:simpleType>
-            </xs:union>
+            </xs:list>
         </xs:simpleType>
-    </xs:attribute>
     
+    
+    <xs:annotation></xs:annotation>
     <xs:simpleType name="fontbynumber">
+        <xs:annotation></xs:annotation>
         <xs:restriction base="xs:positiveInteger">
             <xs:maxInclusive value="72"/>
         </xs:restriction>
@@ -27,4 +29,5 @@
         </xs:restriction>
     </xs:simpleType>
     
+    <xs:annotation></xs:annotation>
 </xs:schema>

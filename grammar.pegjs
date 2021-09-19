@@ -99,18 +99,16 @@
 
   // validar os atributos de um elemento <element>
   function check_elemAttrs(arr) {
-    // obrigatoriamente tem atributos
-    if (arr.length < 1) return error("O elemento <element> requer atributos!")
-
     let keys = [], // array com os nomes dos atributos
-        attrs = {} // objeto com os valores dos atributos
+        maxOccurs = 0, minOccurs = 0
         
     for (let i = 0; i < arr.length; i++) {
       // verificar que não há atributos repetidos
       if (keys.includes(arr[i].attr)) return error("O elemento <element> não pode possuir atributos repetidos!")
       else {
         keys.push(arr[i].attr)
-        attrs[arr[i].attr] = arr[i].val
+        if (arr[i].attr === "maxOccurs") maxOccurs = arr[i].val
+        if (arr[i].attr === "minOccurs") minOccurs = arr[i].val
       }
     }
 
@@ -137,20 +135,20 @@
     if (keys.includes("ref") && keys.includes("type")) return mutexc_error("ref","type")
 
     // maxOccurs não pode ser inferior a minOccurs
-    if (keys.includes("maxOccurs") && keys.includes("minOccurs") && attrs.maxOccurs < attrs.minOccurs)
+    if (keys.includes("maxOccurs") && keys.includes("minOccurs") && maxOccurs < minOccurs)
       return error("A propriedade 'maxOccurs' do elemento não pode ser inferior à 'minOccurs'!")
 
     // atributos com valores predefinidos
-    if (!keys.includes("abstract")) attrs.abstract = false
+    if (!keys.includes("abstract")) arr.push({attr: "abstract", val: false})
     //if (!keys.includes("form")) attrs.form = //valor do atributo elementFormDefault do elemento da schema
-    if (!keys.includes("nillable")) attrs.nillable = false
+    if (!keys.includes("nillable")) arr.push({attr: "nillable", val: false})
 
-    return attrs
+    return arr
   }
 
   // validar os prefixos de abertura e fecho de um elemento
   function check_elemPrefixes(merged, prefix, close_prefix, elem_name) {
-    // merged é um boleano que indica se a abertura e fecho são feitos no mesmo elemento (<element/> ou <list/>) ou não
+    // merged é um boleano que indica se a abertura e fecho são feitos no mesmo elemento ou não
     if (!merged && prefix !== close_prefix) return error(`O prefixo do elemento de fecho do <${elem_name}> tem de ser igual ao prefixo do elemento de abertura!`)
     if (prefix !== null && prefix !== default_prefix) return error("Prefixo inválido!")
     if (prefix === null && !noSchemaPrefix()) return error("Precisa de prefixar o elemento com o prefixo do respetivo namespace!")
@@ -177,6 +175,8 @@
   // validar um elemento <union> - verificar que referencia algum tipo
   const validateUnion = (attrs,content) => attrs.memberTypes.length + content.filter(e => e.element === "simpleType").length > 0 ? true : 
                                            error(`Um elemento <union> deve ter o atributo "memberTypes" não vazio ou pelo menos um elemento filho <simpleType>!`)
+  // verificar se os nomes dos elementos de abertura e fecho de elementos de limites numéricos coincidem
+  const checkConstraintNames = (merged, open, close) => (merged || open === close) ? true : error(`O nome do elemento de abertura (${open}) deve ser igual ao de fecho (${close})!`)
 
   // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes caso seja único
   function newSimpleType(name) {
@@ -189,23 +189,19 @@
   
   // validar os atributos de um elemento <simpleType>
   function check_simpleTypeAttrs(arr) {
-    let keys = [], // array com os nomes dos atributos
-        attrs = {} // objeto com os valores dos atributos
-        
+    let keys = [] // array com os nomes dos atributos
+
     for (let i = 0; i < arr.length; i++) {
       // verificar que não há atributos repetidos
       if (keys.includes(arr[i].attr)) return error("O elemento <simpleType> não pode possuir atributos repetidos!")
-      else {
-        keys.push(arr[i].attr)
-        attrs[arr[i].attr] = arr[i].val
-      }
+      else keys.push(arr[i].attr)
     }
 
     // restrições relativas à profundidade dos elementos
     if (atRoot() && !keys.includes("name")) return error("O atributo 'name' é requirido se o pai do elemento <simpleType> for o <schema>!")
     if (!atRoot() && keys.includes("name")) return error("O atributo 'name' é proibido se o pai do elemento <simpleType> não for o <schema>!")
 
-    return attrs
+    return true
   }
 
   // validar um elemento <list> - tem de ter ou o atributo "itemType" ou um elemento filho <simpleType>
@@ -215,6 +211,21 @@
     if (!("itemType" in attrs) && content === null)
       return error(`Um elemento <list> deve ter o atributo "itemType" ou um elemento filho <simpleType> para indicar o tipo a derivar!`)
     return true
+  }
+
+  function check_numConstraintAttrs(name, arr) {
+    let keys = [] // array com os nomes dos atributos
+        
+    for (let i = 0; i < arr.length; i++) {
+      // verificar que não há atributos repetidos
+      if (keys.includes(arr[i].attr)) return error(`O elemento <${name}> não pode possuir atributos repetidos!`)
+      else keys.push(arr[i].attr)
+    }
+
+    if (!keys.includes("value")) return error(`No element <${name}> é requirido o atributo "value"!`)
+    if (!keys.includes("fixed")) arr.push({attr: "fixed", val: false})
+
+    return arr
   }
 }
 
@@ -246,7 +257,7 @@ end_schema = "</" prefix:(p:NCName ":" {return p})? "schema" ws ">" ws &{
 }
 
 schema_attrs = el:(formDefault / blockDefault / finalDefault / namespace /
-                     elem_id / elem_lang / schema_version / targetNamespace)+ &{return check_schemaAttrs(el)} {return el}
+                     elem_id / elem_lang / schema_version / targetNamespace)+ &{return check_schemaAttrs(el)} {return check_schemaAttrs(el)}
 
 formDefault = ws2 attr:$(("attribute"/"element")"FormDefault") ws "=" ws q1:QM val:form_values q2:QM &{return checkQM(q1,q2)} {return {attr, val}}
 blockDefault = ws2 "blockDefault" ws "=" ws q1:QM val:elem_block_values q2:QM                        &{return checkQM(q1,q2)} {return {attr: "blockDefault", val}}
@@ -304,7 +315,7 @@ simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* &{return c
 simpleType_final = ws2 "final" ws "=" ws q1:QM val:simpleType_final_values q2:QM &{return checkQM(q1,q2)}                     {return {attr: "final", val}}
 simpleType_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM                    &{return checkQM(q1,q2) && newSimpleType(val)} {return {attr: "name", val}}
 
-simpleType_content = c:(annotation? (/* restriction / */ list / union)) {return cleanContent(c)}
+simpleType_content = c:(annotation? (restrictionST / list / union)) {return cleanContent(c)}
 
 
 // ----- <annotation> -----
@@ -372,10 +383,10 @@ union_content = fst:annotation? others:simpleType* {if (fst !== null) others.uns
 // ----- <list> -----
 
 list = "<" prefix:(p:NCName ":" {return p})? "list" attrs:list_attrs ws 
-       close:("/>" ws {return {basic: true, content: null}} / 
+       close:("/>" ws {return {basic: true, content: []}} / 
               ">" ws content:list_content close_prefix:close_list {return {basic: false, close_prefix, content}})
        &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "list") && check_listType(getAttrs(attrs), close.content)}
-       {return {element: "list", attrs, content}}
+       {return {element: "list", attrs, content: close.content}}
 
 close_list = "</" close_prefix:(p:NCName ":" {return p})? "list" ws ">" ws {return close_prefix}
 
@@ -386,6 +397,40 @@ list_itemType = ws2 ("itemType" {any_type = false}) ws "=" ws q1:QM val:type_val
 
 list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
+
+// ----- <restriction> (simpleType) -----
+
+restrictionST = "<" prefix:(p:NCName ":" {return p})? "restriction" attrs:restrictionST_attrs ws 
+                 close:("/>" ws {return {basic: true, content: []}} / 
+                        ">" ws content:restrictionST_content close_prefix:close_restrictionST {return {basic: false, close_prefix, content}})
+                 &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "restrictionST")}
+                 {return {element: "restrictionST", attrs, content: close.content}}
+
+close_restrictionST = "</" close_prefix:(p:NCName ":" {return p})? "restriction" ws ">" ws {return close_prefix}
+
+restrictionST_attrs = attrs:(restrictionST_base elem_id? / elem_id restrictionST_base?)? 
+                      &{return (attrs!==null && cleanContent(attrs).some(x => x.attr === "base")) ? true : error(`Um elemento <restriction> requer o atributo "base"!`)}
+                      {return attrs===null ? [] : cleanContent(attrs)}
+
+restrictionST_base = ws2 ("base" {any_type = false}) ws "=" ws q1:QM val:type_value q2:QM &{return checkQM(q1,q2)} {any_type = true; return {attr: "base", val}}
+                     
+restrictionST_content = fst:annotation? snd:simpleType? others:constrainingFacet* {return cleanContent([fst, snd, ...others])}
+
+
+constrainingFacet = numConstraint /* / enumeration / whiteSpace / pattern */
+
+numConstraint = "<" prefix:(p:NCName ":" {return p})? constr:numConstraint_values attrs:(a:numConstraint_attrs &{return check_numConstraintAttrs(constr,a)} {return check_numConstraintAttrs(constr,a)})
+                    close:("/>" ws {return {basic: true, content: []}} / 
+                           ">" ws content:annotation? close_data:close_numConstraint {return {basic: false, ...close_data, content: content===null ? [] : content}})
+                    &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, constr) && checkConstraintNames(close.basic, constr, close.close_constr)}
+                    {return {element: constr, attrs, content: close.content}}
+
+close_numConstraint = "</" close_prefix:(p:NCName ":" {return p})? close_constr:numConstraint_values ws ">" ws {return {close_prefix, close_constr}}
+
+numConstraint_attrs = el:(elem_id / numConstraint_fixed / numConstraint_value)* {return el}
+
+numConstraint_fixed = ws2 "fixed" ws "=" ws q1:QM val:boolean q2:QM &{return checkQM(q1,q2)} {return {attr: "fixed", val}}
+numConstraint_value = ws2 "value" ws "=" ws q1:QM val:int q2:QM     &{return checkQM(q1,q2)} {return {attr: "value", val}}
 
 // ----- Valores -----
 
@@ -415,6 +460,7 @@ elem_final_values = "#all" / "extension" / "restriction"
 elem_block_values = elem_final_values / "substitution"
 finalDefault_values = elem_final_values / "list" / "union"
 simpleType_final_values = "#all" / "list" / "union" / "restriction"
+numConstraint_values = $("length" / ("max"/"min")"Length" / ("max"/"min")("Ex"/"In")"clusive" / ("total"/"fraction")"Digits")
 
 // um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
 type_value = $(prefix:(p:NCName ":" {return p})? type:$(elem_primitive_types / elem_derived_types) &{

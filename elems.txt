@@ -1,0 +1,55 @@
+- appinfo
+- documentation
+- annotation
+- simpleType
+- union
+- list
+- element
+
+schema - é preciso fazer verificação manual no content
+
+
+<union memberTypes="fontbynumber fontbystringname">
+<annotation id="id123">
+<appinfo source="https://pegjs.org/online">boas</appinfo>
+<documentation source="https://pegjs.org/online" xml:lang="en">DOC muito bonita  </documentation>
+<appinfo></appinfo>
+</annotation>
+</union>
+
+
+<restriction id="io" base="fontbynumber">
+<length value="3"/>
+<minLength value="5" fixed="true"></minLength>
+</restriction>
+
+
+<?xml version="1.0"?>
+<schema xmlns="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.ibm.com" xmlns:TestSchema="http://www.ibm.com">
+
+<simpleType name="fontbynumber">
+<annotation></annotation>
+</simpleType>
+
+<element name="teste2" type="fontbynumber"></element>
+
+<simpleType name="fontbystringname">
+<annotation></annotation>
+</simpleType>
+
+<element name="teste" nillable="true">
+<simpleType id="id13" final="#all">
+
+<list id="l1">
+<simpleType>
+<list id="l2" itemType="integer"/>
+</simpleType>
+</list>
+
+</simpleType>
+
+</element>
+
+<simpleType name="x">
+</simpleType>
+</schema>
