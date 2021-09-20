@@ -213,17 +213,33 @@
     return true
   }
 
-  function check_numConstraintAttrs(name, arr) {
-    let keys = [] // array com os nomes dos atributos
+  //
+  function check_constrFacetAttrs(name, arr) {
+    let keys = [], // array com os nomes dos atributos
+        value = ""
         
     for (let i = 0; i < arr.length; i++) {
       // verificar que não há atributos repetidos
       if (keys.includes(arr[i].attr)) return error(`O elemento <${name}> não pode possuir atributos repetidos!`)
-      else keys.push(arr[i].attr)
+      else {
+        keys.push(arr[i].attr)
+        if (arr[i].attr == "value") value = arr[i].val
+      }
     }
 
-    if (!keys.includes("value")) return error(`No element <${name}> é requirido o atributo "value"!`)
-    if (!keys.includes("fixed")) arr.push({attr: "fixed", val: false})
+    // restrições relativas à existência dos atributos
+    if (!keys.includes("value")) return error(`No elemento <${name}> é requirido o atributo "value"!`)
+    if (name == "pattern" || name == "enumeration") {
+      if (keys.includes("fixed")) return error(`O elemento <${name}> não aceita o atributo "fixed"!`)
+    }
+    else if (!keys.includes("fixed")) arr.push({attr: "fixed", val: false})
+
+    // restrições relativas ao conteúdo dos atributos
+    if (name == "whiteSpace") {
+      if (!["preserve","replace","collapse"].includes(value)) return error(`O valor do atributo "value" do elemento <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
+    } else if (!(name == "pattern" || name == "enumeration")) {
+      if (!/\d+/.test(value)) return error(`O valor do atributo "value" do elemento <${name}> deve ser um inteiro não negativo!`)
+    }
 
     return arr
   }
@@ -414,23 +430,22 @@ restrictionST_attrs = attrs:(restrictionST_base elem_id? / elem_id restrictionST
 
 restrictionST_base = ws2 ("base" {any_type = false}) ws "=" ws q1:QM val:type_value q2:QM &{return checkQM(q1,q2)} {any_type = true; return {attr: "base", val}}
                      
-restrictionST_content = fst:annotation? snd:simpleType? others:constrainingFacet* {return cleanContent([fst, snd, ...others])}
+restrictionST_content = fst:annotation? snd:simpleType? others:constrFacet* {return cleanContent([fst, snd, ...others])}
 
 
-constrainingFacet = numConstraint /* / enumeration / whiteSpace / pattern */
-
-numConstraint = "<" prefix:(p:NCName ":" {return p})? constr:numConstraint_values attrs:(a:numConstraint_attrs &{return check_numConstraintAttrs(constr,a)} {return check_numConstraintAttrs(constr,a)})
+constrFacet = "<" prefix:(p:NCName ":" {return p})? facet:constrFacet_values 
+                    attrs:(a:constrFacet_attrs ws &{return check_constrFacetAttrs(facet,a)} {return check_constrFacetAttrs(facet,a)})
                     close:("/>" ws {return {basic: true, content: []}} / 
-                           ">" ws content:annotation? close_data:close_numConstraint {return {basic: false, ...close_data, content: content===null ? [] : content}})
-                    &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, constr) && checkConstraintNames(close.basic, constr, close.close_constr)}
-                    {return {element: constr, attrs, content: close.content}}
+                           ">" ws content:annotation? close_data:close_constrFacet {return {basic: false, ...close_data, content: content===null ? [] : content}})
+                    &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, facet) && checkConstraintNames(close.basic, facet, close.close_facet)}
+                    {return {element: facet, attrs, content: close.content}}
 
-close_numConstraint = "</" close_prefix:(p:NCName ":" {return p})? close_constr:numConstraint_values ws ">" ws {return {close_prefix, close_constr}}
+close_constrFacet = "</" close_prefix:(p:NCName ":" {return p})? close_facet:constrFacet_values ws ">" ws {return {close_prefix, close_facet}}
 
-numConstraint_attrs = el:(elem_id / numConstraint_fixed / numConstraint_value)* {return el}
+constrFacet_attrs = el:(elem_id / constrFacet_fixed / constrFacet_value)+ {return el}
 
-numConstraint_fixed = ws2 "fixed" ws "=" ws q1:QM val:boolean q2:QM &{return checkQM(q1,q2)} {return {attr: "fixed", val}}
-numConstraint_value = ws2 "value" ws "=" ws q1:QM val:int q2:QM     &{return checkQM(q1,q2)} {return {attr: "value", val}}
+constrFacet_fixed = ws2 "fixed" ws "=" ws q1:QM val:boolean q2:QM &{return checkQM(q1,q2)} {return {attr: "fixed", val}}
+constrFacet_value = ws2 "value" ws "=" ws val:string                                       {return {attr: "value", val}}
 
 // ----- Valores -----
 
@@ -460,7 +475,7 @@ elem_final_values = "#all" / "extension" / "restriction"
 elem_block_values = elem_final_values / "substitution"
 finalDefault_values = elem_final_values / "list" / "union"
 simpleType_final_values = "#all" / "list" / "union" / "restriction"
-numConstraint_values = $("length" / ("max"/"min")"Length" / ("max"/"min")("Ex"/"In")"clusive" / ("total"/"fraction")"Digits")
+constrFacet_values = $("length" / ("max"/"min")"Length" / ("max"/"min")("Ex"/"In")"clusive" / ("total"/"fraction")"Digits" / "whiteSpace" / "pattern" / "enumeration")
 
 // um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
 type_value = $(prefix:(p:NCName ":" {return p})? type:$(elem_primitive_types / elem_derived_types) &{
