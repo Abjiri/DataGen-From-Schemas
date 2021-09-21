@@ -204,26 +204,39 @@
     return true
   }
 
-  // validar um elemento <list> - tem de ter ou o atributo "itemType" ou um elemento filho <simpleType>
-  function check_listType(attrs, content) {
-    if ("itemType" in attrs && content !== null && content.some(x => x.element === "simpleType"))
-      return error(`A utilização do elemento filho <simpleType> e do atributo "itemType" é mutualmente exclusiva no elemento <list>!`)
-    if (!("itemType" in attrs) && content === null)
-      return error(`Um elemento <list> deve ter o atributo "itemType" ou um elemento filho <simpleType> para indicar o tipo a derivar!`)
+  // validar o tipo de um elemento de derivação - tem de ter ou o atributo de referência ou um elemento filho <simpleType>
+  function check_derivingType(elem, attr, attrs, content) {
+    if (attr in attrs && content !== null && content.some(x => x.element === "simpleType"))
+      return error(`A utilização do elemento filho <simpleType> e do atributo "${attr}" é mutualmente exclusiva no elemento <${elem}>!`)
+    if (!(attr in attrs) && content === null)
+      return error(`Um elemento <${elem}> deve ter o atributo "${attr}" ou um elemento filho <simpleType> para indicar o tipo a derivar!`)
     return true
   }
 
-  //
+  // verificar que o nome do elemento de derivação, os atributos e o valor batem todos certo
   function check_constrFacetAttrs(name, arr) {
-    let keys = [], // array com os nomes dos atributos
-        value = ""
+    let keys = [] // array com os nomes dos atributos
         
     for (let i = 0; i < arr.length; i++) {
       // verificar que não há atributos repetidos
       if (keys.includes(arr[i].attr)) return error(`O elemento <${name}> não pode possuir atributos repetidos!`)
       else {
         keys.push(arr[i].attr)
-        if (arr[i].attr == "value") value = arr[i].val
+
+        if (arr[i].attr == "value") {
+          // restrições relativas ao conteúdo dos atributos
+          if (name == "whiteSpace") {
+            if (!["preserve","replace","collapse"].includes(arr[i].val)) return error(`O valor do atributo "value" do elemento <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
+          } 
+          else if (name == "totalDigits") {
+            if (!/[1-9]\d*/.test(arr[i].val)) return error(`O valor do atributo "totalDigits" deve ser um inteiro positivo!`)
+            arr[i].val = parseInt(arr[i].val)
+          } 
+          else if (!(name == "pattern" || name == "enumeration")) {
+            if (!/\d+/.test(arr[i].val)) return error(`O valor do atributo "value" do elemento <${name}> deve ser um inteiro não negativo!`)
+            arr[i].val = parseInt(arr[i].val)
+          }
+        }
       }
     }
 
@@ -234,14 +247,75 @@
     }
     else if (!keys.includes("fixed")) arr.push({attr: "fixed", val: false})
 
-    // restrições relativas ao conteúdo dos atributos
-    if (name == "whiteSpace") {
-      if (!["preserve","replace","collapse"].includes(value)) return error(`O valor do atributo "value" do elemento <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
-    } else if (!(name == "pattern" || name == "enumeration")) {
-      if (!/\d+/.test(value)) return error(`O valor do atributo "value" do elemento <${name}> deve ser um inteiro não negativo!`)
+    return arr
+  }
+
+  // verifica se os valores do elemento de restrição dado e de enumeração se contradizem
+  function contradictoryFacets(obj, facet, func) {
+    if (facet in obj && "enumeration" in obj) {
+      let vals = obj.enumeration.filter(func)
+      if (vals.length > 0) return error(`O valor '${vals[0]}' do atributo "enumeration" contradiz o valor do atributo "${facet}"!`)
     }
 
-    return arr
+    return true
+  }
+
+  // conta o número de casas decimais de um float
+  function precision(a) {
+    if (!isFinite(a)) return 0
+    var e = 1, p = 0
+    while (Math.round(a*e) / e !== a) { e *= 10; p++ }
+    return p
+  }
+
+  function check_restrictionST_facets(arr) {
+    let f = {pattern: [], enumeration: []} // objeto com os pares chave-valor
+        
+    for (let i = 0; i < arr.length; i++) {
+      let key = arr[i].element,
+          value = arr[i].attrs.filter(x => x.attr === "value")[0].val
+      
+      // só os atributos "pattern" e "enumeration" é que podem aparecer várias vezes
+      if (!(key == "pattern" || key == "enumeration") && key in f) return error(`O atributo "${key}" só pode ser definido uma vez em cada elemento <${name}>!`)
+      else {
+        if (key == "pattern" || key == "enumeration") f[key].push(value)
+        else f[key] = value
+      }
+    }
+
+    // se não houver elementos "pattern" ou "enumeration", apagar essas chaves do objeto
+    if (!f.enumeration.length) delete f.enumeration
+    if (!f.pattern.length) delete f.pattern
+    else f.pattern = f.pattern.join("|") // se houver vários patterns no mesmo passo de derivação, são ORed juntos
+    
+    let err1 = (a1,a2,e) => error(`Num elemento <restriction>, o valor do atributo "${a1}" não pode ser superior${e?" ou igual":""} ao do "${a2}"!`)
+    let err2 = (a1,a2) => error(`Não pode especificar ambos os atributos "${a1}" e "${a2}" no mesmo passo de derivação!`)
+    
+    // restrições relativas a colisões entre os valores de atributos diretamente relacionados
+    if ("length" in f) {
+      if ("minLength" in f && f.minLength > f.length) return err1("minLength", "length", false)
+      if ("maxLength" in f && f.maxLength < f.length) return err1("length", "maxLength", false)
+    }
+    if ("minLength" in f && "maxLength" in f && f.minLength > f.maxLength) return err1("minLength", "maxLength", false)
+    if ("minInclusive" in f && "maxInclusive" in f && f.minInclusive > f.maxInclusive) return err1("minInclusive", "maxInclusive", false)
+    if ("minExclusive" in f && "maxExclusive" in f && f.minExclusive > f.maxExclusive) return err1("minExclusive", "maxExclusive", false)
+    if ("minExclusive" in f && "maxInclusive" in f && f.minExclusive >= f.maxInclusive) return err1("minExclusive", "maxInclusive", true)
+    if ("minInclusive" in f && "maxExclusive" in f && f.minInclusive >= f.maxExclusive) return err1("minInclusive", "maxExclusive", true)
+    if ("totalDigits" in f && "fractionDigits" in f && f.fractionDigits > f.totalDigits) return err1("fractionDigits", "totalDigits", false)
+
+    // restrições relativas a colisões entre os valores de atributos indiretamente relacionados
+    let result
+    if ((result = contradictoryFacets(f, "length", x => x.length != f.length)) !== true) return result
+    if ((result = contradictoryFacets(f, "minLength", x => x.length < f.minLength)) !== true) return result
+    if ((result = contradictoryFacets(f, "maxLength", x => x.length > f.maxLength)) !== true) return result
+    if ((result = contradictoryFacets(f, "totalDigits", x => x.replace(/^0+/,'').replace(/0+$/,'').length > f.totalDigits)) !== true) return result
+    if ((result = contradictoryFacets(f, "fractionDigits", x => precision(parseFloat(x)) > f.fractionDigits)) !== true) return result
+ 
+    // atributos mutuamente exclusivos
+    if ("maxInclusive" in f && "maxExclusive" in f) return err2("maxInclusive", "maxExclusive")
+    if ("minInclusive" in f && "minExclusive" in f) return err2("minInclusive", "minExclusive")
+
+    return true
   }
 }
 
@@ -401,7 +475,7 @@ union_content = fst:annotation? others:simpleType* {if (fst !== null) others.uns
 list = "<" prefix:(p:NCName ":" {return p})? "list" attrs:list_attrs ws 
        close:("/>" ws {return {basic: true, content: []}} / 
               ">" ws content:list_content close_prefix:close_list {return {basic: false, close_prefix, content}})
-       &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "list") && check_listType(getAttrs(attrs), close.content)}
+       &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "list") && check_derivingType("list", "itemType", getAttrs(attrs), close.content)}
        {return {element: "list", attrs, content: close.content}}
 
 close_list = "</" close_prefix:(p:NCName ":" {return p})? "list" ws ">" ws {return close_prefix}
@@ -419,8 +493,8 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 restrictionST = "<" prefix:(p:NCName ":" {return p})? "restriction" attrs:restrictionST_attrs ws 
                  close:("/>" ws {return {basic: true, content: []}} / 
                         ">" ws content:restrictionST_content close_prefix:close_restrictionST {return {basic: false, close_prefix, content}})
-                 &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "restrictionST")}
-                 {return {element: "restrictionST", attrs, content: close.content}}
+                 &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "restrictionST") && check_derivingType("restriction", "base", getAttrs(attrs), close.content)}
+                 {return {element: "restriction", attrs, content: close.content}}
 
 close_restrictionST = "</" close_prefix:(p:NCName ":" {return p})? "restriction" ws ">" ws {return close_prefix}
 
@@ -430,7 +504,7 @@ restrictionST_attrs = attrs:(restrictionST_base elem_id? / elem_id restrictionST
 
 restrictionST_base = ws2 ("base" {any_type = false}) ws "=" ws q1:QM val:type_value q2:QM &{return checkQM(q1,q2)} {any_type = true; return {attr: "base", val}}
                      
-restrictionST_content = fst:annotation? snd:simpleType? others:constrFacet* {return cleanContent([fst, snd, ...others])}
+restrictionST_content = fst:annotation? snd:simpleType? others:constrFacet* &{return check_restrictionST_facets(others)} {return cleanContent([fst, snd, ...others])}
 
 
 constrFacet = "<" prefix:(p:NCName ":" {return p})? facet:constrFacet_values 
