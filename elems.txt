@@ -1,9 +1,13 @@
+- include
+- import
 - appinfo
 - documentation
 - annotation
 - simpleType
 - union
 - list
+- restriction (simpleType)
+- minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits |fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern
 - element
 
 schema - é preciso fazer verificação manual no content
