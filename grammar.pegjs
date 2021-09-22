@@ -92,32 +92,61 @@
 
   // <element> ------------------------------
 
-  // nomes dos elementos globais declarados na schema, para verificar a validade dos atributos "ref"
+  // nomes (únicos) dos elementos <element> globais
   let global_elems = []
+  // nomes (únicos) dos elementos <attribute> globais
+  let global_attrs = []
   // nomes dos elementos <notation>
   let notation_names = []
   // atributos "id" de elementos da schema - têm de ser únicos
   let elem_ids = []
 
-  // validar um elemento básico (sem simple/complexType) - verificar que tem os atributos essenciais
-  const validateBasicElement = attrs => "ref" in attrs || "name" in attrs
+  // validar um elemento <element>/<attribute> básico - verificar que tem os atributos essenciais
+  const validateLocalElem = attrs => "ref" in attrs || "name" in attrs
   // verificar se o novo id é único na schema
   const validateID = id => !elem_ids.includes(id) ? true : error("O valor do atributo 'id' deve ser único!")
-  // validar se o atributo "ref" está a referenciar um elemento global válido da schema ou de uma schema importada (só se valida o prefixo, neste caso)
-  const validateRef = ref => (ref.includes(":") || global_elems.includes(ref)) ? true : error("Está a tentar referenciar um elemento inexistente! Só é possível referenciar elementos globais.")
+  // validar se o atributo "ref" está a referenciar um <element> global válido da schema ou de uma schema importada (só se valida o prefixo, neste caso)
+  const validateElemRef = ref => (ref.includes(":") || global_elems.includes(ref)) ? true : error("Está a tentar referenciar um elemento <element> inexistente! Só é possível referenciar elementos globais.")
+  // validar se o atributo "ref" está a referenciar um <attribute> global válido da schema ou de uma schema importada (só se valida o prefixo, neste caso)
+  const validateAttrRef = ref => (ref.includes(":") || global_attrs.includes(ref)) ? true : error("Está a tentar referenciar um elemento <attribute> inexistente! Só é possível referenciar elementos globais.")
   // para elementos com 1 só atributo possível, retorna um array com ou sem ele, conforme seja null ou não
   const isNullAttr = attr => attr === null ? [] : [attr]
   // remove os nulls que vierem na lista de filhos de um elemento
   const cleanContent = content => content.filter(e => e !== null)
+
   // validar o nome de um <element> - se for um elemento global, o nome deve ser único
   const validateElemName = name => {
-    if (atRoot() && !global_elems.includes(name)) {global_elems.push(name); return true}
-    return error("Todos os elementos <element> definidos globalmente devem ter nomes únicos!")
+    if (atRoot()) {
+      if (!global_elems.includes(name)) {global_elems.push(name); return true}
+      return error("Todos os elementos <element> definidos globalmente devem ter nomes únicos!")
+    }
+    return true
+  }
+  // validar o nome de um <attribute> - se for um elemento global, o nome deve ser único
+  const validateAttrName = name => {
+    if (atRoot()) {
+      if (!global_attrs.includes(name)) {global_attrs.push(name); return true}
+      return error("Todos os elementos <attribute> definidos globalmente devem ter nomes únicos!")
+    }
+    return true
   }
   // validar o nome de um <notation> - deve ser único
   const validateNotationName = name => {
     if (notation_names.includes(name)) return error("Todos os elementos <notation> devem ter nomes únicos!")
     notation_names.push(name); return true
+  }
+
+  // verificar que um elemento não tem atributos locais com o mesmo nome
+  const validateLocalAttrs = (elem, content) => {
+    // filtrar apenas os elementos <attribute> do conteúdo e ir buscar os respetivos atributos "name"
+    let names = content.filter(x => x.element == "attribute").map(x => x.attrs.filter(a => a.attr=="name")[0])
+    // remover os atributos que não têm nome (têm ref) e mapear os restos para o valor do nome
+    names = names.filter(x => x != undefined).map(x => x.val)
+
+    // verificar se há nomes repetidos no array
+    let duplicates = names.filter((item, index) => names.indexOf(item) !== index)
+    if (duplicates.length > 0) return error(`Os atributos locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${elem}> tem mais do que um atributo com o nome '${duplicates[0]}'.`)
+    return true
   }
 
   // validar os atributos de um elemento <element>
@@ -137,16 +166,16 @@
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
-      if (keys.includes("ref")) return error("O atributo 'ref' é proibido num elemento de schema!")
-      if (keys.includes("maxOccurs")) return error("O atributo 'maxOccurs' é proibido num elemento de schema!")
-      if (keys.includes("minOccurs")) return error("O atributo 'minOccurs' é proibido num elemento de schema!")
-      if (!keys.includes("name")) return error("O atributo 'name' é requirido num elemento de schema!")
+      if (keys.includes("ref")) return error("O atributo 'ref' é proibido num elemento <element> de schema!")
+      if (keys.includes("maxOccurs")) return error("O atributo 'maxOccurs' é proibido num elemento <element> de schema!")
+      if (keys.includes("minOccurs")) return error("O atributo 'minOccurs' é proibido num elemento <element> de schema!")
+      if (!keys.includes("name")) return error("O atributo 'name' é requirido num elemento <element> de schema!")
     }
     // elementos aninhados
-    else if (keys.includes("final")) return error("O atributo 'final' é proibido num elemento aninhado!")
+    else if (keys.includes("final")) return error("O atributo 'final' é proibido num elemento <element> aninhado!")
 
     // mensagem de erro de atributos mutuamente exclusivos
-    let mutexc_error = (a1,a2) => error(`Os atributos '${a1}' e '${a2}' são mutuamente exclusivos!`)
+    let mutexc_error = (a1,a2) => error(`Em elementos <element>, os atributos '${a1}' e '${a2}' são mutuamente exclusivos!`)
     // atributos mutuamente exclusivos
     if (keys.includes("default") && keys.includes("fixed")) return mutexc_error("default","fixed")
     if (keys.includes("ref") && keys.includes("block")) return mutexc_error("ref","block")
@@ -169,6 +198,15 @@
     return arr
   }
 
+  // verificar que um elemento <attribute> não tem um elemento filho <simpleType> e um dos atributos mutualmente exclusivos com esse
+  function check_attrMutex(attrs, content) {
+    if (content.some(x => x.element === "simpleType")) {
+      if ("type" in attrs) return error(`O atributo "type" só pode estar presente no elemento <attribute> quando o seu conteúdo não contém um elemento <simpleType>!`)
+      if ("ref" in attrs) return error(`O atributo "ref" só pode estar presente no elemento <attribute> quando o seu conteúdo não contém um elemento <simpleType>!`)
+    }
+    return true
+  }
+
   // validar os prefixos de abertura e fecho de um elemento
   function check_elemPrefixes(merged, prefix, close_prefix, elem_name) {
     // merged é um boleano que indica se a abertura e fecho são feitos no mesmo elemento ou não
@@ -176,6 +214,36 @@
     if (prefix !== null && prefix !== default_prefix) return error("Prefixo inválido!")
     if (prefix === null && !noSchemaPrefix()) return error("Precisa de prefixar o elemento com o prefixo do respetivo namespace!")
     return true
+  }
+
+  // validar os atributos de um elemento <attribute>
+  function check_attributeAttrs(arr) {
+    let keys = [] // array com os nomes dos atributos
+        
+    for (let i = 0; i < arr.length; i++) {
+      // verificar que não há atributos repetidos
+      if (keys.includes(arr[i].attr)) return error("O elemento <attribute> não pode possuir atributos repetidos!")
+      else keys.push(arr[i].attr)
+    }
+
+    // restrições relativas à profundidade dos elementos
+    if (atRoot()) { // elementos da schema
+      if (keys.includes("ref")) return error("O atributo 'ref' é proibido num elemento <attribute> de schema!")
+      if (!keys.includes("name")) return error("O atributo 'name' é requirido num elemento <attribute> de schema!")
+    }
+
+    // mensagem de erro de atributos mutuamente exclusivos
+    let mutexc_error = (a1,a2) => error(`Em elementos <attribute>, os atributos '${a1}' e '${a2}' são mutuamente exclusivos!`)
+    // atributos mutuamente exclusivos
+    if (keys.includes("default") && keys.includes("fixed")) return mutexc_error("default","fixed")
+    if (keys.includes("ref") && keys.includes("form")) return mutexc_error("ref","form")
+    if (keys.includes("ref") && keys.includes("name")) return mutexc_error("ref","name")
+    if (keys.includes("ref") && keys.includes("type")) return mutexc_error("ref","type")
+
+    // atributos com valores predefinidos
+    if (!keys.includes("use")) arr.push({attr: "use", val: "optional"})
+
+    return arr
   }
 
   // validar os atributos de um elemento <notation>
@@ -245,9 +313,9 @@
 
   // validar o tipo de um elemento de derivação - tem de ter ou o atributo de referência ou um elemento filho <simpleType>
   function check_derivingType(elem, attr, attrs, content) {
-    if (attr in attrs && content !== null && content.some(x => x.element === "simpleType"))
+    if (attr in attrs && content.some(x => x.element === "simpleType"))
       return error(`A utilização do elemento filho <simpleType> e do atributo "${attr}" é mutualmente exclusiva no elemento <${elem}>!`)
-    if (!(attr in attrs) && content === null)
+    if (!(attr in attrs) && !content.length)
       return error(`Um elemento <${elem}> deve ter o atributo "${attr}" ou um elemento filho <simpleType> para indicar o tipo a derivar!`)
     return true
   }
@@ -395,14 +463,15 @@ namespace = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws val:string  
 schema_version = ws2 "version" ws "=" ws val:string                                                                           {return {attr: "version", val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
 targetNamespace = ws2 "targetNamespace" ws "=" ws val:string                                                                  {return {attr: "targetNamespace", val}}
 
-schema_content = (/* redefine / */ include / import / annotation)* (((simpleType /* / complexType / group / attributeGroup */) / element /* / attribute*/ / notation ) annotation*)*
+schema_content = el:(/* redefine / */ include / import / annotation)* (((simpleType /* / complexType / group / attributeGroup */) / element / attribute / notation ) annotation*)*
+                &{return validateLocalAttrs("schema", cleanContent(el))} {return el}
 
 
 // ----- <include> -----
 
 include = "<" prefix:(p:NCName ":" {return p})? "include" attrs:include_attrs ws 
           close:("/>" ws {return {basic: true, content: []}} / 
-                openEl ws content:annotation? close_data:close_include {return {basic: false, close_prefix, content: content===null ? [] : content}})
+                openEl ws content:annotation? close_prefix:close_include {return {basic: false, close_prefix, content: cleanContent([content])}})
           &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "include")}
           {return {element: "include", attrs, content: close.content}}
 
@@ -410,7 +479,7 @@ close_include = "</" close_prefix:(p:NCName ":" {return p})? "include" ws closeE
 
 include_attrs = attrs:(schemaLocation elem_id? / elem_id schemaLocation?)? 
                 &{return (attrs!==null && cleanContent(attrs).some(x => x.attr === "schemaLocation")) ? true : error(`Um elemento <include> requer o atributo "schemaLocation"!`)}
-                {return attrs===null ? [] : cleanContent(attrs)}
+                {return cleanContent([attrs])}
 
 schemaLocation = ws2 "schemaLocation" ws "=" ws val:string {return {attr: "schemaLocation", val}}
 
@@ -419,7 +488,7 @@ schemaLocation = ws2 "schemaLocation" ws "=" ws val:string {return {attr: "schem
 
 import = "<" prefix:(p:NCName ":" {return p})? "import" attrs:import_attrs ws 
           close:("/>" ws {return {basic: true, content: []}} / 
-                openEl ws content:annotation? close_data:close_import {return {basic: false, close_prefix, content: content===null ? [] : content}})
+                openEl ws content:annotation? close_prefix:close_import {return {basic: false, close_prefix, content: cleanContent([content])}})
           &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "import")}
           {return {element: "import", attrs, content: close.content}}
 
@@ -433,7 +502,7 @@ import_attrs = el:(namespace / elem_id / schemaLocation)* &{return check_importA
 element = "<" prefix:(p:NCName ":" {return p})? "element" attrs:element_attrs ws
           close:("/>" ws {return {basic: true, content: []}} / 
                 openEl ws content:element_content close_prefix:close_element {return {basic: false, close_prefix, content}}) &{
-  if ((close.basic || !close.content.length) && !validateBasicElement(getAttrs(attrs))) return error("Um elemento básico deve ter, pelo menos, o atributo 'name' ou 'ref'!")
+  if ((close.basic || !close.content.length) && !validateLocalElem(getAttrs(attrs))) return error("Um elemento local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
   return check_elemPrefixes(close.basic, prefix, close.close_prefix, "element")
 } {return {element: "element", attrs, content: close.content}}
 
@@ -441,7 +510,7 @@ close_element = "</" prefix:(p:NCName ":" {return p})? "element" ws closeEl ws {
 
 element_attrs = el:(elem_abstract / elem_block / elem_default / elem_substitutionGroup /
                 elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
-                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)+ &{return check_elemAttrs(el)} {return el}
+                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)* &{return check_elemAttrs(el)} {return el}
 
 elem_abstract = ws2 "abstract" ws "=" ws q1:QM val:boolean q2:QM                 &{return checkQM(q1,q2)}                          {return {attr: "abstract", val}}
 elem_block = ws2 "block" ws "=" ws q1:QM val:elem_block_values q2:QM             &{return checkQM(q1,q2)}                          {return {attr: "block", val}}
@@ -455,12 +524,32 @@ elem_minOccurs = ws2 "minOccurs" ws "=" ws q1:QM val:int q2:QM                  
 elem_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM                          &{return checkQM(q1,q2) && validateElemName(val)} {return {attr: "name", val}}
 elem_nillable = ws2 "nillable" ws "=" ws q1:QM val:boolean q2:QM                 &{return checkQM(q1,q2)}                          {return {attr: "nillable", val}}
 elem_lang = ws2 "xml:lang" ws "=" ws q1:QM val:language q2:QM                    &{return checkQM(q1,q2)}                          {return {attr: "lang", val}}
-elem_ref = ws2 "ref" ws "=" ws q1:QM val:QName q2:QM                             &{return checkQM(q1,q2) && validateRef(val)}      {return {attr: "ref", val}}
+elem_ref = ws2 "ref" ws "=" ws q1:QM val:QName q2:QM                             &{return checkQM(q1,q2) && validateElemRef(val)}  {return {attr: "ref", val}}
 elem_source = ws2 "source" ws "=" ws val:string                                                                                    {return {attr: "source", val}}
 elem_substitutionGroup = ws2 "substitutionGroup" ws "=" ws q1:QM val:QName q2:QM &{return checkQM(q1,q2)}                          {return {attr: "substitutionGroup", val}}
 elem_type = ws2 "type" ws "=" ws q1:QM val:type_value q2:QM                      &{return checkQM(q1,q2)}                          {return {attr: "type", val}}
 
 element_content = c:(annotation? (simpleType /* / complexType */)? /* (unique / key / keyref)*) */) {return cleanContent(c)}
+
+
+// ----- <attribute> -----
+
+attribute = "<" prefix:(p:NCName ":" {return p})? ("attribute" {any_type = false}) attrs:attribute_attrs ws
+          close:("/>" ws {return {basic: true, content: []}} / 
+                openEl ws content:attribute_content close_prefix:close_attribute {return {basic: false, close_prefix, content}}) &{
+  if ((close.basic || !close.content.length) && !validateLocalElem(getAttrs(attrs))) return error("Um atributo local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
+  return check_elemPrefixes(close.basic, prefix, close.close_prefix, "attribute") && check_attrMutex(getAttrs(attrs), close.content)
+} {return {element: "attribute", attrs, content: close.content}}
+
+close_attribute = "</" prefix:(p:NCName ":" {return p})? "attribute" ws closeEl ws {return prefix}
+
+attribute_attrs = el:(elem_default / elem_fixed / elem_form / elem_id / attr_name / attr_ref / elem_type / attr_use)* &{return check_attributeAttrs(el)} {any_type = true; return el}
+
+attr_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM        &{return checkQM(q1,q2) && validateAttrName(val)} {return {attr: "name", val}}
+attr_ref = ws2 "ref" ws "=" ws q1:QM val:QName q2:QM           &{return checkQM(q1,q2) && validateAttrRef(val)}  {return {attr: "ref", val}}
+attr_use = ws2 "use" ws "=" ws q1:QM val:attr_use_values q2:QM &{return checkQM(q1,q2)}                          {return {attr: "use", val}}
+
+attribute_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 
 // ----- <simpleType> -----
@@ -508,7 +597,7 @@ close_appinfo_prefix = "</" close_prefix:(p:NCName ":" {return p})? "appinfo" ws
 
 documentation = doc_simple / doc_prefix
 
-documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return attrs===null ? [] : cleanContent(attrs)}
+documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return cleanContent([attrs])}
 
 doc_simple = "<documentation" attrs:documentation_attrs ws openEl content:doc_content_simple? close_doc_simple
              {return {element: "documentation", attrs, content: content===null ? "" : content}}
@@ -531,7 +620,7 @@ union = "<" prefix:(p:NCName ":" {return p})? "union" attrs:union_attrs ws openE
         &{return check_elemPrefixes(false, prefix, close_prefix, "union") && validateUnion(getAttrs(attrs), content)}
         {return {element: "union", attrs, content}}
 
-union_attrs = attrs:(elem_id union_memberTypes? / union_memberTypes elem_id?)? {return attrs===null ? [] : cleanContent(attrs)}
+union_attrs = attrs:(elem_id union_memberTypes? / union_memberTypes elem_id?)? {return cleanContent([attrs])}
 
 union_memberTypes = ws2 ("memberTypes" {any_type = false}) ws "=" ws q1:QM val:list_types q2:QM
                     &{return checkQM(q1,q2)} {any_type = true; return {attr: "memberTypes", val}}
@@ -549,7 +638,7 @@ list = "<" prefix:(p:NCName ":" {return p})? "list" attrs:list_attrs ws
 
 close_list = "</" close_prefix:(p:NCName ":" {return p})? "list" ws closeEl ws {return close_prefix}
 
-list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return attrs===null ? [] : cleanContent(attrs)}
+list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return cleanContent([attrs])}
 
 list_itemType = ws2 ("itemType" {any_type = false}) ws "=" ws q1:QM val:type_value q2:QM
                 &{return checkQM(q1,q2)} {any_type = true; return {attr: "itemType", val}}
@@ -567,7 +656,7 @@ restrictionST = "<" prefix:(p:NCName ":" {return p})? "restriction" attrs:restri
 
 close_restrictionST = "</" close_prefix:(p:NCName ":" {return p})? "restriction" ws closeEl ws {return close_prefix}
 
-restrictionST_attrs = attrs:(restrictionST_base elem_id? / elem_id restrictionST_base?)? {return attrs===null ? [] : cleanContent(attrs)}
+restrictionST_attrs = attrs:(restrictionST_base elem_id? / elem_id restrictionST_base?)? {return cleanContent([attrs])}
 
 restrictionST_base = ws2 ("base" {any_type = false}) ws "=" ws q1:QM val:type_value q2:QM &{return checkQM(q1,q2)} {any_type = true; return {attr: "base", val}}
                      
@@ -577,13 +666,13 @@ restrictionST_content = fst:annotation? snd:simpleType? others:constrFacet* &{re
 constrFacet = "<" prefix:(p:NCName ":" {return p})? facet:constrFacet_values 
               attrs:(a:constrFacet_attrs ws &{return check_constrFacetAttrs(facet,a)} {return check_constrFacetAttrs(facet,a)})
               close:("/>" ws {return {basic: true, content: []}} / 
-                    openEl ws content:annotation? close_data:close_constrFacet {return {basic: false, ...close_data, content: content===null ? [] : content}})
+                    openEl ws content:annotation? close_data:close_constrFacet {return {basic: false, ...close_data, content: cleanContent([content])}})
               &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, facet) && checkConstraintNames(close.basic, facet, close.close_facet)}
               {return {element: facet, attrs, content: close.content}}
 
 close_constrFacet = "</" close_prefix:(p:NCName ":" {return p})? close_facet:constrFacet_values ws closeEl ws {return {close_prefix, close_facet}}
 
-constrFacet_attrs = el:(elem_id / constrFacet_fixed / constrFacet_value)+ {return el}
+constrFacet_attrs = el:(elem_id / constrFacet_fixed / constrFacet_value)* {return el}
 
 constrFacet_fixed = ws2 "fixed" ws "=" ws q1:QM val:boolean q2:QM &{return checkQM(q1,q2)} {return {attr: "fixed", val}}
 constrFacet_value = ws2 "value" ws "=" ws val:string                                       {return {attr: "value", val}}
@@ -593,7 +682,7 @@ constrFacet_value = ws2 "value" ws "=" ws val:string                            
 
 notation = "<" prefix:(p:NCName ":" {return p})? "notation" attrs:notation_attrs ws 
           close:("/>" ws {return {basic: true, content: []}} / 
-                openEl ws content:annotation? close_data:close_notation {return {basic: false, close_prefix, content: content===null ? [] : content}})
+                openEl ws content:annotation? close_prefix:close_notation {return {basic: false, close_prefix, content: cleanContent([content])}})
           &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "notation")}
           {return {element: "notation", attrs, content: close.content}}
 
@@ -635,6 +724,7 @@ elem_final_values = "#all" / "extension" / "restriction"
 elem_block_values = elem_final_values / "substitution"
 finalDefault_values = elem_final_values / "list" / "union"
 simpleType_final_values = "#all" / "list" / "union" / "restriction"
+attr_use_values = "optional" / "prohibited" / "required"
 constrFacet_values = $("length" / ("max"/"min")"Length" / ("max"/"min")("Ex"/"In")"clusive" / ("total"/"fraction")"Digits" / "whiteSpace" / "pattern" / "enumeration")
 
 // um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
