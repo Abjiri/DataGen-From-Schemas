@@ -136,6 +136,31 @@
     notation_names.push(name); return true
   }
 
+  // validar os prefixos de abertura e fecho de um elemento
+  function check_elemPrefixes(merged, prefix, close_prefix, elem_name) {
+    // merged é um boleano que indica se a abertura e fecho são feitos no mesmo elemento ou não
+    if (!merged && prefix !== close_prefix) return error(`O prefixo do elemento de fecho do <${elem_name}> tem de ser igual ao prefixo do elemento de abertura!`)
+    if (prefix !== null && prefix !== default_prefix) return error("Prefixo inválido!")
+    if (prefix === null && !noSchemaPrefix()) return error("Precisa de prefixar o elemento com o prefixo do respetivo namespace!")
+    return true
+  }
+  
+  // verificar que um elemento <element> não tem o atributo "ref" e um dos elementos filhos mutualmente exclusivos com esse
+  function check_elemMutex(attrs, content) {
+    if ("ref" in attrs && content.some(x => ["simpleType","complexType","key","keyref","unique"].includes(x.element)))
+      return error(`Se o atributo "ref" está presente num elemento <element>, o seu conteúdo não pode conter nenhum elemento <simpleType>, <complexType>, <key>, <keyref> ou <unique>!`)
+    return true
+  }
+
+  // verificar que um elemento <attribute> não tem um elemento filho <simpleType> e um dos atributos mutualmente exclusivos com esse
+  function check_attrMutex(attrs, content) {
+    if (content.some(x => x.element === "simpleType")) {
+      if ("type" in attrs) return error(`O atributo "type" só pode estar presente no elemento <attribute> quando o seu conteúdo não contém um elemento <simpleType>!`)
+      if ("ref" in attrs) return error(`O atributo "ref" só pode estar presente no elemento <attribute> quando o seu conteúdo não contém um elemento <simpleType>!`)
+    }
+    return true
+  }
+
   // verificar que um elemento não tem atributos locais com o mesmo nome
   const validateLocalAttrs = (elem, content) => {
     // filtrar apenas os elementos <attribute> do conteúdo e ir buscar os respetivos atributos "name"
@@ -196,24 +221,6 @@
     if (!keys.includes("nillable")) arr.push({attr: "nillable", val: false})
 
     return arr
-  }
-
-  // verificar que um elemento <attribute> não tem um elemento filho <simpleType> e um dos atributos mutualmente exclusivos com esse
-  function check_attrMutex(attrs, content) {
-    if (content.some(x => x.element === "simpleType")) {
-      if ("type" in attrs) return error(`O atributo "type" só pode estar presente no elemento <attribute> quando o seu conteúdo não contém um elemento <simpleType>!`)
-      if ("ref" in attrs) return error(`O atributo "ref" só pode estar presente no elemento <attribute> quando o seu conteúdo não contém um elemento <simpleType>!`)
-    }
-    return true
-  }
-
-  // validar os prefixos de abertura e fecho de um elemento
-  function check_elemPrefixes(merged, prefix, close_prefix, elem_name) {
-    // merged é um boleano que indica se a abertura e fecho são feitos no mesmo elemento ou não
-    if (!merged && prefix !== close_prefix) return error(`O prefixo do elemento de fecho do <${elem_name}> tem de ser igual ao prefixo do elemento de abertura!`)
-    if (prefix !== null && prefix !== default_prefix) return error("Prefixo inválido!")
-    if (prefix === null && !noSchemaPrefix()) return error("Precisa de prefixar o elemento com o prefixo do respetivo namespace!")
-    return true
   }
 
   // validar os atributos de um elemento <attribute>
@@ -503,7 +510,7 @@ element = "<" prefix:(p:NCName ":" {return p})? "element" attrs:element_attrs ws
           close:("/>" ws {return {basic: true, content: []}} / 
                 openEl ws content:element_content close_prefix:close_element {return {basic: false, close_prefix, content}}) &{
   if ((close.basic || !close.content.length) && !validateLocalElem(getAttrs(attrs))) return error("Um elemento local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
-  return check_elemPrefixes(close.basic, prefix, close.close_prefix, "element")
+  return check_elemPrefixes(close.basic, prefix, close.close_prefix, "element") && check_elemMutex(getAttrs(attrs), close.content)
 } {return {element: "element", attrs, content: close.content}}
 
 close_element = "</" prefix:(p:NCName ":" {return p})? "element" ws closeEl ws {return prefix}
