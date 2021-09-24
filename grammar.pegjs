@@ -102,7 +102,7 @@
   let elem_ids = []
 
   // validar um elemento <element>/<attribute> básico - verificar que tem os atributos essenciais
-  const validateLocalElem = attrs => "ref" in attrs || "name" in attrs
+  const validateLocalEl = attrs => "ref" in attrs || "name" in attrs
   // verificar se o novo id é único na schema
   const validateID = id => !elem_ids.includes(id) ? true : error("O valor do atributo 'id' deve ser único!")
   // validar se o atributo "ref" está a referenciar um <element> global válido da schema ou de uma schema importada (só se valida o prefixo, neste caso)
@@ -135,13 +135,18 @@
     if (notation_names.includes(name)) return error("Todos os elementos <notation> devem ter nomes únicos!")
     notation_names.push(name); return true
   }
-
-  // validar os prefixos de abertura e fecho de um elemento
-  function check_elemPrefixes(merged, prefix, close_prefix, elem_name) {
+  
+  // validar as tags de abertura e fecho de um elemento - prefixos e nomes de elementos coesos
+  function check_elTags(el_name, prefix, close) {
     // merged é um boleano que indica se a abertura e fecho são feitos no mesmo elemento ou não
-    if (!merged && prefix !== close_prefix) return error(`O prefixo do elemento de fecho do <${elem_name}> tem de ser igual ao prefixo do elemento de abertura!`)
+    if (!close.merged) {
+      if (el_name !== close.name) return error(`Os elementos de abertura <${el_name}> e de fecho <${close.name}> devem dizer respeito ao mesmo elemento!`)
+      if (prefix !== close.prefix) return error(`O prefixo do elemento de fecho do <${el_name}> tem de ser igual ao prefixo do elemento de abertura!`)
+    }
+    
     if (prefix !== null && prefix !== default_prefix) return error("Prefixo inválido!")
     if (prefix === null && !noSchemaPrefix()) return error("Precisa de prefixar o elemento com o prefixo do respetivo namespace!")
+
     return true
   }
   
@@ -291,7 +296,7 @@
   const validateUnion = (attrs,content) => attrs.memberTypes.length + content.filter(e => e.element === "simpleType").length > 0 ? true : 
                                            error(`Um elemento <union> deve ter o atributo "memberTypes" não vazio ou pelo menos um elemento filho <simpleType>!`)
   // verificar se os nomes dos elementos de abertura e fecho de elementos de limites numéricos coincidem
-  const checkConstraintNames = (merged, open, close) => (merged || open === close) ? true : error(`O nome do elemento de abertura (${open}) deve ser igual ao de fecho (${close})!`)
+  const checkConstraintNames = (el_name, close) => (close.merged || el_name === close.name) ? true : error(`O nome do elemento de abertura (${el_name}) deve ser igual ao de fecho (${close.name})!`)
 
   // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes caso seja único
   function newSimpleType(name) {
@@ -448,12 +453,11 @@ XML_encoding_value = "UTF-"("8"/"16") / "ISO-10646-UCS-"("2"/"4") / "ISO-8859-"[
 XML_standalone = ws2 "standalone" ws "=" ws q1:QM XML_standalone_value q2:QM &{return checkQM(q1,q2)}
 XML_standalone_value = "yes" / "no"
 
-
 // ----- <schema> -----
 
-schema = "<" (p:NCName ":" {default_prefix = p})? "schema" attrs:schema_attrs ws ">" ws content:schema_content end_schema {return {element: "schema", attrs, content}}
+schema = "<" (p:NCName ":" {default_prefix = p})? "schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema {return {element: "schema", attrs, content}}
 
-end_schema = "</" prefix:(p:NCName ":" {return p})? "schema" ws ">" ws &{
+close_schema = "</" prefix:(p:NCName ":" {return p})? "schema" ws ">" ws &{
   if (!noSchemaPrefix() && prefix === null) return error("Precisa de prefixar o elemento de fecho da schema!")
   if (noSchemaPrefix() && prefix !== null) return error("Não pode usar um prefixo aqui porque não predefiniu um prefixo para o namespace da schema!")
   if (prefix !== default_prefix) return error ("Precisa de prefixar o elemento de fecho da schema com o prefixo predefinido do seu namespace!")
@@ -476,13 +480,11 @@ schema_content = el:(/* redefine / */ include / import / annotation)* (((simpleT
 
 // ----- <include> -----
 
-include = "<" prefix:(p:NCName ":" {return p})? "include" attrs:include_attrs ws 
-          close:("/>" ws {return {basic: true, content: []}} / 
-                openEl ws content:annotation? close_prefix:close_include {return {basic: false, close_prefix, content: cleanContent([content])}})
-          &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "include")}
-          {return {element: "include", attrs, content: close.content}}
-
-close_include = "</" close_prefix:(p:NCName ":" {return p})? "include" ws closeEl ws {return close_prefix}
+include = "<" prefix:(p:NCName ":" {return p})? el_name:"include" attrs:include_attrs ws 
+          close:("/>" ws {return {merged: true, content: []}} / 
+                openEl ws content:annotation? close_el:close_XSD_el {return {merged: false, ...close_el, content: cleanContent([content])}})
+          &{return check_elTags(el_name, prefix, close)}
+          {return {element: el_name, attrs, content: close.content}}
 
 include_attrs = attrs:(schemaLocation elem_id? / elem_id schemaLocation?)? 
                 &{return (attrs!==null && cleanContent(attrs).some(x => x.attr === "schemaLocation")) ? true : error(`Um elemento <include> requer o atributo "schemaLocation"!`)}
@@ -493,27 +495,23 @@ schemaLocation = ws2 "schemaLocation" ws "=" ws val:string {return {attr: "schem
 
 // ----- <import> -----
 
-import = "<" prefix:(p:NCName ":" {return p})? "import" attrs:import_attrs ws 
-          close:("/>" ws {return {basic: true, content: []}} / 
-                openEl ws content:annotation? close_prefix:close_import {return {basic: false, close_prefix, content: cleanContent([content])}})
-          &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "import")}
-          {return {element: "import", attrs, content: close.content}}
-
-close_import = "</" close_prefix:(p:NCName ":" {return p})? "import" ws closeEl ws {return close_prefix}
+import = "<" prefix:(p:NCName ":" {return p})? el_name:"import" attrs:import_attrs ws 
+          close:("/>" ws {return {merged: true, content: []}} / 
+                openEl ws content:annotation? close_el:close_XSD_el {return {merged: false, ...close_el, content: cleanContent([content])}})
+          &{return check_elTags(el_name, prefix, close)}
+          {return {element: el_name, attrs, content: close.content}}
 
 import_attrs = el:(namespace / elem_id / schemaLocation)* &{return check_importAttrs(el)} {return el}
 
 
 // ----- <element> -----
 
-element = "<" prefix:(p:NCName ":" {return p})? "element" attrs:element_attrs ws
-          close:("/>" ws {return {basic: true, content: []}} / 
-                openEl ws content:element_content close_prefix:close_element {return {basic: false, close_prefix, content}}) &{
-  if ((close.basic || !close.content.length) && !validateLocalElem(getAttrs(attrs))) return error("Um elemento local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
-  return check_elemPrefixes(close.basic, prefix, close.close_prefix, "element") && check_elemMutex(getAttrs(attrs), close.content)
-} {return {element: "element", attrs, content: close.content}}
-
-close_element = "</" prefix:(p:NCName ":" {return p})? "element" ws closeEl ws {return prefix}
+element = "<" prefix:(p:NCName ":" {return p})? el_name:"element" attrs:element_attrs ws
+          close:("/>" ws {return {merged: true, content: []}} / 
+                openEl ws content:element_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) &{
+  if ((close.merged || !close.content.length) && !validateLocalEl(getAttrs(attrs))) return error("Um elemento local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
+  return check_elTags(el_name, prefix, close) && check_elemMutex(getAttrs(attrs), close.content)
+} {return {element: el_name, attrs, content: close.content}}
 
 element_attrs = el:(elem_abstract / elem_block / elem_default / elem_substitutionGroup /
                 elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
@@ -541,14 +539,12 @@ element_content = c:(annotation? (simpleType /* / complexType */)? /* (unique / 
 
 // ----- <attribute> -----
 
-attribute = "<" prefix:(p:NCName ":" {return p})? ("attribute" {any_type = false}) attrs:attribute_attrs ws
-          close:("/>" ws {return {basic: true, content: []}} / 
-                openEl ws content:attribute_content close_prefix:close_attribute {return {basic: false, close_prefix, content}}) &{
-  if ((close.basic || !close.content.length) && !validateLocalElem(getAttrs(attrs))) return error("Um atributo local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
-  return check_elemPrefixes(close.basic, prefix, close.close_prefix, "attribute") && check_attrMutex(getAttrs(attrs), close.content)
-} {return {element: "attribute", attrs, content: close.content}}
-
-close_attribute = "</" prefix:(p:NCName ":" {return p})? "attribute" ws closeEl ws {return prefix}
+attribute = "<" prefix:(p:NCName ":" {return p})? el_name:$("attribute" {any_type = false}) attrs:attribute_attrs ws
+          close:("/>" ws {return {merged: true, content: []}} / 
+                openEl ws content:attribute_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) &{
+  if ((close.merged || !close.content.length) && !validateLocalEl(getAttrs(attrs))) return error("Um atributo local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
+  return check_elTags(el_name, prefix, close) && check_attrMutex(getAttrs(attrs), close.content)
+} {return {element: el_name, attrs, content: close.content}}
 
 attribute_attrs = el:(elem_default / elem_fixed / elem_form / elem_id / attr_name / attr_ref / elem_type / attr_use)* &{return check_attributeAttrs(el)} {any_type = true; return el}
 
@@ -561,9 +557,9 @@ attribute_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 // ----- <simpleType> -----
 
-simpleType = "<" prefix:(p:NCName ":" {return p})? "simpleType" attrs:simpleType_attrs ws (openEl {type_depth++}) ws content:simpleType_content
-             "</" close_prefix:(p:NCName ":" {return p})? "simpleType" ws (closeEl {if (!--type_depth) current_type = null}) ws
-             &{return check_elemPrefixes(false, prefix, close_prefix, "simpleType")} {return {element: "simpleType", attrs, content}}
+simpleType = "<" prefix:(p:NCName ":" {return p})? el_name:"simpleType" attrs:simpleType_attrs ws (openEl {type_depth++}) ws content:simpleType_content close_el:close_XSD_el
+             &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
+             {if (!--type_depth) current_type = null; return {element: el_name, attrs, content}}
 
 simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* &{return check_simpleTypeAttrs(el)} {return el}
 
@@ -575,9 +571,9 @@ simpleType_content = c:(annotation? (restrictionST / list / union)) {return clea
 
 // ----- <annotation> -----
 
-annotation = "<" prefix:(p:NCName ":" {return p})? "annotation" attr:elem_id? ws openEl ws content:annotation_content
-             "</" close_prefix:(p:NCName ":" {return p})? "annotation" ws closeEl ws
-             &{return check_elemPrefixes(false, prefix, close_prefix, "annotation")} {return {element: "annotation", attrs: isNullAttr(attr), content}}
+annotation = "<" prefix:(p:NCName ":" {return p})? el_name:"annotation" attr:elem_id? ws openEl ws content:annotation_content close_el:close_XSD_el
+             &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
+             {return {element: el_name, attrs: isNullAttr(attr), content}}
 
 annotation_content = (appinfo / documentation)*
 
@@ -589,15 +585,15 @@ appinfo = appinfo_simple / appinfo_prefix
 appinfo_simple = "<appinfo" attr:elem_source? ws openEl content:appinfo_content_simple? close_appinfo_simple
                  {return {element: "appinfo", attrs: isNullAttr(attr), content: content===null ? "" : content}}
 
-appinfo_prefix = "<" prefix:(p:NCName ":" {return p})? "appinfo" attr:elem_source? ws openEl content:appinfo_content_prefix? close_prefix:close_appinfo_prefix
-                 &{return check_elemPrefixes(false, prefix, close_prefix, "appinfo")} 
-                 {return {element: "appinfo", attrs: isNullAttr(attr), content}}
+appinfo_prefix = "<" prefix:(p:NCName ":" {return p})? el_name:"appinfo" attr:elem_source? ws openEl content:appinfo_content_prefix? close_el:close_appinfo_prefix
+                 &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} 
+                 {return {element: el_name, attrs: isNullAttr(attr), content}}
 
 appinfo_content_simple = (!close_appinfo_simple). appinfo_content_simple* {return text().trim()}
 appinfo_content_prefix = (!close_appinfo_prefix). appinfo_content_prefix* {return text().trim()}
 
 close_appinfo_simple = "</appinfo" ws closeEl ws
-close_appinfo_prefix = "</" close_prefix:(p:NCName ":" {return p})? "appinfo" ws closeEl ws {return close_prefix}
+close_appinfo_prefix = "</" prefix:(p:NCName ":" {return p})? name:"appinfo" ws closeEl ws {return {name, prefix}}
 
 
 // ----- <documentation> -----
@@ -609,23 +605,22 @@ documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {
 doc_simple = "<documentation" attrs:documentation_attrs ws openEl content:doc_content_simple? close_doc_simple
              {return {element: "documentation", attrs, content: content===null ? "" : content}}
 
-doc_prefix = "<" prefix:(p:NCName ":" {return p})? "documentation" attrs:documentation_attrs ws openEl content:doc_content_prefix? close_prefix:close_doc_prefix
-             &{return check_elemPrefixes(false, prefix, close_prefix, "documentation")}
-             {return {element: "documentation", attrs, content: content===null ? "" : content}}
+doc_prefix = "<" prefix:(p:NCName ":" {return p})? el_name:"documentation" attrs:documentation_attrs ws openEl content:doc_content_prefix? close_el:close_doc_prefix
+             &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} 
+             {return {element: el_name, attrs, content: content===null ? "" : content}}
 
 doc_content_prefix = (!close_doc_prefix). doc_content_prefix* {return text().trim()}
 doc_content_simple = (!close_doc_simple). doc_content_simple* {return text().trim()}
 
 close_doc_simple = "</documentation" ws closeEl ws
-close_doc_prefix = "</" close_prefix:(p:NCName ":" {return p})? "documentation" ws closeEl ws {return close_prefix}
+close_doc_prefix = "</" prefix:(p:NCName ":" {return p})? name:"documentation" ws closeEl ws {return {name, prefix}}
 
 
 // ----- <union> -----
 
-union = "<" prefix:(p:NCName ":" {return p})? "union" attrs:union_attrs ws openEl ws content:union_content
-        "</" close_prefix:(p:NCName ":" {return p})? "union" ws closeEl ws
-        &{return check_elemPrefixes(false, prefix, close_prefix, "union") && validateUnion(getAttrs(attrs), content)}
-        {return {element: "union", attrs, content}}
+union = "<" prefix:(p:NCName ":" {return p})? el_name:"union" attrs:union_attrs ws openEl ws content:union_content close_el:close_XSD_el
+        &{return check_elTags(el_name, prefix, {merged: false, ...close_el}) && validateUnion(getAttrs(attrs), content)}
+        {return {element: el_name, attrs, content}}
 
 union_attrs = attrs:(elem_id union_memberTypes? / union_memberTypes elem_id?)? {return cleanContent([attrs])}
 
@@ -637,13 +632,11 @@ union_content = fst:annotation? others:simpleType* {if (fst !== null) others.uns
 
 // ----- <list> -----
 
-list = "<" prefix:(p:NCName ":" {return p})? "list" attrs:list_attrs ws 
-       close:("/>" ws {return {basic: true, content: []}} / 
-              openEl ws content:list_content close_prefix:close_list {return {basic: false, close_prefix, content}})
-       &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "list") && check_derivingType("list", "itemType", getAttrs(attrs), close.content)}
-       {return {element: "list", attrs, content: close.content}}
-
-close_list = "</" close_prefix:(p:NCName ":" {return p})? "list" ws closeEl ws {return close_prefix}
+list = "<" prefix:(p:NCName ":" {return p})? el_name:"list" attrs:list_attrs ws 
+       close:("/>" ws {return {merged: true, content: []}} / 
+              openEl ws content:list_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
+       &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "itemType", getAttrs(attrs), close.content)}
+       {return {element: el_name, attrs, content: close.content}}
 
 list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return cleanContent([attrs])}
 
@@ -655,13 +648,11 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 // ----- <restriction> (simpleType) -----
 
-restrictionST = "<" prefix:(p:NCName ":" {return p})? "restriction" attrs:restrictionST_attrs ws 
-                 close:("/>" ws {return {basic: true, content: []}} / 
-                        openEl ws content:restrictionST_content close_prefix:close_restrictionST {return {basic: false, close_prefix, content}})
-                 &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "restrictionST") && check_derivingType("restriction", "base", getAttrs(attrs), close.content)}
-                 {return {element: "restriction", attrs, content: close.content}}
-
-close_restrictionST = "</" close_prefix:(p:NCName ":" {return p})? "restriction" ws closeEl ws {return close_prefix}
+restrictionST = "<" prefix:(p:NCName ":" {return p})? el_name:"restriction" attrs:restrictionST_attrs ws 
+                 close:("/>" ws {return {merged: true, content: []}} / 
+                        openEl ws content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
+                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", getAttrs(attrs), close.content)}
+                 {return {element: el_name, attrs, content: close.content}}
 
 restrictionST_attrs = attrs:(restrictionST_base elem_id? / elem_id restrictionST_base?)? {return cleanContent([attrs])}
 
@@ -670,14 +661,12 @@ restrictionST_base = ws2 ("base" {any_type = false}) ws "=" ws q1:QM val:type_va
 restrictionST_content = fst:annotation? snd:simpleType? others:constrFacet* &{return check_restrictionST_facets(others)} {return cleanContent([fst, snd, ...others])}
 
 
-constrFacet = "<" prefix:(p:NCName ":" {return p})? facet:constrFacet_values 
-              attrs:(a:constrFacet_attrs ws &{return check_constrFacetAttrs(facet,a)} {return check_constrFacetAttrs(facet,a)})
-              close:("/>" ws {return {basic: true, content: []}} / 
-                    openEl ws content:annotation? close_data:close_constrFacet {return {basic: false, ...close_data, content: cleanContent([content])}})
-              &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, facet) && checkConstraintNames(close.basic, facet, close.close_facet)}
-              {return {element: facet, attrs, content: close.content}}
-
-close_constrFacet = "</" close_prefix:(p:NCName ":" {return p})? close_facet:constrFacet_values ws closeEl ws {return {close_prefix, close_facet}}
+constrFacet = "<" prefix:(p:NCName ":" {return p})? el_name:constrFacet_values 
+              attrs:(a:constrFacet_attrs ws &{return check_constrFacetAttrs(el_name, a)} {return check_constrFacetAttrs(el_name, a)})
+              close:("/>" ws {return {merged: true, content: []}} / 
+                    openEl ws content:annotation? close_el:close_XSD_el {return {merged: false, ...close_el, content: cleanContent([content])}})
+              &{return check_elTags(el_name, prefix, close) && checkConstraintNames(el_name, close)}
+              {return {element: el_name, attrs, content: close.content}}
 
 constrFacet_attrs = el:(elem_id / constrFacet_fixed / constrFacet_value)* {return el}
 
@@ -687,13 +676,11 @@ constrFacet_value = ws2 "value" ws "=" ws val:string                            
 
 // ----- <notation> -----
 
-notation = "<" prefix:(p:NCName ":" {return p})? "notation" attrs:notation_attrs ws 
-          close:("/>" ws {return {basic: true, content: []}} / 
-                openEl ws content:annotation? close_prefix:close_notation {return {basic: false, close_prefix, content: cleanContent([content])}})
-          &{return check_elemPrefixes(close.basic, prefix, close.close_prefix, "notation")}
+notation = "<" prefix:(p:NCName ":" {return p})? el_name:"notation" attrs:notation_attrs ws 
+          close:("/>" ws {return {merged: true, content: []}} / 
+                openEl ws content:annotation? close_el:close_XSD_el {return {merged: false, ...close_el, content: cleanContent([content])}})
+          &{return check_elTags(el_name, prefix, close)}
           {return {element: "notation", attrs, content: close.content}}
-
-close_notation = "</" close_prefix:(p:NCName ":" {return p})? "notation" ws closeEl ws {return close_prefix}
 
 notation_attrs = el:(elem_id / notation_name / notation_URI_attrs)* &{return check_notationAttrs(el)} {return el}
 
@@ -705,6 +692,10 @@ notation_URI_attrs = ws2 attr:("public" / "system") ws "=" ws val:string        
 
 openEl  = ">" {schema_depth++}
 closeEl = ">" {schema_depth--}
+
+close_XSD_el = "</" prefix:(p:NCName ":" {return p})? name:XSD_el_name ws closeEl ws {return {name, prefix}}
+XSD_el_name = "include" / "import" / "element" / "attribute" / "simpleType" / "annotation" / "appinfo" / 
+              "documentation" / "union" / "list" / "restriction" / "notation" / constrFacet_values
 
 ws "whitespace" = [ \t\n\r]*
 ws2 = [ \t\n\r]+
