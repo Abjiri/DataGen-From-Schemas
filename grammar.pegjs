@@ -93,7 +93,7 @@
   // <element> ------------------------------
 
   //nomes (únicos) dos elementos <element> globais, <attribute> globais e <notation>
-  let names = {element: [], attribute: [], notation: []}
+  let names = {element: [], attribute: [], attributeGroup: [], notation: []}
   // atributos "id" de elementos da schema - têm de ser únicos
   let ids = []
 
@@ -149,6 +149,13 @@
     return true
   }
 
+  // verificar que um elemento <attributeGroup> não tem conteúdo se tiver o atributo "ref"
+  function check_attrGroupMutex(attrs, content) {
+    if ("ref" in attrs && content.some(x => x.element != "annotation"))
+      return error('Se um elemento <attributeGroup> tiver o atributo "ref" especificado, o seu conteúdo só pode ser, no máximo, um elemento <annotation>!')
+    return true
+  }
+
   // verificar que um elemento não tem <attribute> locais com o mesmo nome
   function validateLocalAttrs(elem, content) {
     // filtrar apenas os elementos <attribute> do conteúdo e ir buscar os respetivos atributos "name"
@@ -192,15 +199,13 @@
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
-      let error_msg = attr => `O atributo "${attr}" é proibido num elemento <element> de schema!`
-
-      if (keys.includes("ref")) return error(error_msg("ref"))
-      if (keys.includes("maxOccurs")) return error(error_msg("maxOccurs"))
-      if (keys.includes("minOccurs")) return error(error_msg("minOccurs"))
-      if (!keys.includes("name")) return error(error_msg("name"))
+      if (keys.includes("ref")) return error('O atributo "ref" é proibido num elemento <element> de schema!')
+      if (keys.includes("maxOccurs")) return error('O atributo "maxOccurs" é proibido num elemento <element> de schema!')
+      if (keys.includes("minOccurs")) return error('O atributo "minOccurs" é proibido num elemento <element> de schema!')
+      if (!keys.includes("name")) return error('O atributo "name" é requirido num elemento <element> de schema!')
     }
     // elementos aninhados
-    else if (keys.includes("final")) return error('O atributo "final" é proibido num elemento <element> aninhado!')
+    else if (keys.includes("final")) return error('O atributo "final" é proibido num elemento <element> local!')
 
     // mensagem de erro de atributos mutuamente exclusivos
     let mutexc_error = (a1,a2) => error(`Em elementos <element>, os atributos "${a1}" e "${a2}" são mutuamente exclusivos!`)
@@ -226,26 +231,35 @@
     return arr
   }
 
-  // validar os atributos de um elemento <attribute>
-  function check_attributeAttrs(arr) {
-    let keys = getAttrsKeys(arr, "attribute") // array com os nomes dos atributos
+  // validar os atributos de um elemento <attribute/attributeGroup>
+  function check_attributeElAttrs(arr, el_name) {
+    let keys = getAttrsKeys(arr, el_name) // array com os nomes dos atributos
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
-      if (keys.includes("ref")) return error('O atributo "ref" é proibido num elemento <attribute> de schema!')
-      if (!keys.includes("name")) return error('O atributo "name" é requirido num elemento <attribute> de schema!')
+      if (keys.includes("ref")) return error(`O atributo "ref" é proibido num elemento <${el_name}> de schema!`)
+      if (!keys.includes("name")) return error(`O atributo "name" é requirido num elemento <${el_name}> de schema!`)
+    }
+    else {
+      if (el_name == "attributeGroup") {
+        if (!keys.includes("ref")) return error(`O atributo "ref" é requirido num elemento <${el_name}> local!`)
+        if (keys.includes("name")) return error(`O atributo "name" é proibido num elemento <${el_name}> local!`)
+      }
     }
 
     // mensagem de erro de atributos mutuamente exclusivos
-    let mutexc_error = (a1,a2) => error(`Em elementos <attribute>, os atributos "${a1}" e "${a2}" são mutuamente exclusivos!`)
+    let mutexc_error = (a1,a2) => error(`Em elementos <${el_name}>, os atributos "${a1}" e "${a2}" são mutuamente exclusivos!`)
     // atributos mutuamente exclusivos
-    if (keys.includes("default") && keys.includes("fixed")) return mutexc_error("default","fixed")
-    if (keys.includes("ref") && keys.includes("form")) return mutexc_error("ref","form")
-    if (keys.includes("ref") && keys.includes("name")) return mutexc_error("ref","name")
-    if (keys.includes("ref") && keys.includes("type")) return mutexc_error("ref","type")
+    if (keys.includes("name") && keys.includes("ref")) return mutexc_error("name","ref")
 
-    // atributos com valores predefinidos
-    if (!keys.includes("use")) arr.push({attr: "use", val: "optional"})
+    if (el_name == "attribute") {
+      if (keys.includes("default") && keys.includes("fixed")) return mutexc_error("default","fixed")
+      if (keys.includes("ref") && keys.includes("form")) return mutexc_error("ref","form")
+      if (keys.includes("ref") && keys.includes("type")) return mutexc_error("ref","type")
+
+      // atributos com valores predefinidos
+      if (!keys.includes("use")) arr.push({attr: "use", val: "optional"})
+    }
 
     return arr
   }
@@ -475,7 +489,7 @@ namespace = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws val:string  
 schema_version = ws2 "version" ws "=" ws val:string                                                                           {return {attr: "version", val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
 targetNamespace = ws2 "targetNamespace" ws "=" ws val:string                                                                  {return {attr: "targetNamespace", val}}
 
-schema_content = el:((/* redefine / */ include / import / annotation)* (((simpleType / complexType /* / group / attributeGroup */) / element / attribute / notation) annotation*)*)
+schema_content = el:((/* redefine / */ include / import / annotation)* (((simpleType / complexType /* / group */ / attributeGroup) / element / attribute / notation) annotation*)*)
                  &{return validateLocalAttrs("schema", cleanContent(el))} {return el}
 
 
@@ -541,13 +555,28 @@ attribute = prefix:open_XSD_el el_name:$("attribute" {any_type = false}) attrs:a
   return check_elTags(el_name, prefix, close) && check_attrMutex(getAttrs(attrs), close.content)
 } {return {element: el_name, attrs, content: close.content}}
 
-attribute_attrs = el:(elem_default / elem_fixed / elem_form / elem_id / attr_name / attr_ref / elem_type / attr_use)* &{return check_attributeAttrs(el)} {any_type = true; return el}
+attribute_attrs = el:(elem_default / elem_fixed / elem_form / elem_id / attr_name / attr_ref / elem_type / attr_use)* &{return check_attributeElAttrs(el,"attribute")} {any_type = true; return el}
 
 attr_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM        &{return checkQM(q1,q2) && validateName(val,"attribute")} {return {attr: "name", val}}
 attr_ref = ws2 "ref" ws "=" ws q1:QM val:QName q2:QM           &{return checkQM(q1,q2) && validateRef(val,"attribute")}  {return {attr: "ref", val}}
 attr_use = ws2 "use" ws "=" ws q1:QM val:attr_use_values q2:QM &{return checkQM(q1,q2)}                                  {return {attr: "use", val}}
 
 attribute_content = c:(annotation? simpleType?) {return cleanContent(c)}
+
+
+// ----- <attributeGroup> -----
+
+attributeGroup = prefix:open_XSD_el el_name:"attributeGroup" attrs:attributeGroup_attrs ws
+                 close:(merged_close / openEl content:attributeGroup_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
+                 &{return check_elTags(el_name, prefix, close) && check_attrGroupMutex(getAttrs(attrs), close.content)} 
+                 {return {element: el_name, attrs, content: close.content}}
+
+attributeGroup_attrs = el:(elem_id / attrGroup_name / attrGroup_ref)* &{return check_attributeElAttrs(el,"attributeGroup")} {return el}
+
+attrGroup_name = ws2 "name" ws "=" ws q1:QM val:NCName q2:QM &{return checkQM(q1,q2) && validateName(val,"attributeGroup")} {return {attr: "name", val}}
+attrGroup_ref = ws2 "ref" ws "=" ws q1:QM val:QName q2:QM    &{return checkQM(q1,q2) && validateRef(val,"attributeGroup")}  {return {attr: "ref", val}}
+
+attributeGroup_content = c:(annotation? (attribute / attributeGroup)* /* anyAttribute? */) {return cleanContent(c.flat())}
 
 
 // ----- <simpleType> -----
@@ -759,7 +788,7 @@ QName = $((p:NCName ":" &{return existsPrefix(p)})? NCName)
 ID = id:NCName &{return validateID(id)} {ids.push(id); return id}
 language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8)?)
 
-XSD_el_name = "include" / "import" / "element" / "attribute" / 
+XSD_el_name = "include" / "import" / "element" / "attributeGroup" / "attribute" /
               "simpleType" / "annotation" / "appinfo" / "documentation" / "union" / "list" / "restriction" / "notation" / constrFacet_values /
               "complexType" / "simpleContent"
 
