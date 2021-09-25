@@ -2,9 +2,23 @@
 <xs:schema xmlns="http://www.ibm.com" xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.ibm.com">
     
     <xs:annotation></xs:annotation>
-        <xs:simpleType name="boas">
+        <xs:simpleType name="boas" final="list union restriction">
             <xs:union memberTypes="xs:string"/>
         </xs:simpleType>
+    
+    <xs:attributeGroup name="a"></xs:attributeGroup>
+    <xs:attribute name="a"></xs:attribute>
+    
+    <xs:element name="agds" block=" #all " type="xs:string"></xs:element>
+    
+    <xs:attributeGroup name="myAttributeGroup">
+        <xs:attribute name="someattribute1" type="xs:integer"/>
+        <xs:attribute name="someattribute2" type="xs:string"/>
+        <xs:anyAttribute namespace="  ##targetNamespace ##local "></xs:anyAttribute>
+    </xs:attributeGroup>
+    
+    <xs:element name="a   " id="   q123   " abstract = "    true" final="extension restriction" xml:lang= "     pt"></xs:element>
+    <xs:element name="a" id="çq123" abstract = "    true" final="extension restriction"></xs:element>
     
     
     <xs:simpleType name="mountainbikesize">
@@ -14,31 +28,6 @@
             <xs:enumeration value="large"/>
         </xs:restriction>
     </xs:simpleType>
-    
-    <xs:complexType name="FamilyMountainBikeSizes">
-        <xs:simpleContent>
-            <xs:extension base="mountainbikesize">
-                <xs:attribute name="familyMember" type="xs:string" />
-                <xs:attributeGroup/>
-            </xs:extension>
-        </xs:simpleContent>
-    </xs:complexType>
-    
-    <xs:complexType name="ChildMountainBikeSizes" mixed="true">
-        <xs:simpleContent>
-            <xs:restriction base="FamilyMountainBikeSizes" >
-                <xs:simpleType>
-                    <xs:restriction base="mountainbikesize">
-                        <xs:enumeration value="small"/>
-                        <xs:enumeration value="medium"/>
-                        <xs:enumeration value="large"/>
-                    </xs:restriction>
-                </xs:simpleType>
-                <xs:enumeration value="small"/>
-                <xs:enumeration value="medium"/>
-            </xs:restriction>
-        </xs:simpleContent>
-    </xs:complexType>
     
     <xs:annotation/>
     <xs:simpleType name="fontbynumber">
