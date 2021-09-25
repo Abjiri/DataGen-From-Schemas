@@ -816,24 +816,28 @@ XSD_el_name = "include" / "import" / "element" / "attributeGroup" / "attribute" 
               "complexType" / "simpleContent"
 
 form_values = $("un"?"qualified")
-elem_final_values = "#all" / "extension" / "restriction"
-block_values = elem_final_values / "substitution"
 finalDefault_values = elem_final_values / "list" / "union"
 simpleType_final_values = "#all" / "list" / "union" / "restriction"
 use_values = "optional" / "prohibited" / "required"
 processContents_values = "lax" / "skip" / "strict"
 constrFacet_values = $("length" / ("max"/"min")"Length" / ("max"/"min")("Ex"/"In")"clusive" / ("total"/"fraction")"Digits" / "whiteSpace" / "pattern" / "enumeration")
 
+elem_final_values = ws ("#all" / "extension" / "restriction" / "extension" ws "restriction" / "restriction" ws "extension") ws
+
+block_values = ws ("#all" / block_listOfValues) ws
+block_list_val = "extension" / "restriction" / "substitution"
+block_listOfValues = l:$(block_list_val (ws2 block_list_val)*) &{let arr = l.split(/[ \t\n\r]+/); return (new Set(arr)).size === arr.length ? true : error('O valor do atributo "block" deve corresponder a (#all | Lista de (extension | restriction | substitution))!')}
+
 
 anyAttr_namespace_values = (anyAttr_namespace_values_Q / anyAttr_namespace_values_A) {return text().slice(1,-1)}
-anyAttr_namespace_values_Q = $('"' ("##any" / "##other" / ws l:anyAttr_listOfValues_Q ws &{return check_anyAttr_namespace(l)}) '"')
-anyAttr_namespace_values_A = $("'" ("##any" / "##other" / ws l:anyAttr_listOfValues_A ws &{return check_anyAttr_namespace(l)}) "'")
+anyAttr_namespace_values_Q = $('"' ws ("##any" / "##other" / l:anyAttr_listOfValues_Q &{return check_anyAttr_namespace(l)}) ws '"')
+anyAttr_namespace_values_A = $("'" ws ("##any" / "##other" / l:anyAttr_listOfValues_A &{return check_anyAttr_namespace(l)}) ws "'")
 
-anyAttr_list_values_Q = "##local" / "##targetNamespace" / $((!("##"/'"')). [^ "\t\n\r]+) // a string é um URI
-anyAttr_list_values_A = "##local" / "##targetNamespace" / $((!("##"/"'")). [^ '\t\n\r]+) // a string é um URI
+anyAttr_list_val_Q = "##local" / "##targetNamespace" / $((!("##"/'"')). [^ "\t\n\r]+) // a string é um URI
+anyAttr_list_val_A = "##local" / "##targetNamespace" / $((!("##"/"'")). [^ '\t\n\r]+) // a string é um URI
 
-anyAttr_listOfValues_Q = $(anyAttr_list_values_Q (ws2 anyAttr_list_values_Q)*)
-anyAttr_listOfValues_A = $(anyAttr_list_values_A (ws2 anyAttr_list_values_A)*)
+anyAttr_listOfValues_Q = $(anyAttr_list_val_Q (ws2 anyAttr_list_val_Q)*)
+anyAttr_listOfValues_A = $(anyAttr_list_val_A (ws2 anyAttr_list_val_A)*)
 
 // um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
 type_value = $(prefix:(p:NCName ":" {return p})? type:$(elem_primitive_types / elem_derived_types) &{
