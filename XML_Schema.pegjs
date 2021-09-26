@@ -129,6 +129,12 @@
 
     return true
   }
+
+  // validar as tags e verificar se o atributo "base" está presente
+  function check_requiredBase(el_name, parent_el, prefix, attrs, close) {
+    if (!("base" in attrs)) return error(`O atributo "base" é requirido num elemento <${el_name}> (${parent_el})!`)
+    return check_elTags(el_name, prefix, close)
+  }
   
   // verificar que um elemento <element> não tem o atributo "ref" e um dos elementos filhos mutualmente exclusivos com esse
   function check_elemMutex(attrs, content) {
@@ -715,24 +721,24 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 // ----- <restriction> (simpleType) -----
 
-restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:restrictionSimple_attrs ws 
+restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:simpleBase_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", getAttrs(attrs), close.content)}
                 {return {element: el_name, attrs, content: close.content}}
 
-restrictionSimple_attrs = attrs:(restrictionSimple_base elem_id? / elem_id restrictionSimple_base?)? {return cleanContent(attrs)}
+simpleBase_attrs = attrs:(simple_base elem_id? / elem_id simple_base?)? {return cleanContent(attrs)}
 
-restrictionSimple_base = ws2 attr:"base" ws "=" q1:QMo val:type_value q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+simple_base = ws2 attr:"base" ws "=" q1:QMo val:type_value q2:QMc          &{return checkQM(q1,q2)} {return {attr, val}}
+complex_base = ws2 attr:"base" ws "=" q1:QMo val:complex_type_value q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
                      
 restrictionST_content = fst:annotation? snd:simpleType? others:constrFacet* &{return check_restrictionST_facets(others)} {return cleanContent([fst, snd, ...others])}
 
 
 // ----- <restriction> (simpleContent) -----
 
-restrictionSC = prefix:open_XSD_el el_name:"restriction" attrs:restrictionSimple_attrs ws 
+restrictionSC = prefix:open_XSD_el el_name:"restriction" attrs:simpleBase_attrs ws 
                 close:(merged_close / openEl content:restrictionSC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-                &{if (!("base" in getAttrs(attrs))) return error('O atributo "base" é requirido num elemento <restriction> (simpleContent)!')
-                  return check_elTags(el_name, prefix, close) && validateBaseSC(getAttrs(attrs).base)} 
+                &{return check_requiredBase(el_name, "simpleContent", prefix, getAttrs(attrs), close)}
                 {return {element: el_name, attrs, content: close.content}}
                      
 restrictionSC_content = c:(restrictionST_content attributes) {return cleanContent(c.flat())}
@@ -740,20 +746,35 @@ restrictionSC_content = c:(restrictionST_content attributes) {return cleanConten
 
 // ----- <restriction> (complexContent) -----
 
-restrictionCC = prefix:open_XSD_el el_name:"restriction" attrs:restrictionComplex_attrs ws 
-                close:(merged_close / openEl content:restrictionCC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-                &{if (!("base" in getAttrs(attrs))) return error('O atributo "base" é requirido num elemento <restriction> (complexContent)!')
-                  return check_elTags(el_name, prefix, close)} 
+restrictionCC = prefix:open_XSD_el el_name:"restriction" attrs:complexBase_attrs ws 
+                close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
+                &{return check_requiredBase(el_name, "complexContent", prefix, getAttrs(attrs), close)}
                 {return {element: el_name, attrs, content: close.content}}
 
-restrictionComplex_attrs = attrs:(restrictionComplex_base elem_id? / elem_id restrictionComplex_base?)? {return cleanContent(attrs)}
-
-restrictionComplex_base = ws2 attr:"base" ws "=" q1:QMo val:complex_type_value q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+complexBase_attrs = attrs:(complex_base elem_id? / elem_id complex_base?)? {return cleanContent(attrs)}
                      
-restrictionCC_content = c:(annotation? /* (group | all | choice | sequence)? */ attributes) {return cleanContent(c.flat())}
+CC_son_content = c:(annotation? /* (group | all | choice | sequence)? */ attributes) {return cleanContent(c)}
 
 
-// <minExclusive> / <minInclusive> / <maxExclusive> / <maxInclusive> / <totalDigits / <fractionDigits> / <length> / <minLength> / <maxLength> / <enumeration> / <whiteSpace> / <pattern>
+// ----- <extension> (simpleContent) -----
+
+extensionSC = prefix:open_XSD_el el_name:"extension" attrs:simpleBase_attrs ws 
+              close:(merged_close / openEl content:extensionSC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
+              &{return check_requiredBase(el_name, "simpleContent", prefix, getAttrs(attrs), close)}
+              {return {element: el_name, attrs, content: close.content}}
+                     
+extensionSC_content = c:(annotation? attributes) {return cleanContent(c)}
+
+
+// ----- <extension> (complexContent) -----
+
+extensionCC = prefix:open_XSD_el el_name:"extension" attrs:complexBase_attrs ws 
+              close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
+              &{return check_requiredBase(el_name, "complexContent", prefix, getAttrs(attrs), close)}
+              {return {element: el_name, attrs, content: close.content}}
+
+
+// ----- <minExclusive> <minInclusive> <maxExclusive> <maxInclusive> <totalDigits <fractionDigits> <length> <minLength> <maxLength> <enumeration> <whiteSpace> <pattern> -----
 
 constrFacet = prefix:open_XSD_el el_name:constrFacet_values 
               attrs:(a:constrFacet_attrs ws &{return check_constrFacetAttrs(el_name, a)} {return check_constrFacetAttrs(el_name, a)})
@@ -791,7 +812,7 @@ simpleContent = prefix:open_XSD_el el_name:"simpleContent" attr:elem_id? ws open
                 &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
                 {return {element: el_name, attrs: cleanContent(attr), content}}
 
-simpleContent_content = c:(annotation? (restrictionSC /* / extensionSC */)) {return cleanContent(c)}
+simpleContent_content = c:(annotation? (restrictionSC / extensionSC)) {return cleanContent(c)}
 
 
 // ----- <complexContent> -----
@@ -802,7 +823,7 @@ complexContent = prefix:open_XSD_el el_name:$("complexContent" {any_type = "C"})
 
 complexContent_attrs = attrs:(complex_mixed elem_id? / elem_id complex_mixed?)? {return cleanContent(attrs)}
 
-complexContent_content = c:(annotation? (restrictionCC /* / extensionCC */)) {any_type = "BSC"; return cleanContent(c)}
+complexContent_content = c:(annotation? (restrictionCC / extensionCC)) {any_type = "BSC"; return cleanContent(c)}
 
 
 // ----- <notation> -----
@@ -830,7 +851,7 @@ merged_close = "/>" ws {return {merged: true, content: []}}
 close_XSD_el = prefix:close_XSD_prefix name:XSD_el_name ws closeEl {return {name, prefix}}
 ann_content = openEl content:annotation? close_el:close_XSD_el {return {merged: false, ...close_el, content: cleanContent(content)}}
 
-attributes = (attribute / attributeGroup)* anyAttribute?
+attributes = c:((attribute / attributeGroup)* anyAttribute?) {return c.flat()}
 
 
 // ----- Valores -----
@@ -858,8 +879,8 @@ QName = $((p:NCName ":" &{return existsPrefix(p)})? NCName)
 ID = id:NCName &{return validateID(id)} {ids.push(id); return id}
 language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8)?)
 
-XSD_el_name = "include" / "import" / "element" / "attributeGroup" / "attribute" / "anyAttribute" /
-              "simpleType" / "annotation" / "appinfo" / "documentation" / "union" / "list" / "restriction" / "notation" / constrFacet_values /
+XSD_el_name = "include" / "import" / "element" / "attributeGroup" / "attribute" / "anyAttribute" / "notation" / "annotation" / "appinfo" / "documentation" / 
+              "simpleType" / "union" / "list" / "restriction" / "extension" / constrFacet_values /
               "complexType" / "simpleContent" / "complexContent"
 
 
