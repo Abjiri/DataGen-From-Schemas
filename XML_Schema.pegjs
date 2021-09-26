@@ -302,21 +302,32 @@
   // nomes dos novos tipos definidos na schema - têm de ser únicos
   let local_types = {simpleType: [], complexType: [], simpleContent: []}
   // boleano para indicar se um tipo referenciado tem de corresponder a um tipo built-in ou simpleType apenas (false), ou pode ser um complexType também (true) 
-  let any_type = true
-  // nome do elemento pai da última <restriction> processada
-  let restriction = null
+  let any_type = "BSC"
 
   // verificar se já existe algum tipo local com este nome
-  const existsLocalType = type => local_types.simpleType.includes(type) || any_type && local_types.complexType.includes(type)
-  // verificar que o tipo local que está a ser referenciado existe
-  const validateLocalType = type => !existsLocalType(type) ? error(`Tem de referenciar um tipo embutido${any_type ? ", simpleType ou complexType" : " ou simpleType"} válido!`) : 
-                                                             (type === current_type ? error("Não pode referenciar um tipo local dentro do seu próprio elemento!") : true)
+  const existsLocalType = type => (any_type == "BSC" && any_typeObject.values(local_types).flat().includes(type)) || 
+                                  (any_type == "BS" && local_types.simpleType.includes(type)) || 
+                                  (any_type == "C" && local_types.complexType.includes(type))
   // validar um elemento <union> - verificar que referencia algum tipo
   const validateUnion = (attrs,content) => ("memberTypes" in attrs ? attrs.memberTypes.length : 0) + content.filter(e => e.element === "simpleType").length > 0 ? true : 
                                            error(`Um elemento <union> deve ter o atributo "memberTypes" não vazio e/ou pelo menos um elemento filho <simpleType>!`)
   // validar o atributo base de um elemento <restriction> (simpleContent)
   const validateBaseSC = base => (!local_types.complexType.includes(base) || local_types.simpleContent.includes(base)) ? true :
                                   error('Num elemento <restriction> (simpleContent), para o atributo "base" poder referenciar um <complexType>, o tipo desse elemento deve ser um tipo embutido, <simpleType> ou <simpleContent>!')
+
+
+  // verificar que o tipo local que está a ser referenciado existe
+  function validateLocalType(type) {
+    let error_msg = {
+      BSC: "tipo embutido, simpleType ou complexType",
+      BS: "tipo embutido ou simpleType",
+      C: "complexType"
+    }
+      
+    if (!existsLocalType(type)) return error(`Tem de referenciar um ${error_msg[any_type]} válido!`)
+    if (type === current_type) return error("Não pode referenciar um tipo local dentro do seu próprio elemento!")
+    return true
+  }
 
   // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes respetiva caso seja único
   function newLocalType(name, kind) {
@@ -486,8 +497,8 @@ XML_standalone_value = "yes" / "no"
 
 // ----- <schema> -----
 
-schema = (p:open_XSD_el {default_prefix = p}) "schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
-         {return {element: "schema", attrs, content}}
+schema = (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
+         {return {element: el_name, attrs, content}}
 
 close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
   if (!noSchemaPrefix() && prefix === null) return error("Precisa de prefixar o elemento de fecho da schema!")
@@ -566,13 +577,13 @@ element_content = c:(annotation? (simpleType / complexType)? /* (unique / key / 
 
 // ----- <attribute> -----
 
-attribute = prefix:open_XSD_el el_name:$("attribute" {any_type = false}) attrs:attribute_attrs ws
+attribute = prefix:open_XSD_el el_name:$("attribute" {any_type = "BS"}) attrs:attribute_attrs ws
             close:(merged_close / openEl content:attribute_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) &{
   if ((close.merged || !close.content.length) && !validateLocalEl(getAttrs(attrs))) return error("Um atributo local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
   return check_elTags(el_name, prefix, close) && check_attrMutex(getAttrs(attrs), close.content)
 } {return {element: el_name, attrs, content: close.content}}
 
-attribute_attrs = el:(elem_default / elem_fixed / elem_form / elem_id / attr_name / attr_ref / elem_type / attr_use)* &{return check_attributeElAttrs(el,"attribute")} {any_type = true; return el}
+attribute_attrs = el:(elem_default / elem_fixed / elem_form / elem_id / attr_name / attr_ref / elem_type / attr_use)* &{return check_attributeElAttrs(el,"attribute")} {any_type = "BSC"; return el}
 
 attr_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc   &{return checkQM(q1,q2) && validateName(val,"attribute")} {return {attr, val}}
 attr_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc      &{return checkQM(q1,q2) && validateRef(val,"attribute")}  {return {attr, val}}
@@ -593,7 +604,7 @@ attributeGroup_attrs = el:(elem_id / attrGroup_name / attrGroup_ref)* &{return c
 attrGroup_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return checkQM(q1,q2) && validateName(val,"attributeGroup")} {return {attr, val}}
 attrGroup_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc    &{return checkQM(q1,q2) && validateRef(val,"attributeGroup")}  {return {attr, val}}
 
-attributeGroup_content = c:(annotation? (attribute / attributeGroup)* anyAttribute?) {return cleanContent(c.flat())}
+attributeGroup_content = c:(annotation? attributes) {return cleanContent(c.flat())}
 
 
 // ----- <anyAttribute> -----
@@ -610,7 +621,7 @@ anyAttr_processContents = ws2 attr:"processContents" ws "=" q1:QMo val:processCo
 
 // ----- <simpleType> -----
 
-simpleType = prefix:open_XSD_el el_name:"simpleType" attrs:simpleType_attrs ws (openEl {type_depth++}) ws content:simpleType_content close_el:close_XSD_el
+simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:simpleType_attrs ws (openEl {type_depth++}) ws content:simpleType_content close_el:close_XSD_el
              &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
              {if (!--type_depth) current_type = null; return {element: el_name, attrs, content}}
 
@@ -619,7 +630,7 @@ simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* &{return c
 simpleType_final = ws2 attr:"final" ws "=" q1:QMo val:simpleType_final_values q2:QMc &{return checkQM(q1,q2)}                                   {return {attr, val}}
 simpleType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc                    &{return checkQM(q1,q2) && newLocalType(val,"simpleType")} {return {attr, val}}
 
-simpleType_content = c:(annotation? (restrictionST / list / union)) {return cleanContent(c)}
+simpleType_content = c:(annotation? (restrictionST / list / union)) {any_type = "BSC"; return cleanContent(c)}
 
 
 // ----- <annotation> -----
@@ -636,9 +647,9 @@ annotation_content = (appinfo / documentation)*
 
 appinfo = appinfo_simple / appinfo_prefix
 
-appinfo_simple = "<appinfo" attr:elem_source? ws
+appinfo_simple = "<" el_name:"appinfo" attr:elem_source? ws
                  close:("/>" ws {return ""} / openEl content:appinfo_content_simple? close_appinfo_simple {return content===null ? "" : content})
-                 {return {element: "appinfo", attrs: cleanContent(attr), content: close}}
+                 {return {element: el_name, attrs: cleanContent(attr), content: close}}
 
 appinfo_prefix = prefix:open_XSD_el el_name:"appinfo" attr:elem_source? ws
                  close:(merged_close / openEl content:appinfo_content_prefix? close_el:close_appinfo_prefix {return {merged: false, ...close_el, content}})
@@ -658,9 +669,9 @@ documentation = doc_simple / doc_prefix
 
 documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return cleanContent(attrs)}
 
-doc_simple = "<documentation" attrs:documentation_attrs ws
+doc_simple = "<" el_name:"documentation" attrs:documentation_attrs ws
              close:("/>" ws {return ""} / openEl content:doc_content_simple? close_doc_simple {return content===null ? "" : content})
-             {return {element: "documentation", attrs, content: close}}
+             {return {element: el_name, attrs, content: close}}
 
 doc_prefix = prefix:open_XSD_el el_name:"documentation" attrs:documentation_attrs ws 
              close:(merged_close / openEl content:doc_content_prefix? close_el:close_doc_prefix {return {merged: false, ...close_el, content}})
@@ -683,7 +694,7 @@ union = prefix:open_XSD_el el_name:"union" attrs:union_attrs ws
 
 union_attrs = attrs:(elem_id union_memberTypes? / union_memberTypes elem_id?)? {return cleanContent(attrs)}
 
-union_memberTypes = ws2 attr:$("memberTypes" {any_type = false}) ws "=" q1:QMo val:list_types q2:QMc &{return checkQM(q1,q2)} {any_type = true; return {attr, val}}
+union_memberTypes = ws2 attr:"memberTypes" ws "=" q1:QMo val:list_types q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
 
 union_content = fst:annotation? others:simpleType* {if (fst !== null) others.unshift(fst); return others}
 
@@ -697,24 +708,52 @@ list = prefix:open_XSD_el el_name:"list" attrs:list_attrs ws
 
 list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return cleanContent(attrs)}
 
-list_itemType = ws2 attr:$("itemType" {any_type = false}) ws "=" q1:QMo val:type_value q2:QMc &{return checkQM(q1,q2)} {any_type = true; return {attr, val}}
+list_itemType = ws2 attr:"itemType" ws "=" q1:QMo val:type_value q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
 
 list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 
 // ----- <restriction> (simpleType) -----
 
-restrictionST = prefix:open_XSD_el el_name:$("restriction" {restriction = "simpleType"}) attrs:restriction_attrs ws 
+restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:restrictionSimple_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", getAttrs(attrs), close.content)}
                 {return {element: el_name, attrs, content: close.content}}
 
-restriction_attrs = attrs:(restriction_base elem_id? / elem_id restriction_base?)? {return cleanContent(attrs)}
+restrictionSimple_attrs = attrs:(restrictionSimple_base elem_id? / elem_id restrictionSimple_base?)? {return cleanContent(attrs)}
 
-restriction_base = ws2 attr:$("base" {any_type = restriction != "simpleType"}) ws "=" q1:QMo val:type_value q2:QMc &{return checkQM(q1,q2)} {any_type = true; return {attr, val}}
+restrictionSimple_base = ws2 attr:"base" ws "=" q1:QMo val:type_value q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
                      
 restrictionST_content = fst:annotation? snd:simpleType? others:constrFacet* &{return check_restrictionST_facets(others)} {return cleanContent([fst, snd, ...others])}
 
+
+// ----- <restriction> (simpleContent) -----
+
+restrictionSC = prefix:open_XSD_el el_name:"restriction" attrs:restrictionSimple_attrs ws 
+                close:(merged_close / openEl content:restrictionSC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
+                &{if (!("base" in getAttrs(attrs))) return error('O atributo "base" é requirido num elemento <restriction> (simpleContent)!')
+                  return check_elTags(el_name, prefix, close) && validateBaseSC(getAttrs(attrs).base)} 
+                {return {element: el_name, attrs, content: close.content}}
+                     
+restrictionSC_content = c:(restrictionST_content attributes) {return cleanContent(c.flat())}
+
+
+// ----- <restriction> (complexContent) -----
+
+restrictionCC = prefix:open_XSD_el el_name:"restriction" attrs:restrictionComplex_attrs ws 
+                close:(merged_close / openEl content:restrictionCC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
+                &{if (!("base" in getAttrs(attrs))) return error('O atributo "base" é requirido num elemento <restriction> (complexContent)!')
+                  return check_elTags(el_name, prefix, close)} 
+                {return {element: el_name, attrs, content: close.content}}
+
+restrictionComplex_attrs = attrs:(restrictionComplex_base elem_id? / elem_id restrictionComplex_base?)? {return cleanContent(attrs)}
+
+restrictionComplex_base = ws2 attr:"base" ws "=" q1:QMo val:complex_type_value q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+                     
+restrictionCC_content = c:(annotation? /* (group | all | choice | sequence)? */ attributes) {return cleanContent(c.flat())}
+
+
+// <minExclusive> / <minInclusive> / <maxExclusive> / <maxInclusive> / <totalDigits / <fractionDigits> / <length> / <minLength> / <maxLength> / <enumeration> / <whiteSpace> / <pattern>
 
 constrFacet = prefix:open_XSD_el el_name:constrFacet_values 
               attrs:(a:constrFacet_attrs ws &{return check_constrFacetAttrs(el_name, a)} {return check_constrFacetAttrs(el_name, a)})
@@ -733,44 +772,44 @@ constrFacet_value = ws2 attr:"value" ws "=" ws val:string                       
 complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs ws 
               close:(merged_close / (openEl {type_depth++}) content:complexType_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
               &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(getAttrs(attrs), close.content)}
-              {if (!--type_depth) current_type = null; return {element: "complexType", attrs, content: close.content}}
+              {if (!--type_depth) current_type = null; return {element: el_name, attrs, content: close.content}}
 
-complexType_attrs = el:(elem_abstract / complexType_block / elem_final / elem_id / complexType_mixed / complexType_name)*
+complexType_attrs = el:(elem_abstract / complexType_block / elem_final / elem_id / complex_mixed / complexType_name)*
                     &{return check_localTypeAttrs(el, "complexType")} {return check_localTypeAttrs(el, "complexType")}
 
 complexType_block = ws2 attr:"block" ws "=" q1:QMo val:elem_final_values q2:QMc &{return checkQM(q1,q2)}                                    {return {attr, val}}
-complexType_mixed = ws2 attr:"mixed" ws "=" q1:QMo val:boolean q2:QMc           &{return checkQM(q1,q2)}                                    {return {attr, val}}
+complex_mixed = ws2 attr:"mixed" ws "=" q1:QMo val:boolean q2:QMc               &{return checkQM(q1,q2)}                                    {return {attr, val}}
 complexType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc              &{return checkQM(q1,q2) && newLocalType(val,"complexType")} {return {attr, val}}
 
-complexType_content = c:(annotation? simpleContent (simpleContent /* / complexContent / */ (/* (group / all / choice / sequence)? */ ((attribute / attributeGroup)* anyAttribute?)))) 
+complexType_content = c:(annotation? (simpleContent / complexContent / /* (group / all / choice / sequence)? */ attributes))
                       {return cleanContent(c)}
 
 
 // ----- <simpleContent> -----
 
 simpleContent = prefix:open_XSD_el el_name:"simpleContent" attr:elem_id? ws openEl content:simpleContent_content close_el:close_XSD_el
-              &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
-              {return {element: "simpleContent", attrs: cleanContent(attr), content}}
+                &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
+                {return {element: el_name, attrs: cleanContent(attr), content}}
 
 simpleContent_content = c:(annotation? (restrictionSC /* / extensionSC */)) {return cleanContent(c)}
 
 
-// ----- <restriction> (simpleContent) -----
+// ----- <complexContent> -----
 
-restrictionSC = prefix:open_XSD_el el_name:$("restriction" {restriction = "simpleContent"}) attrs:restriction_attrs ws 
-                close:(merged_close / openEl content:restrictionSC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-                &{if (!("base" in getAttrs(attrs))) return error('O atributo "base" é requirido num elemento <restriction> (simpleContent)!')
-                  return check_elTags(el_name, prefix, close) && validateBaseSC(getAttrs(attrs).base)} 
-                {return {element: el_name, attrs, content: close.content}}
-                     
-restrictionSC_content = c:(restrictionST_content (attribute / attributeGroup)* anyAttribute?) {return cleanContent(c.flat())}
+complexContent = prefix:open_XSD_el el_name:$("complexContent" {any_type = "C"}) attrs:complexContent_attrs ws openEl content:complexContent_content close_el:close_XSD_el
+                 &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
+                 {return {element: el_name, attrs, content}}
+
+complexContent_attrs = attrs:(complex_mixed elem_id? / elem_id complex_mixed?)? {return cleanContent(attrs)}
+
+complexContent_content = c:(annotation? (restrictionCC /* / extensionCC */)) {any_type = "BSC"; return cleanContent(c)}
 
 
 // ----- <notation> -----
 
 notation = prefix:open_XSD_el el_name:"notation" attrs:notation_attrs ws close:(merged_close / ann_content)
           &{return check_elTags(el_name, prefix, close)}
-          {return {element: "notation", attrs, content: close.content}}
+          {return {element: el_name, attrs, content: close.content}}
 
 notation_attrs = el:(elem_id / notation_name / notation_URI_attrs)* &{return check_notationAttrs(el)} {return el}
 
@@ -786,10 +825,12 @@ closeEl = ">" ws {schema_depth--}
 open_XSD_el      = "<"  prefix:(p:NCName ":" {return p})? {return prefix}
 close_XSD_prefix = "</" prefix:(p:NCName ":" {return p})? {return prefix}
 
+merged_close = "/>" ws {return {merged: true, content: []}}
+
 close_XSD_el = prefix:close_XSD_prefix name:XSD_el_name ws closeEl {return {name, prefix}}
 ann_content = openEl content:annotation? close_el:close_XSD_el {return {merged: false, ...close_el, content: cleanContent(content)}}
 
-merged_close = "/>" ws {return {merged: true, content: []}}
+attributes = (attribute / attributeGroup)* anyAttribute?
 
 
 // ----- Valores -----
@@ -819,7 +860,7 @@ language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8)?)
 
 XSD_el_name = "include" / "import" / "element" / "attributeGroup" / "attribute" / "anyAttribute" /
               "simpleType" / "annotation" / "appinfo" / "documentation" / "union" / "list" / "restriction" / "notation" / constrFacet_values /
-              "complexType" / "simpleContent"
+              "complexType" / "simpleContent" / "complexContent"
 
 
 // ----- Valores simples de atributos -----
@@ -834,6 +875,9 @@ type_value = $(prefix:(p:NCName ":" {return p})? type:$(primitive_types / derive
   return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
 } / p:NCName ":" name:NCName &{return existsPrefix(p) && (p !== default_prefix || validateLocalType(name))} // se for o prefixo desta schema, verifica-se que o tipo existe; se não for, assume-se que sim
   / name:NCName &{return validateLocalType(name)})
+
+complex_type_value = $(p:NCName ":" name:NCName &{return existsPrefix(p) && (p !== default_prefix || validateLocalType(name))} // se for o prefixo desta schema, verifica-se que o tipo existe; se não for, assume-se que sim
+                     / name:NCName &{return validateLocalType(name)})
 
 primitive_types = "string"/"boolean"/"decimal"/"float"/"double"/"duration"/"dateTime"/"time"/"date"/"gYearMonth"/"gYear"/"gMonthDay"/"gDay"/"gMonth"/"hexBinary"/"base64Binary"/"anyURI"/"QName"/"NOTATION"
 derived_types = "normalizedString"/"token"/"language"/"NMTOKEN"/"NMTOKENS"/"Name"/"NCName"/"ID"/"IDREF"/"IDREFS"/"ENTITY"/"ENTITIES"/"integer"/"nonPositiveInteger"/"negativeInteger"/"long"/"int"/"short"/"byte"/"nonNegativeInteger"/"unsignedLong"/"unsignedInt"/"unsignedShort"/"unsignedByte"/"positiveInteger"
