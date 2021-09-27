@@ -540,7 +540,7 @@
   }
 }
 
-DSL_text = ws XML_declaration ws xsd:schema { return xsd }
+DSL_text = ws comment? XML_declaration ws comment? xsd:schema { return xsd }
 
 
 // ----- Declaração XML -----
@@ -577,7 +577,7 @@ xmlns = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws val:string      
 schema_version = ws2 attr:"version" ws "=" ws val:string                                                                     {return {attr, val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
 targetNamespace = ws2 attr:"targetNamespace" ws "=" ws val:string                                                            {return {attr, val}}
 
-schema_content = el:((/* redefine / */ include / import / annotation)* (((simpleType / complexType / group / attributeGroup) / element / attribute / notation) annotation*)*) {return cleanContent(el.flat(3))}
+schema_content = comment? el:((/* redefine / */ include / import / annotation)* (((simpleType / complexType / group / attributeGroup) / element / attribute / notation) annotation*)*) {return cleanContent(el.flat(3))}
 
 
 // ----- <include> -----
@@ -938,6 +938,13 @@ notation_attrs = el:(elem_id / notation_name / notation_URI_attrs)* &{return che
 
 notation_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc          &{return checkQM(q1,q2) && validateName(val,"notation")} {return {attr, val}}
 notation_URI_attrs = ws2 attr:("public" / "system") ws "=" ws val:string                                                          {return {attr, val}}
+
+
+// ----- Comentário -----
+
+comment = "<!--" comment_content close_comment ws
+comment_content = (!close_comment). comment_content*
+close_comment = "-->"
 
 
 // ----- Regex recorrentes -----
