@@ -3,6 +3,8 @@
 {
   // Geral ------------------------------
 
+  // queue para invocações de funções de validação de referências na schema (refs e types) - para os elementos referenciados não terem de aparecer antes das referências
+  let queue = []
   // tipos embutidos da XML Schema
   let primitive_types = ["string","boolean","decimal","float","double","duration","dateTime","time","date","gYearMonth","gYear","gMonthDay","gDay","gMonth","hexBinary","base64Binary","anyURI","QName","NOTATION"]
   let derived_types = ["normalizedString","token","language","NMTOKEN","NMTOKENS","Name","NCName","ID","IDREF","IDREFS","ENTITY","ENTITIES","integer","nonPositiveInteger","negativeInteger","long","int","short","byte","nonNegativeInteger","unsignedLong","unsignedInt","unsignedShort","unsignedByte","positiveInteger"]
@@ -20,6 +22,32 @@
   const createObjectFrom = arr => arr.reduce((obj,item) => { obj[item] = 0; return obj }, {})
   // juntar todos os atributos do elemento num só objeto
   const getAttrs = objArr => objArr.reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
+  // executar todas as invocações guardadas na queue para ver se são válidas
+  const checkQueue = () => queue.reduce((accum, curr) => accum && queueFuncs[curr.attr](...curr.args), true)
+
+  // funções invocadas pela queue
+  const queueFuncs = {
+    // validar se o atributo "ref" está a referenciar um <element/attribute> global válido da schema ou de uma schema importada (só se valida o prefixo, neste caso)
+    ref: (ref, el_name) => (ref.includes(":") || names[el_name].includes(ref)) ? true : error(`Está a tentar referenciar um elemento <${el_name}> inexistente! Só é possível referenciar elementos globais.`),
+    // verificar que o tipo local que está a ser referenciado existe
+    type: (type, prefix, curr_any_type, curr_type, in_element) => {
+      let error_msg = {
+        BSC: "tipo embutido, simpleType ou complexType",
+        BS: "tipo embutido ou simpleType",
+        C: "complexType"
+      }
+        
+      if (curr_any_type != "C" && Object.values(built_in_types).flat().includes(type)) {
+        return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
+                                                        ${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
+      }
+      if (prefix == null || prefix == default_prefix) {
+        if (!existsLocalType(type)) return error(`Tem de referenciar um ${error_msg[curr_any_type]} válido!`)
+        if (!in_element && type === curr_type) return error(`Definições circulares detetadas para o tipo "${type}"! Isto significa que o "${type}" está contido na sua própria hierarquia, o que é um erro.`)
+      }
+      return true
+    }
+  }
 
 
   // Schema ------------------------------
@@ -101,15 +129,13 @@
   let names = {element: [], attribute: [], attributeGroup: [], group: [], notation: []}
   // atributos "id" de elementos da schema - têm de ser únicos
   let ids = []
-  // boleano para saber se está a ser processado um <element> (para a função validateLocalType)
-  let element = false
+  // boleano para saber se está a ser processado um <element> (para a função validationQueue.type)
+  let in_element = false
 
   // validar um elemento <element/attribute> básico - verificar que tem os atributos essenciais
   const validateLocalEl = attrs => "ref" in attrs || "name" in attrs
   // verificar se o novo id é único na schema
   const validateID = id => !ids.includes(id) ? true : error(`O valor do atributo 'id' deve ser único na schema! Existe mais do que um elemento na schema com o id "${id}"!`)
-  // validar se o atributo "ref" está a referenciar um <element/attribute> global válido da schema ou de uma schema importada (só se valida o prefixo, neste caso)
-  const validateRef = (ref, el_name) => (ref.includes(":") || names[el_name].includes(ref)) ? true : error(`Está a tentar referenciar um elemento <${el_name}> inexistente! Só é possível referenciar elementos globais.`)
   // se for null, converte para array vazio; senão, remove os nulls do array
   const cleanContent = content => content === null ? [] : content.filter(e => e !== null)
 
@@ -363,23 +389,6 @@
                                   error('Num elemento <restriction> (simpleContent), para o atributo "base" poder referenciar um <complexType>, o tipo desse elemento deve ser um tipo embutido, <simpleType> ou <simpleContent>!')
 
 
-  // verificar que o tipo local que está a ser referenciado existe
-  function validateLocalType(type, prefix) {
-    let error_msg = {
-      BSC: "tipo embutido, simpleType ou complexType",
-      BS: "tipo embutido ou simpleType",
-      C: "complexType"
-    }
-      
-    if (any_type != "C" && Object.values(built_in_types).flat().includes(type)) {
-      return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
-                                                      ${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
-    }
-    if (!existsLocalType(type)) return error(`Tem de referenciar um ${error_msg[any_type]} válido!`)
-    if (!element && type === current_type) return error(`Definições circulares detetadas para o tipo "${type}"! Isto significa que o "${type}" está contido na sua própria hierarquia, o que é um erro.`)
-    return true
-  }
-
   // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes respetiva caso seja único
   function newLocalType(name, kind) {
     if (Object.values(local_types).flat().includes(name)) return error("Já existe um simpleType/complexType com este nome nesta schema!")
@@ -388,7 +397,7 @@
     return true
   }
   
-  // validar os atributos de um elemento <simpleType>/<complexType>
+  // validar os atributos de um elemento <simpleType/complexType>
   function check_localTypeAttrs(arr, el_name) {
     let keys = getAttrsKeys(arr, el_name) // array com os nomes dos atributos
 
@@ -549,7 +558,7 @@ XML_standalone_value = "yes" / "no"
 // ----- <schema> -----
 
 schema = (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
-         {return {element: el_name, attrs, content}}
+         &{return checkQueue()} {return {element: el_name, attrs, content}}
 
 close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
   if (!noSchemaPrefix() && prefix === null) return error("Precisa de prefixar o elemento de fecho da schema!")
@@ -597,7 +606,7 @@ import_namespace = ws2 attr:"namespace" ws "=" ws val:string {return {attr, val}
 
 // ----- <element> -----
 
-element = prefix:open_XSD_el el_name:$("element" {any_type = "BSC"; element = true}) attrs:element_attrs ws
+element = prefix:open_XSD_el el_name:$("element" {any_type = "BSC"; in_element = true}) attrs:element_attrs ws
           close:(merged_close / openEl content:element_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) &{
   if ((close.merged || !close.content.length) && !validateLocalEl(getAttrs(attrs))) return error("Um elemento local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
   return check_elTags(el_name, prefix, close) && check_elemMutex(getAttrs(attrs), close.content)
@@ -605,7 +614,7 @@ element = prefix:open_XSD_el el_name:$("element" {any_type = "BSC"; element = tr
 
 element_attrs = el:(elem_abstract / elem_block / elem_default / elem_substitutionGroup /
                 elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
-                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)* &{return check_elemAttrs(el)} {element = false; return el}
+                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)* &{return check_elemAttrs(el)} {in_element = false; return el}
 
 elem_abstract = ws2 attr:"abstract" ws "=" q1:QMo val:boolean q2:QMc                 &{return checkQM(q1,q2)}                                {return {attr, val}}
 elem_block = ws2 attr:"block" ws "=" q1:QMo val:block_values q2:QMc                  &{return checkQM(q1,q2)}                                {return {attr, val}}
@@ -619,7 +628,7 @@ elem_minOccurs = ws2 attr:"minOccurs" ws "=" q1:QMo val:int q2:QMc              
 elem_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc                          &{return checkQM(q1,q2) && validateName(val,"element")} {return {attr, val}}
 elem_nillable = ws2 attr:"nillable" ws "=" q1:QMo val:boolean q2:QMc                 &{return checkQM(q1,q2)}                                {return {attr, val}}
 elem_lang = ws2 attr:"xml:lang" ws "=" q1:QMo val:language q2:QMc                    &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc                             &{return checkQM(q1,q2) && validateRef(val,"element")}  {return {attr, val}}
+elem_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc                             &{return checkQM(q1,q2)}                                {queue.push({attr: "ref", args: [val, "element"]}); return {attr, val}}
 elem_source = ws2 attr:"source" ws "=" ws val:string                                                                                         {return {attr, val}}
 elem_substitutionGroup = ws2 attr:"substitutionGroup" ws "=" q1:QMo val:QName q2:QMc &{return checkQM(q1,q2)}                                {return {attr, val}}
 elem_type = ws2 attr:"type" ws "=" q1:QMo val:type_value q2:QMc                      &{return checkQM(q1,q2)}                                {return {attr, val}}
@@ -638,7 +647,7 @@ attribute = prefix:open_XSD_el el_name:$("attribute" {any_type = "BS"}) attrs:at
 attribute_attrs = el:(elem_default / elem_fixed / elem_form / elem_id / attr_name / attr_ref / elem_type / attr_use)* &{return check_attributeElAttrs(el,"attribute")} {any_type = "BSC"; return el}
 
 attr_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc   &{return checkQM(q1,q2) && validateName(val,"attribute")} {return {attr, val}}
-attr_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc      &{return checkQM(q1,q2) && validateRef(val,"attribute")}  {return {attr, val}}
+attr_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc      &{return checkQM(q1,q2)}                                  {queue.push({attr: "ref", args: [val, "attribute"]}); return {attr, val}}
 attr_use = ws2 attr:"use" ws "=" q1:QMo val:use_values q2:QMc &{return checkQM(q1,q2)}                                  {return {attr, val}}
 
 attribute_content = c:(annotation? simpleType?) {return cleanContent(c)}
@@ -654,7 +663,7 @@ attributeGroup = prefix:open_XSD_el el_name:"attributeGroup" attrs:attributeGrou
 attributeGroup_attrs = el:(elem_id / attrGroup_name / attrGroup_ref)* &{return check_attributeElAttrs(el,"attributeGroup")} {return el}
 
 attrGroup_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return checkQM(q1,q2) && validateName(val,"attributeGroup")} {return {attr, val}}
-attrGroup_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc    &{return checkQM(q1,q2) && validateRef(val,"attributeGroup")}  {return {attr, val}}
+attrGroup_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc    &{return checkQM(q1,q2)}                                       {queue.push({attr: "ref", args: [val, "attributeGroup"]}); return {attr, val}}
 
 attributeGroup_content = c:(annotation? attributes) {return cleanContent(c.flat())}
 
@@ -709,19 +718,19 @@ annotation_content = (appinfo / documentation)*
 appinfo = appinfo_simple / appinfo_prefix
 
 appinfo_simple = "<" el_name:"appinfo" attr:elem_source? ws
-                 close:("/>" ws {return ""} / openEl content:appinfo_content_simple? close_appinfo_simple {return content===null ? "" : content})
+                 close:("/>" ws {return ""} / openEl content:appinfo_content_simple? close_appinfo_simple {schema_depth--; return content===null ? "" : content})
                  {return {element: el_name, attrs: cleanContent(attr), content: close}}
 
 appinfo_prefix = prefix:open_XSD_el el_name:"appinfo" attr:elem_source? ws
-                 close:(merged_close / openEl content:appinfo_content_prefix? close_el:close_appinfo_prefix {return {merged: false, ...close_el, content}})
+                 close:(merged_close / openEl content:appinfo_content_prefix? close_el:close_appinfo_prefix {schema_depth--; return {merged: false, ...close_el, content}})
                  &{return check_elTags(el_name, prefix, close)} 
                  {return {element: el_name, attrs: cleanContent(attr), content: (close.content === [] || close.content === null) ? "" : close.content}}
 
 appinfo_content_simple = (!close_appinfo_simple). appinfo_content_simple* {return text().trim()}
 appinfo_content_prefix = (!close_appinfo_prefix). appinfo_content_prefix* {return text().trim()}
 
-close_appinfo_simple = "</appinfo" ws closeEl
-close_appinfo_prefix = prefix:close_XSD_prefix name:"appinfo" ws closeEl {return {name, prefix}}
+close_appinfo_simple = "</appinfo" ws ">" ws
+close_appinfo_prefix = prefix:close_XSD_prefix name:"appinfo" ws ">" ws {return {name, prefix}}
 
 
 // ----- <documentation> -----
@@ -731,19 +740,19 @@ documentation = doc_simple / doc_prefix
 documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return cleanContent(attrs)}
 
 doc_simple = "<" el_name:"documentation" attrs:documentation_attrs ws
-             close:("/>" ws {return ""} / openEl content:doc_content_simple? close_doc_simple {return content===null ? "" : content})
+             close:("/>" ws {return ""} / openEl content:doc_content_simple? close_doc_simple {schema_depth--; return content===null ? "" : content})
              {return {element: el_name, attrs, content: close}}
 
 doc_prefix = prefix:open_XSD_el el_name:"documentation" attrs:documentation_attrs ws 
-             close:(merged_close / openEl content:doc_content_prefix? close_el:close_doc_prefix {return {merged: false, ...close_el, content}})
+             close:(merged_close / openEl content:doc_content_prefix? close_el:close_doc_prefix {schema_depth--; return {merged: false, ...close_el, content}})
              &{return check_elTags(el_name, prefix, close)}
              {return {element: el_name, attrs, content: (close.content===[] || close.content===null) ? "" : close.content}}
 
 doc_content_prefix = (!close_doc_prefix). doc_content_prefix* {return text().trim()}
 doc_content_simple = (!close_doc_simple). doc_content_simple* {return text().trim()}
 
-close_doc_simple = "</documentation" ws closeEl
-close_doc_prefix = prefix:close_XSD_prefix name:"documentation" ws closeEl {return {name, prefix}}
+close_doc_simple = "</documentation" ws ">" ws
+close_doc_prefix = prefix:close_XSD_prefix name:"documentation" ws ">" ws {return {name, prefix}}
 
 
 // ----- <union> -----
@@ -914,7 +923,7 @@ group = prefix:open_XSD_el el_name:"group" attrs:group_attrs ws
 group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)* &{return check_groupAttrs(el)} {return el}
 
 group_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return checkQM(q1,q2) && validateName(val,"group")} {return {attr, val}}
-group_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc    &{return checkQM(q1,q2) && validateRef(val,"group")}  {return {attr, val}}
+group_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc    &{return checkQM(q1,q2)}                              {queue.push({attr: "ref", args: [val, "group"]}); return {attr, val}}
 
 group_content = c:(annotation? (all / choiceOrSequence)) {return cleanContent(c)}
 
@@ -985,8 +994,8 @@ processContents_values = "lax" / "skip" / "strict"
 constrFacet_values = $("length" / ("max"/"min")"Length" / ("max"/"min")("Ex"/"In")"clusive" / ("total"/"fraction")"Digits" / "whiteSpace" / "pattern" / "enumeration")
 
 // um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
-type_value = $(p:NCName ":" name:NCName &{return existsPrefix(p) && (p !== default_prefix || validateLocalType(name, p))} // se for o prefixo desta schema, verifica-se que o tipo existe; se não for, assume-se que sim
-             / name:NCName &{return validateLocalType(name, null)})
+type_value = $(p:NCName ":" name:NCName &{return existsPrefix(p)} {queue.push({attr: "type", args: [name, p, any_type, current_type, in_element]})} // se for o prefixo desta schema, verifica-se que o tipo existe; se não for, assume-se que sim
+             / name:NCName {queue.push({attr: "type", args: [name, null, any_type, current_type, in_element]})})
 
 
 // ----- Listas de valores de atributos -----
