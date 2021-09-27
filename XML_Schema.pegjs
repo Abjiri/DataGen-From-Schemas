@@ -3,6 +3,10 @@
 {
   // Geral ------------------------------
 
+  // tipos embutidos da XML Schema
+  let primitive_types = ["string","boolean","decimal","float","double","duration","dateTime","time","date","gYearMonth","gYear","gMonthDay","gDay","gMonth","hexBinary","base64Binary","anyURI","QName","NOTATION"]
+  let derived_types = ["normalizedString","token","language","NMTOKEN","NMTOKENS","Name","NCName","ID","IDREF","IDREFS","ENTITY","ENTITIES","integer","nonPositiveInteger","negativeInteger","long","int","short","byte","nonNegativeInteger","unsignedLong","unsignedInt","unsignedShort","unsignedByte","positiveInteger"]
+
   // verificar se o elemento pai é o <schema>
   const atRoot = () => !schema_depth
   // verificar se não foi definido um prefixo para a schema
@@ -92,8 +96,8 @@
 
   // <element> ------------------------------
 
-  //nomes (únicos) dos elementos <element> globais, <attribute> globais e <notation>
-  let names = {element: [], attribute: [], attributeGroup: [], notation: []}
+  //nomes (únicos) dos elementos globais com esse atributo
+  let names = {element: [], attribute: [], attributeGroup: [], group: [], notation: []}
   // atributos "id" de elementos da schema - têm de ser únicos
   let ids = []
 
@@ -108,8 +112,8 @@
 
   // validar o nome de um <element/attribute/notation> - deve ser único
   function validateName(name, el_name) {
-    // se for um <element/attribute>, é preciso verificar que são elementos globais
-    if (el_name == "notation" || atRoot()) {
+    // verificar que são elementos globais
+    if (atRoot()) {
       if (!names[el_name].includes(name)) {names[el_name].push(name); return true}
       return error(`Todos os elementos <${el_name}> ${el_name != "notation" ? "definidos globalmente " : ""}devem ter nomes únicos!`)
     }
@@ -232,6 +236,8 @@
     // atributos com valores predefinidos
     if (!keys.includes("abstract")) arr.push({attr: "abstract", val: false})
     //if (!keys.includes("form")) attrs.form = //valor do atributo elementFormDefault do elemento da schema
+    if (!keys.includes("maxOccurs")) arr.push({attr: "maxOccurs", val: 1})
+    if (!keys.includes("minOccurs")) arr.push({attr: "minOccurs", val: 1})
     if (!keys.includes("nillable")) arr.push({attr: "nillable", val: false})
 
     return arr
@@ -270,6 +276,38 @@
     return arr
   }
 
+  // validar os atributos de um elemento <any/all/choice/sequence>
+  function check_occursAttrs(arr, el_name) {
+    let keys = getAttrsKeys(arr, el_name) // array com os nomes dos atributos
+
+    // atributos com valores predefinidos
+    if (!keys.includes("maxOccurs")) arr.push({attr: "maxOccurs", val: 1})
+    if (!keys.includes("minOccurs")) arr.push({attr: "minOccurs", val: 1})
+
+    return arr
+  }
+
+  // validar os atributos de um elemento <group>
+  function check_groupAttrs(arr) {
+    let keys = getAttrsKeys(arr, el_name) // array com os nomes dos atributos
+
+    // restrições relativas à profundidade dos elementos
+    if (atRoot()) { // elementos da schema
+      if (keys.includes("ref")) return error('O atributo "ref" é proibido num elemento <group> de schema!')
+      if (!keys.includes("name")) return error('O atributo "name" é requirido num elemento <group> de schema!')
+    }
+    else {
+      if (!keys.includes("ref")) return error('O atributo "ref" é requirido num elemento <group> local!')
+      if (keys.includes("name")) return error('O atributo "name" é proibido num elemento <group> local!')
+    }
+
+    // atributos com valores predefinidos
+    if (!keys.includes("maxOccurs")) arr.push({attr: "maxOccurs", val: 1})
+    if (!keys.includes("minOccurs")) arr.push({attr: "minOccurs", val: 1})
+
+    return arr
+  }
+
   // validar os atributos de um elemento <notation>
   function check_notationAttrs(arr) {
     let keys = getAttrsKeys(arr, "notation") // array com os nomes dos atributos
@@ -287,10 +325,10 @@
     return (new Set(arr)).size === arr.length ? true : error(error_msg)
   }
 
-  // validar o valor do atributo "namespace" de um elemento <anyAttribute>, se não for ##any nem ##other
-  function check_anyAttr_namespace(l) {
+  // validar o valor do atributo "namespace" de um elemento <any/anyAttribute>, se não for ##any nem ##other
+  function check_namespace(l) {
     let arr = l.split(/[ \t\n\r]+/)
-    let error_msg = 'O valor do atributo "namespace" do elemento <anyAttribute> deve corresponder a ((##any | ##other) | Lista de (referência_URI | (##targetNamespace | ##local)))!'
+    let error_msg = 'O valor do atributo "namespace" deve corresponder a ((##any | ##other) | Lista de (referência_URI | (##targetNamespace | ##local)))!'
 
     // verificar que não tem mais do que 1 URI
     if (arr.filter(x => x != "##local" && x != "##targetNamespace").length > 1) return error(error_msg)
@@ -311,7 +349,7 @@
   let any_type = "BSC"
 
   // verificar se já existe algum tipo local com este nome
-  const existsLocalType = type => (any_type == "BSC" && any_typeObject.values(local_types).flat().includes(type)) || 
+  const existsLocalType = type => (any_type == "BSC" && Object.values(local_types).flat().includes(type)) || 
                                   (any_type == "BS" && local_types.simpleType.includes(type)) || 
                                   (any_type == "C" && local_types.complexType.includes(type))
   // validar um elemento <union> - verificar que referencia algum tipo
@@ -331,7 +369,7 @@
     }
       
     if (!existsLocalType(type)) return error(`Tem de referenciar um ${error_msg[any_type]} válido!`)
-    if (type === current_type) return error("Não pode referenciar um tipo local dentro do seu próprio elemento!")
+    if (type === current_type) return error(`Definições circulares detetadas para o tipo "${type}"! Isto significa que o "${type}" está contido na sua própria hierarquia, o que é um erro.`)
     return true
   }
 
@@ -513,18 +551,18 @@ close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
   return true
 }
 
-schema_attrs = el:(formDefault / blockDefault / finalDefault / namespace /
+schema_attrs = el:(formDefault / blockDefault / finalDefault / xmlns /
                      elem_id / elem_lang / schema_version / targetNamespace)+ &{return check_schemaAttrs(el)} {return check_schemaAttrs(el)}
 
 formDefault = ws2 attr:$(("attribute"/"element")"FormDefault") ws "=" q1:QMo val:form_values q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
 blockDefault = ws2 attr:"blockDefault" ws "=" q1:QMo val:block_values q2:QMc                        &{return checkQM(q1,q2)} {return {attr, val}}
 finalDefault = ws2 attr:"finalDefault" ws "=" q1:QMo val:finalDefault_values q2:QMc                 &{return checkQM(q1,q2)} {return {attr, val}}
-namespace = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws val:string                                               {prefixes.push(prefix); return {attr: "namespace", prefix, val}}
+xmlns = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws val:string                                                   {prefixes.push(prefix); return {attr: "namespace", prefix, val}}
 schema_version = ws2 attr:"version" ws "=" ws val:string                                                                     {return {attr, val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
 targetNamespace = ws2 attr:"targetNamespace" ws "=" ws val:string                                                            {return {attr, val}}
 
-schema_content = el:((/* redefine / */ include / import / annotation)* (((simpleType / complexType /* / group */ / attributeGroup) / element / attribute / notation) annotation*)*)
-                 &{return validateLocalAttrs("schema", cleanContent(el))} {return el}
+schema_content = el:((/* redefine / */ include / import / annotation)* (((simpleType / complexType / group / attributeGroup) / element / attribute / notation) annotation*)*)
+                 &{return validateLocalAttrs("schema", cleanContent(el.flat(2)))} {return cleanContent(el.flat(3))}
 
 
 // ----- <include> -----
@@ -546,7 +584,9 @@ import = prefix:open_XSD_el el_name:"import" attrs:import_attrs ws close:(merged
           &{return check_elTags(el_name, prefix, close)}
           {return {element: el_name, attrs, content: close.content}}
 
-import_attrs = el:(namespace / elem_id / schemaLocation)* &{return check_importAttrs(el)} {return el}
+import_attrs = el:(import_namespace / elem_id / schemaLocation)* &{return check_importAttrs(el)} {return el}
+
+import_namespace = ws2 attr:"namespace" ws "=" ws val:string {return {attr, val}}
 
 
 // ----- <element> -----
@@ -578,7 +618,7 @@ elem_source = ws2 attr:"source" ws "=" ws val:string                            
 elem_substitutionGroup = ws2 attr:"substitutionGroup" ws "=" q1:QMo val:QName q2:QMc &{return checkQM(q1,q2)}                                {return {attr, val}}
 elem_type = ws2 attr:"type" ws "=" q1:QMo val:type_value q2:QMc                      &{return checkQM(q1,q2)}                                {return {attr, val}}
 
-element_content = c:(annotation? (simpleType / complexType)? /* (unique / key / keyref)*) */) {return cleanContent(c)}
+element_content = c:(annotation? (simpleType / complexType)? /* (unique / key / keyref)*) */) {return cleanContent(c.flat())}
 
 
 // ----- <attribute> -----
@@ -619,10 +659,19 @@ anyAttribute = prefix:open_XSD_el el_name:"anyAttribute" attrs:anyAttribute_attr
                &{return check_elTags(el_name, prefix, close)} 
                {return {element: el_name, attrs, content: close.content}}
 
-anyAttribute_attrs = el:(elem_id / anyAttr_namespace / anyAttr_processContents)* &{return getAttrsKeys(el,"anyAttribute")} {return el}
+anyAttribute_attrs = el:(elem_id / any_namespace / processContents)* &{return getAttrsKeys(el,"anyAttribute")} {return el}
 
-anyAttr_namespace = ws2 attr:"namespace" ws "=" ws val:anyAttr_namespace_values                                               {return {attr, val}}
-anyAttr_processContents = ws2 attr:"processContents" ws "=" q1:QMo val:processContents_values q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+any_namespace = ws2 attr:"namespace" ws "=" ws val:namespace_values                                                   {return {attr, val}}
+processContents = ws2 attr:"processContents" ws "=" q1:QMo val:processContents_values q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+
+
+// ----- <any> -----
+
+any = prefix:open_XSD_el el_name:"any" attrs:any_attrs ws close:(merged_close / ann_content)
+      &{return check_elTags(el_name, prefix, close)} 
+      {return {element: el_name, attrs, content: close.content}}
+
+any_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs / any_namespace / processContents)* &{return check_occursAttrs(el,"any")} {return el}
 
 
 // ----- <simpleType> -----
@@ -644,7 +693,7 @@ simpleType_content = c:(annotation? (restrictionST / list / union)) {any_type = 
 annotation = prefix:open_XSD_el el_name:"annotation" attr:elem_id? ws
              close:(merged_close / openEl content:annotation_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
              &{return check_elTags(el_name, prefix, close)}
-             {return {element: el_name, attrs: cleanContent(attr), content}}
+             {return {element: el_name, attrs: cleanContent(attr), content: close.content}}
 
 annotation_content = (appinfo / documentation)*
 
@@ -696,13 +745,13 @@ close_doc_prefix = prefix:close_XSD_prefix name:"documentation" ws closeEl {retu
 union = prefix:open_XSD_el el_name:"union" attrs:union_attrs ws 
         close:(merged_close / openEl content:union_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
         &{return check_elTags(el_name, prefix, close) && validateUnion(getAttrs(attrs), close.content)}
-        {return {element: el_name, attrs, content}}
+        {return {element: el_name, attrs, content: close.content}}
 
 union_attrs = attrs:(elem_id union_memberTypes? / union_memberTypes elem_id?)? {return cleanContent(attrs)}
 
 union_memberTypes = ws2 attr:"memberTypes" ws "=" q1:QMo val:list_types q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
 
-union_content = fst:annotation? others:simpleType* {if (fst !== null) others.unshift(fst); return others}
+union_content = c:(annotation? simpleType*) {return cleanContent(c.flat())}
 
 
 // ----- <list> -----
@@ -731,7 +780,7 @@ simpleBase_attrs = attrs:(simple_base elem_id? / elem_id simple_base?)? {return 
 simple_base = ws2 attr:"base" ws "=" q1:QMo val:type_value q2:QMc          &{return checkQM(q1,q2)} {return {attr, val}}
 complex_base = ws2 attr:"base" ws "=" q1:QMo val:complex_type_value q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
                      
-restrictionST_content = fst:annotation? snd:simpleType? others:constrFacet* &{return check_restrictionST_facets(others)} {return cleanContent([fst, snd, ...others])}
+restrictionST_content = h1:annotation? h2:simpleType? t:constrFacet* &{return check_restrictionST_facets(t)} {return cleanContent([h1, h2, ...t])}
 
 
 // ----- <restriction> (simpleContent) -----
@@ -753,7 +802,7 @@ restrictionCC = prefix:open_XSD_el el_name:"restriction" attrs:complexBase_attrs
 
 complexBase_attrs = attrs:(complex_base elem_id? / elem_id complex_base?)? {return cleanContent(attrs)}
                      
-CC_son_content = c:(annotation? /* (group | all | choice | sequence)? */ attributes) {return cleanContent(c)}
+CC_son_content = c:(annotation? (all / choiceOrSequence / group)? attributes) {return cleanContent(c.flat())}
 
 
 // ----- <extension> (simpleContent) -----
@@ -763,7 +812,7 @@ extensionSC = prefix:open_XSD_el el_name:"extension" attrs:simpleBase_attrs ws
               &{return check_requiredBase(el_name, "simpleContent", prefix, getAttrs(attrs), close)}
               {return {element: el_name, attrs, content: close.content}}
                      
-extensionSC_content = c:(annotation? attributes) {return cleanContent(c)}
+extensionSC_content = c:(annotation? attributes) {return cleanContent(c.flat())}
 
 
 // ----- <extension> (complexContent) -----
@@ -802,8 +851,7 @@ complexType_block = ws2 attr:"block" ws "=" q1:QMo val:elem_final_values q2:QMc 
 complex_mixed = ws2 attr:"mixed" ws "=" q1:QMo val:boolean q2:QMc               &{return checkQM(q1,q2)}                                    {return {attr, val}}
 complexType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc              &{return checkQM(q1,q2) && newLocalType(val,"complexType")} {return {attr, val}}
 
-complexType_content = c:(annotation? (simpleContent / complexContent / /* (group / all / choice / sequence)? */ attributes))
-                      {return cleanContent(c)}
+complexType_content = c:(annotation? (simpleContent / complexContent / (all / choiceOrSequence / group)? attributes)) {return cleanContent(c.flat(2))}
 
 
 // ----- <simpleContent> -----
@@ -824,6 +872,48 @@ complexContent = prefix:open_XSD_el el_name:$("complexContent" {any_type = "C"})
 complexContent_attrs = attrs:(complex_mixed elem_id? / elem_id complex_mixed?)? {return cleanContent(attrs)}
 
 complexContent_content = c:(annotation? (restrictionCC / extensionCC)) {any_type = "BSC"; return cleanContent(c)}
+
+
+// ----- <all> -----
+
+all = prefix:open_XSD_el el_name:"all" attrs:all_attrs ws 
+      close:(merged_close / openEl content:all_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
+      &{return check_elTags(el_name, prefix, close)}
+      {return {element: el_name, attrs, content: close.content}}
+
+all_attrs = el:(elem_id / all_maxOccurs / all_minOccurs)* &{return check_occursAttrs(el,"all")} {return el}
+
+all_maxOccurs = ws2 attr:"maxOccurs" ws "=" q1:QMo val:"1"  q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+all_minOccurs = ws2 attr:"minOccurs" ws "=" q1:QMo val:[01] q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+
+all_content = c:(annotation? element*) {return cleanContent(c.flat())}
+
+
+// ----- <choice/sequence> -----
+
+choiceOrSequence = prefix:open_XSD_el el_name:$("choice"/"sequence") attrs:(a:choiceOrSeq_attrs &{return check_occursAttrs(a, el_name)} {return check_occursAttrs(a, el_name)}) ws 
+                   close:(merged_close / openEl content:choiceOrSeq_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
+                   &{return check_elTags(el_name, prefix, close)}
+                   {return {element: el_name, attrs, content: close.content}}
+
+choiceOrSeq_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs)* {return el}
+
+choiceOrSeq_content = c:(annotation? (element / choiceOrSequence / group / any)*) {return cleanContent(c.flat())}
+
+
+// ----- <group> -----
+
+group = prefix:open_XSD_el el_name:"group" attrs:group_attrs ws 
+        close:(merged_close / openEl content:group_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
+        &{return check_elTags(el_name, prefix, close)}
+        {return {element: el_name, attrs, content: close.content}}
+
+group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)* &{return check_groupAttrs(el)} {return el}
+
+group_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return checkQM(q1,q2) && validateName(val,"group")} {return {attr, val}}
+group_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc    &{return checkQM(q1,q2) && validateRef(val,"group")}  {return {attr, val}}
+
+group_content = c:(annotation? (all / choiceOrSequence)) {return cleanContent(c)}
 
 
 // ----- <notation> -----
@@ -881,7 +971,7 @@ language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8)?)
 
 XSD_el_name = "include" / "import" / "element" / "attributeGroup" / "attribute" / "anyAttribute" / "notation" / "annotation" / "appinfo" / "documentation" / 
               "simpleType" / "union" / "list" / "restriction" / "extension" / constrFacet_values /
-              "complexType" / "simpleContent" / "complexContent"
+              "complexType" / "simpleContent" / "complexContent" / "all" / "choice" / "group" / "sequence" / "any"
 
 
 // ----- Valores simples de atributos -----
@@ -901,7 +991,7 @@ complex_type_value = $(p:NCName ":" name:NCName &{return existsPrefix(p) && (p !
                      / name:NCName &{return validateLocalType(name)})
 
 primitive_types = "string"/"boolean"/"decimal"/"float"/"double"/"duration"/"dateTime"/"time"/"date"/"gYearMonth"/"gYear"/"gMonthDay"/"gDay"/"gMonth"/"hexBinary"/"base64Binary"/"anyURI"/"QName"/"NOTATION"
-derived_types = "normalizedString"/"token"/"language"/"NMTOKEN"/"NMTOKENS"/"Name"/"NCName"/"ID"/"IDREF"/"IDREFS"/"ENTITY"/"ENTITIES"/"integer"/"nonPositiveInteger"/"negativeInteger"/"long"/"int"/"short"/"byte"/"nonNegativeInteger"/"unsignedLong"/"unsignedInt"/"unsignedShort"/"unsignedByte"/"positiveInteger"
+derived_types = "normalizedString"/"token"/"language"/"NMTOKENS"/"NMTOKEN"/"Name"/"NCName"/"IDREFS"/"IDREF"/"ID"/"ENTITY"/"ENTITIES"/"integer"/"nonPositiveInteger"/"negativeInteger"/"long"/"int"/"short"/"byte"/"nonNegativeInteger"/"unsignedLong"/"unsignedInt"/"unsignedShort"/"unsignedByte"/"positiveInteger"
 
 
 // ----- Listas de valores de atributos -----
@@ -923,12 +1013,12 @@ simpleType_final_list_val = "list" / "union" / "restriction"
 simpleType_final_listOfValues = l:$(simpleType_final_list_val (ws2 simpleType_final_list_val)*) &{return validate_listOfValues(l, 'O valor do atributo "final" do elemento <simpleType> deve corresponder a (#all | Lista de (list | union | restriction))!')}
 
 
-anyAttr_namespace_values = (anyAttr_namespace_values_Q / anyAttr_namespace_values_A) {return text().slice(1,-1)}
-anyAttr_namespace_values_Q = $('"' ws ("##any" / "##other" / l:anyAttr_listOfValues_Q &{return check_anyAttr_namespace(l)}) ws '"')
-anyAttr_namespace_values_A = $("'" ws ("##any" / "##other" / l:anyAttr_listOfValues_A &{return check_anyAttr_namespace(l)}) ws "'")
+namespace_values = (namespace_values_Q / namespace_values_A) {return text().slice(1,-1)}
+namespace_values_Q = $('"' ws ("##any" / "##other" / l:namespace_listOfValues_Q &{return check_namespace(l)}) ws '"')
+namespace_values_A = $("'" ws ("##any" / "##other" / l:namespace_listOfValues_A &{return check_namespace(l)}) ws "'")
 
-anyAttr_list_val_Q = "##local" / "##targetNamespace" / $((!("##"/'"')). [^ "\t\n\r]+) // a string é um URI
-anyAttr_list_val_A = "##local" / "##targetNamespace" / $((!("##"/"'")). [^ '\t\n\r]+) // a string é um URI
+namespace_list_val_Q = "##local" / "##targetNamespace" / $((!("##"/'"')). [^ "\t\n\r]+) // a string é um URI
+namespace_list_val_A = "##local" / "##targetNamespace" / $((!("##"/"'")). [^ '\t\n\r]+) // a string é um URI
 
-anyAttr_listOfValues_Q = $(anyAttr_list_val_Q (ws2 anyAttr_list_val_Q)*)
-anyAttr_listOfValues_A = $(anyAttr_list_val_A (ws2 anyAttr_list_val_A)*)
+namespace_listOfValues_Q = $(namespace_list_val_Q (ws2 namespace_list_val_Q)*)
+namespace_listOfValues_A = $(namespace_list_val_A (ws2 namespace_list_val_A)*)
