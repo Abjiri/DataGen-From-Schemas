@@ -126,7 +126,7 @@
   // <element> ------------------------------
 
   // nomes (únicos) dos elementos globais com esse atributo
-  let names = {element: [], attribute: [], attributeGroup: [], group: [], notation: []}
+  let names = {attribute: [], attributeGroup: [], element: [], elem_constraint: [], group: [], notation: []}
   // atributos "id" de elementos da schema - têm de ser únicos
   let ids = []
   // boleanos para saber se está a ser processado um <element> (para a função validationQueue.type) ou um <redefine>
@@ -136,15 +136,23 @@
   const validateLocalEl = attrs => "ref" in attrs || "name" in attrs
   // verificar se o novo id é único na schema
   const validateID = id => !ids.includes(id) ? true : error(`O valor do atributo 'id' deve ser único na schema! Existe mais do que um elemento na schema com o id "${id}"!`)
+  // verificar se o atributo em questão está presente
+  const check_requiredAttr = (attrs, el_name, attr_name) => (attrs!==null && cleanContent(attrs).some(x => x.attr === attr_name)) ? true : error(`Um elemento <${el_name}> requer o atributo "${attr_name}"!`)
   // se for null, converte para array vazio; senão, remove os nulls do array
   const cleanContent = content => content === null ? [] : content.filter(e => e !== null)
 
   // validar o nome de um <element/attribute/notation> - deve ser único
   function validateName(name, el_name) {
+    console.log(name)
+    console.log(el_name)
     // verificar que são elementos globais
     if (atRoot()) {
       if (!names[el_name].includes(name)) {names[el_name].push(name); return true}
       return error(`Todos os elementos <${el_name}> ${el_name != "notation" ? "definidos globalmente " : ""}devem ter nomes únicos!`)
+    }
+    if (["key","keyref","unique"].includes(el_name)) {
+      if (!names.elem_constraint.includes(name)) {names.elem_constraint.push(name); return true}
+      return error(`Todos os elementos <key>, <keyref> e <unique> devem ter nomes únicos!`)
     }
     return true
   }
@@ -270,6 +278,17 @@
     if (!keys.includes("nillable")) arr.push({attr: "nillable", val: false})
 
     return arr
+  }
+
+  // validar os atributos de um elemento <keyref>
+  function check_keyrefAttrs(arr) {
+    let keys = getAttrsKeys(arr, "keyref") // array com os nomes dos atributos
+
+    // atributos requiridos
+    if (!keys.includes("name")) return error(`No elemento <keyref> é requirido o atributo "name"!`)
+    if (!keys.includes("refer") && !keys.includes("system")) return error(`No elemento <keyref> é requirido o atributo "refer"!`)
+
+    return true
   }
 
   // validar os atributos de um elemento <attribute/attributeGroup>
@@ -643,7 +662,58 @@ elem_source = ws2 attr:"source" ws "=" ws val:string                            
 elem_substitutionGroup = ws2 attr:"substitutionGroup" ws "=" q1:QMo val:QName q2:QMc &{return checkQM(q1,q2)}                                {return {attr, val}}
 elem_type = ws2 attr:"type" ws "=" q1:QMo val:type_value q2:QMc                      &{return checkQM(q1,q2)}                                {return {attr, val}}
 
-element_content = c:(annotation? (simpleType / complexType)? /* (unique / key / keyref)*) */) {return cleanContent(c.flat())}
+element_content = c:(annotation? (simpleType / complexType)? (keyOrUnique / keyref)*) {return cleanContent(c.flat())}
+
+
+// ----- <field> -----
+
+field = prefix:open_XSD_el el_name:"field" attrs:field_attrs ws close:(merged_close / ann_content)
+        &{return check_elTags(el_name, prefix, close)}
+        {return {element: el_name, attrs, content: close.content}}
+
+field_attrs = attrs:(field_xpath elem_id? / elem_id field_xpath?)? 
+              &{return check_requiredAttr(attrs, "field", "xpath")} {return cleanContent(attrs)}
+
+field_xpath = ws2 attr:"xpath" ws "=" q1:QMo val:fieldXPath q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+
+
+// ----- <selector> -----
+
+selector = prefix:open_XSD_el el_name:"selector" attrs:selector_attrs ws close:(merged_close / ann_content)
+           &{return check_elTags(el_name, prefix, close)}
+           {return {element: el_name, attrs, content: close.content}}
+
+selector_attrs = attrs:(selector_xpath elem_id? / elem_id selector_xpath?)? 
+                 &{return check_requiredAttr(attrs, "selector", "xpath")} {return cleanContent(attrs)}
+
+selector_xpath = ws2 attr:"xpath" ws "=" q1:QMo val:selectorXPath q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+
+
+// ----- <key/unique> -----
+
+keyOrUnique = prefix:open_XSD_el el_name:$("key"/"unique") 
+              attrs:(a:keyOrUnique_attrs &{return check_requiredAttr(a, el_name, "name") && validateName(a.filter(x => x.attr=="name")[0].val, el_name)} {return a}) ws
+              close:(merged_close / openEl content:xpath_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
+              &{return check_elTags(el_name, prefix, close)}
+              {return {element: el_name, attrs, content: close.content}}
+
+keyOrUnique_attrs = attrs:(elem_constraint_name elem_id? / elem_id elem_constraint_name?)? {return cleanContent(attrs)}
+
+elem_constraint_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+
+xpath_content = c:(annotation? (selector field+)) {return cleanContent(c.flat())}
+
+
+// ----- <keyref> -----
+
+keyref = prefix:open_XSD_el el_name:"keyref" attrs:(a:keyref_attrs &{return validateName(a.filter(x => x.attr=="name")[0].val, el_name)} {return a}) ws
+         close:(merged_close / openEl content:xpath_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
+         &{return check_elTags(el_name, prefix, close)}
+         {return {element: el_name, attrs, content: close.content}}
+
+keyref_attrs = el:(elem_id / elem_constraint_name / keyref_refer)* &{return check_keyrefAttrs(el)} {return el}
+
+keyref_refer = ws2 attr:"refer" ws "=" q1:QMo val:QName q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
 
 
 // ----- <attribute> -----
@@ -998,7 +1068,9 @@ QName = $((p:NCName ":" &{return existsPrefix(p)})? NCName)
 ID = id:NCName &{return validateID(id)} {ids.push(id); return id}
 language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8)?)
 
-XSD_el_name = "include" / "import" / "redefine" / "element" / "attributeGroup" / "attribute" / "anyAttribute" / "notation" / "annotation" / "appinfo" / "documentation" / 
+XSD_el_name = "include" / "import" / "redefine" / "notation" / "annotation" / "appinfo" / "documentation" / 
+              "element" / "field" / "selector" / "key" / "keyref" / "unique" / 
+              "attributeGroup" / "attribute" / "anyAttribute" / 
               "simpleType" / "union" / "list" / "restriction" / "extension" / constrFacet_values /
               "complexType" / "simpleContent" / "complexContent" / "all" / "choice" / "group" / "sequence" / "any"
 
@@ -1043,3 +1115,12 @@ namespace_list_val_A = "##local" / "##targetNamespace" / $((!("##"/"'")). [^ '\t
 
 namespace_listOfValues_Q = $(namespace_list_val_Q (ws2 namespace_list_val_Q)*)
 namespace_listOfValues_A = $(namespace_list_val_A (ws2 namespace_list_val_A)*)
+
+
+// ----- XPath -----
+
+selectorXPath = $(path ('|' path)*)
+path = ('.//')? step ('/' step)*
+fieldXPath = $(('.//')? (step '/')* (step / '@' nameTest))
+step = '.' / nameTest  
+nameTest = QName / '*' / NCName ':' '*'  
