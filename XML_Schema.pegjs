@@ -49,7 +49,6 @@
     }
   }
 
-
   // Schema ------------------------------
 
   // prefixo definido na declaração da schema
@@ -143,8 +142,6 @@
 
   // validar o nome de um <element/attribute/notation> - deve ser único
   function validateName(name, el_name) {
-    console.log(name)
-    console.log(el_name)
     // verificar que são elementos globais
     if (atRoot()) {
       if (!names[el_name].includes(name)) {names[el_name].push(name); return true}
@@ -216,33 +213,39 @@
     return true
   }
 
-  // construir um array com os nomes de todos os atributos do elemento
-  function getAttrsKeys(arr, el_name) {
-    let keys = [] // array com os nomes dos atributos
+  // construir um array com os nomes de todos os atributos do elemento; o argumento occurs indica se podem existir os atributos max/minOccurs
+  function getAttrsKeys(arr, el_name, occurs) {
+    let keys = [], // array com os nomes dos atributos
+        maxOccurs = 1, minOccurs = 1
 
     for (let i = 0; i < arr.length; i++) {
       // verificar que não há atributos repetidos
       if (keys.includes(arr[i].attr)) return error(`O elemento <${el_name}> não pode possuir atributos repetidos!`)
-      else keys.push(arr[i].attr)
-    }
-
-    return keys
-  }
-
-  // validar os atributos de um elemento <element>
-  function check_elemAttrs(arr) {
-    let keys = [], // array com os nomes dos atributos
-        maxOccurs = 0, minOccurs = 0
-        
-    for (let i = 0; i < arr.length; i++) {
-      // verificar que não há atributos repetidos
-      if (keys.includes(arr[i].attr)) return error("O elemento <element> não pode possuir atributos repetidos!")
       else {
         keys.push(arr[i].attr)
         if (arr[i].attr === "maxOccurs") maxOccurs = arr[i].val
         if (arr[i].attr === "minOccurs") minOccurs = arr[i].val
       }
     }
+
+    return !occurs ? keys : {keys, maxOccurs, minOccurs}
+  }
+
+  // adicionar os valores default dos atributos "max/minOccurs"
+  function defaultOccurs(arr, keys, maxOccurs, minOccurs) {
+    if (!keys.includes("maxOccurs")) arr.push({attr: "maxOccurs", val: keys.includes("minOccurs") ? minOccurs : 1})
+    else if (maxOccurs == "unbounded") {
+      let index = arr.findIndex(x => x.attr == "maxOccurs")
+      arr[index].val = minOccurs + 100 // se o maxOccurs for unbounded, assume-se um teto de minOccurs+100
+    }
+    if (!keys.includes("minOccurs")) arr.push({attr: "minOccurs", val: !maxOccurs ? 0 : 1})
+
+    return arr
+  }
+
+  // validar os atributos de um elemento <element>
+  function check_elemAttrs(arr) {
+    let {keys, maxOccurs, minOccurs} = getAttrsKeys(arr, "element", true) // array com os nomes dos atributos
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
@@ -271,10 +274,9 @@
       return error('A propriedade "maxOccurs" do elemento não pode ser inferior à "minOccurs"!')
 
     // atributos com valores predefinidos
+    arr = defaultOccurs(arr, keys, maxOccurs, minOccurs)
     if (!keys.includes("abstract")) arr.push({attr: "abstract", val: false})
     //if (!keys.includes("form")) attrs.form = //valor do atributo elementFormDefault do elemento da schema
-    if (!keys.includes("maxOccurs")) arr.push({attr: "maxOccurs", val: 1})
-    if (!keys.includes("minOccurs")) arr.push({attr: "minOccurs", val: 1})
     if (!keys.includes("nillable")) arr.push({attr: "nillable", val: false})
 
     return arr
@@ -282,7 +284,7 @@
 
   // validar os atributos de um elemento <keyref>
   function check_keyrefAttrs(arr) {
-    let keys = getAttrsKeys(arr, "keyref") // array com os nomes dos atributos
+    let keys = getAttrsKeys(arr, "keyref", false) // array com os nomes dos atributos
 
     // atributos requiridos
     if (!keys.includes("name")) return error(`No elemento <keyref> é requirido o atributo "name"!`)
@@ -293,7 +295,7 @@
 
   // validar os atributos de um elemento <attribute/attributeGroup>
   function check_attributeElAttrs(arr, el_name) {
-    let keys = getAttrsKeys(arr, el_name) // array com os nomes dos atributos
+    let keys = getAttrsKeys(arr, el_name, false) // array com os nomes dos atributos
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
@@ -326,18 +328,16 @@
 
   // validar os atributos de um elemento <any/all/choice/sequence>
   function check_occursAttrs(arr, el_name) {
-    let keys = getAttrsKeys(arr, el_name) // array com os nomes dos atributos
+    let {keys, maxOccurs, minOccurs} = getAttrsKeys(arr, el_name, true) // array com os nomes dos atributos
 
     // atributos com valores predefinidos
-    if (!keys.includes("maxOccurs")) arr.push({attr: "maxOccurs", val: 1})
-    if (!keys.includes("minOccurs")) arr.push({attr: "minOccurs", val: 1})
-
+    arr = defaultOccurs(arr, keys, maxOccurs, minOccurs)
     return arr
   }
 
   // validar os atributos de um elemento <group>
   function check_groupAttrs(arr) {
-    let keys = getAttrsKeys(arr, el_name) // array com os nomes dos atributos
+    let {keys, maxOccurs, minOccurs} = getAttrsKeys(arr, el_name, true) // array com os nomes dos atributos
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
@@ -350,15 +350,13 @@
     }
 
     // atributos com valores predefinidos
-    if (!keys.includes("maxOccurs")) arr.push({attr: "maxOccurs", val: 1})
-    if (!keys.includes("minOccurs")) arr.push({attr: "minOccurs", val: 1})
-
+    arr = defaultOccurs(arr, keys, maxOccurs, minOccurs)
     return arr
   }
 
   // validar os atributos de um elemento <notation>
   function check_notationAttrs(arr) {
-    let keys = getAttrsKeys(arr, "notation") // array com os nomes dos atributos
+    let keys = getAttrsKeys(arr, "notation", false) // array com os nomes dos atributos
 
     // atributos requiridos
     if (!keys.includes("name")) return error(`No elemento <notation> é requirido o atributo "name"!`)
@@ -418,7 +416,7 @@
   
   // validar os atributos de um elemento <simpleType/complexType>
   function check_localTypeAttrs(arr, el_name) {
-    let keys = getAttrsKeys(arr, el_name) // array com os nomes dos atributos
+    let keys = getAttrsKeys(arr, el_name, false) // array com os nomes dos atributos
     
     // restrições relativas à profundidade dos elementos
     if (atRoot() && !keys.includes("name")) return error(`O atributo 'name' é requirido se o pai do elemento <${el_name}> for o <schema>!`)
@@ -754,7 +752,7 @@ anyAttribute = prefix:open_XSD_el el_name:"anyAttribute" attrs:anyAttribute_attr
                &{return check_elTags(el_name, prefix, close)} 
                {return {element: el_name, attrs, content: close.content}}
 
-anyAttribute_attrs = el:(elem_id / any_namespace / processContents)* &{return getAttrsKeys(el,"anyAttribute")} {return el}
+anyAttribute_attrs = el:(elem_id / any_namespace / processContents)* &{return getAttrsKeys(el, "anyAttribute", false)} {return el}
 
 any_namespace = ws2 attr:"namespace" ws "=" ws val:namespace_values                                                   {return {attr, val}}
 processContents = ws2 attr:"processContents" ws "=" q1:QMo val:processContents_values q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
@@ -918,7 +916,7 @@ extensionCC = prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws
 // ----- <minExclusive> <minInclusive> <maxExclusive> <maxInclusive> <totalDigits <fractionDigits> <length> <minLength> <maxLength> <enumeration> <whiteSpace> <pattern> -----
 
 constrFacet = prefix:open_XSD_el el_name:constrFacet_values 
-              attrs:(a:constrFacet_attrs ws &{return check_constrFacetAttrs(el_name, a)} {return check_constrFacetAttrs(el_name, a)})
+              attrs:(a:constrFacet_attrs ws &{return check_constrFacetAttrs(el_name, a)} {return a})
               close:(merged_close / ann_content)
               &{return check_elTags(el_name, prefix, close)}
               {return {element: el_name, attrs, content: close.content}}
@@ -937,7 +935,7 @@ complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs w
               {if (!--type_depth) current_type = null; return {element: el_name, attrs, content: close.content}}
 
 complexType_attrs = el:(elem_abstract / complexType_block / elem_final / elem_id / complex_mixed / complexType_name)*
-                    &{return check_localTypeAttrs(el, "complexType")} {return check_localTypeAttrs(el, "complexType")}
+                    &{return check_localTypeAttrs(el, "complexType")} {return el}
 
 complexType_block = ws2 attr:"block" ws "=" q1:QMo val:elem_final_values q2:QMc &{return checkQM(q1,q2)}                                    {return {attr, val}}
 complex_mixed = ws2 attr:"mixed" ws "=" q1:QMo val:boolean q2:QMc               &{return checkQM(q1,q2)}                                    {return {attr, val}}
@@ -983,7 +981,7 @@ all_content = c:(annotation? element*) {return cleanContent(c.flat())}
 
 // ----- <choice/sequence> -----
 
-choiceOrSequence = prefix:open_XSD_el el_name:$("choice"/"sequence") attrs:(a:choiceOrSeq_attrs &{return check_occursAttrs(a, el_name)} {return check_occursAttrs(a, el_name)}) ws 
+choiceOrSequence = prefix:open_XSD_el el_name:$("choice"/"sequence") attrs:(a:choiceOrSeq_attrs &{return check_occursAttrs(a, el_name)} {return a}) ws 
                    close:(merged_close / openEl content:choiceOrSeq_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
                    &{return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, "element", close.content)}
                    {return {element: el_name, attrs, content: close.content}}
