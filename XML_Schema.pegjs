@@ -16,10 +16,12 @@
   const noSchemaPrefix = () => default_prefix === null
   // verificar se o prefixo usado foi declarado na definição da schema
   const existsPrefix = p => prefixes.includes(p) ? true : error("Este prefixo não foi declarado no início da schema!")
-  // verificar se as aspas/apóstrofes são fechados consistentemente
-  const checkQM = (q1,q2) => q1 === q2 ? true : error("Deve encapsular o valor em aspas ou em apóstrofes. Não pode usar um de cada!")
+  // verificar se as aspas/apóstrofes são fechados consistentemente - se sim, retorna o objeto {attr,val} em que foram usadas (ou apenas true, para as invocações da declaração XML)
+  const checkQM = (q1,q2,attr,val) => q1 === q2 ? (attr===null ? true : {attr,val}) : error("Deve encapsular o valor em aspas ou em apóstrofes. Não pode usar um de cada!")
   // juntar todos os atributos do elemento num só objeto
-  const getAttrs = objArr => objArr.reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
+  const getAttrs = objArr => objArr === null ? {} : cleanContent(objArr).reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
+  // verificar se o array de atributos tem algum atributo repetido
+  const check_repeatedAttrs = (arr, attrs, el_name) => (Object.keys(attrs).length == arr.length) ? attrs : error(`O elemento <${el_name}> não pode possuir atributos repetidos!`)
   // executar todas as invocações guardadas na queue para ver se são válidas
   const checkQueue = () => queue.reduce((accum, curr) => accum && queueFuncs[curr.attr](...curr.args), true)
 
@@ -105,19 +107,6 @@
     schema_attrs = attrs
     return attrs
   }
-
-  // validar os atributos do elemento <import>
-  function check_importAttrs(arr) {
-    let keys = [] // array com os nomes dos atributos
-        
-    for (let i = 0; i < arr.length; i++) {
-      // verificar que não há atributos repetidos
-      if (keys.includes(arr[i].attr)) return error("O elemento <import> não pode possuir atributos repetidos!")
-      else keys.push(arr[i].attr)
-    }
-
-    return true
-  }
   
 
   // <element> ------------------------------
@@ -131,10 +120,12 @@
 
   // validar um elemento <element/attribute> básico - verificar que tem os atributos essenciais
   const validateLocalEl = attrs => "ref" in attrs || "name" in attrs
+  // validar os atributos de um elemento <any/all/choice/sequence>
+  const check_occursAttrs = (arr, el_name) => defaultOccurs(check_repeatedAttrs(arr, getAttrs(arr), el_name))
   // verificar se o novo id é único na schema
   const validateID = id => !ids.includes(id) ? true : error(`O valor do atributo 'id' deve ser único na schema! Existe mais do que um elemento na schema com o id "${id}"!`)
   // verificar se o atributo em questão está presente
-  const check_requiredAttr = (attrs, el_name, attr_name) => (attrs!==null && cleanContent(attrs).some(x => x.attr === attr_name)) ? true : error(`Um elemento <${el_name}> requer o atributo "${attr_name}"!`)
+  const check_requiredAttr = (attrs, el_name, attr_name) => attr_name in attrs ? attrs : error(`Um elemento <${el_name}> requer o atributo "${attr_name}"!`)
   // se for null, converte para array vazio; senão, remove os nulls do array
   const cleanContent = content => content === null ? [] : content.filter(e => e !== null)
 
@@ -200,10 +191,8 @@
 
   // verificar que um elemento não tem <element/attribute> locais com o mesmo nome
   function check_repeatedNames(parent, el_name, content) {
-    // filtrar apenas os elementos <element/attribute> do conteúdo e ir buscar os respetivos atributos "name"
-    let names = content.filter(x => x.element == el_name).map(x => x.attrs.filter(a => a.attr=="name")[0])
-    // remover os atributos que não têm nome (têm ref) e mapear os restos para o valor do nome
-    names = names.filter(x => x != undefined).map(x => x.val)
+    // filtrar apenas os elementos <element/attribute> do conteúdo e ir buscar os respetivos atributos "name" (remover os atributos que não têm nome, mas sim ref)
+    let names = content.filter(x => x.element == el_name).map(x => x.attrs.name).filter(x => x != undefined)
 
     // verificar se há nomes repetidos no array
     let duplicates = names.filter((item, index) => names.indexOf(item) !== index)
@@ -211,156 +200,125 @@
     return true
   }
 
-  // construir um array com os nomes de todos os atributos do elemento; o argumento occurs indica se podem existir os atributos max/minOccurs
-  function getAttrsKeys(arr, el_name, occurs) {
-    let keys = [], // array com os nomes dos atributos
-        maxOccurs = 1, minOccurs = 1
-
-    for (let i = 0; i < arr.length; i++) {
-      // verificar que não há atributos repetidos
-      if (keys.includes(arr[i].attr)) return error(`O elemento <${el_name}> não pode possuir atributos repetidos!`)
-      else {
-        keys.push(arr[i].attr)
-        if (arr[i].attr === "maxOccurs") maxOccurs = arr[i].val
-        if (arr[i].attr === "minOccurs") minOccurs = arr[i].val
-      }
-    }
-
-    return !occurs ? keys : {keys, maxOccurs, minOccurs}
-  }
-
   // adicionar os valores default dos atributos "max/minOccurs"
-  function defaultOccurs(arr, keys, maxOccurs, minOccurs) {
-    if (!keys.includes("maxOccurs")) arr.push({attr: "maxOccurs", val: keys.includes("minOccurs") ? minOccurs : 1})
-    else if (maxOccurs == "unbounded") {
-      let index = arr.findIndex(x => x.attr == "maxOccurs")
-      arr[index].val = minOccurs + 100 // se o maxOccurs for unbounded, assume-se um teto de minOccurs+100
-    }
-    if (!keys.includes("minOccurs")) arr.push({attr: "minOccurs", val: !maxOccurs ? 0 : 1})
+  function defaultOccurs(attrs) {
+    if (!("maxOccurs" in attrs)) attrs.maxOccurs = "minOccurs" in attrs ? attrs.minOccurs : 1
+    else if (attrs.maxOccurs == "unbounded") attrs.maxOccurs = ("minOccurs" in attrs ? attrs.minOccurs : 0) + 100 // se o maxOccurs for unbounded, assume-se um teto de minOccurs+100
 
-    return arr
+    if (!("minOccurs" in attrs)) attrs.minOccurs = !attrs.maxOccurs ? 0 : 1
+    return attrs
   }
 
   // validar os atributos de um elemento <element>
   function check_elemAttrs(arr) {
-    let {keys, maxOccurs, minOccurs} = getAttrsKeys(arr, "element", true) // array com os nomes dos atributos
+    let attrs = check_repeatedAttrs(arr, getAttrs(arr), "element")
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
-      if (keys.includes("ref")) return error('O atributo "ref" é proibido num elemento <element> de schema!')
-      if (keys.includes("maxOccurs")) return error('O atributo "maxOccurs" é proibido num elemento <element> de schema!')
-      if (keys.includes("minOccurs")) return error('O atributo "minOccurs" é proibido num elemento <element> de schema!')
-      if (!keys.includes("name")) return error('O atributo "name" é requirido num elemento <element> de schema!')
+      if ("ref" in attrs) return error('O atributo "ref" é proibido num elemento <element> de schema!')
+      if ("maxOccurs" in attrs) return error('O atributo "maxOccurs" é proibido num elemento <element> de schema!')
+      if ("minOccurs" in attrs) return error('O atributo "minOccurs" é proibido num elemento <element> de schema!')
+      if (!("name" in attrs)) return error('O atributo "name" é requirido num elemento <element> de schema!')
     }
     // elementos aninhados
-    else if (keys.includes("final")) return error('O atributo "final" é proibido num elemento <element> local!')
+    else if ("final" in attrs) return error('O atributo "final" é proibido num elemento <element> local!')
 
     // mensagem de erro de atributos mutuamente exclusivos
     let mutexc_error = (a1,a2) => error(`Em elementos <element>, os atributos "${a1}" e "${a2}" são mutuamente exclusivos!`)
     // atributos mutuamente exclusivos
-    if (keys.includes("default") && keys.includes("fixed")) return mutexc_error("default","fixed")
-    if (keys.includes("ref") && keys.includes("block")) return mutexc_error("ref","block")
-    if (keys.includes("ref") && keys.includes("default")) return mutexc_error("ref","default")
-    if (keys.includes("ref") && keys.includes("fixed")) return mutexc_error("ref","fixed")
-    if (keys.includes("ref") && keys.includes("form")) return mutexc_error("ref","form")
-    if (keys.includes("ref") && keys.includes("name")) return mutexc_error("ref","name")
-    if (keys.includes("ref") && keys.includes("nillable")) return mutexc_error("ref","nillable")
-    if (keys.includes("ref") && keys.includes("type")) return mutexc_error("ref","type")
+    if ("default" in attrs && "fixed" in attrs) return mutexc_error("default","fixed")
+    if ("ref" in attrs && "block" in attrs) return mutexc_error("ref","block")
+    if ("ref" in attrs && "default" in attrs) return mutexc_error("ref","default")
+    if ("ref" in attrs && "fixed" in attrs) return mutexc_error("ref","fixed")
+    if ("ref" in attrs && "form" in attrs) return mutexc_error("ref","form")
+    if ("ref" in attrs && "name" in attrs) return mutexc_error("ref","name")
+    if ("ref" in attrs && "nillable" in attrs) return mutexc_error("ref","nillable")
+    if ("ref" in attrs && "type" in attrs) return mutexc_error("ref","type")
 
     // maxOccurs não pode ser inferior a minOccurs
-    if (keys.includes("maxOccurs") && keys.includes("minOccurs") && maxOccurs < minOccurs)
+    if ("maxOccurs" in attrs && "minOccurs" in attrs && attrs.maxOccurs < attrs.minOccurs)
       return error('A propriedade "maxOccurs" do elemento não pode ser inferior à "minOccurs"!')
 
     // atributos com valores predefinidos
-    if (!atRoot()) arr = defaultOccurs(arr, keys, maxOccurs, minOccurs)
-    if (!keys.includes("abstract")) arr.push({attr: "abstract", val: false})
-    //if (!keys.includes("form")) attrs.form = //valor do atributo elementFormDefault do elemento da schema
-    if (!keys.includes("nillable")) arr.push({attr: "nillable", val: false})
+    if (!atRoot()) attrs = defaultOccurs(attrs)
+    if (!("abstract" in attrs)) attrs.abstract = false
+    //if (!("form" in attrs)) attrs.form = //valor do atributo elementFormDefault do elemento da schema
+    if (!("nillable" in attrs)) attrs.nillable = false
 
-    return arr
+    return attrs
   }
 
   // validar os atributos de um elemento <keyref>
   function check_keyrefAttrs(arr) {
-    let keys = getAttrsKeys(arr, "keyref", false) // array com os nomes dos atributos
+    let attrs = check_repeatedAttrs(arr, getAttrs(arr), "keyref")
 
     // atributos requiridos
-    if (!keys.includes("name")) return error(`No elemento <keyref> é requirido o atributo "name"!`)
-    if (!keys.includes("refer") && !keys.includes("system")) return error(`No elemento <keyref> é requirido o atributo "refer"!`)
+    if (!("name" in attrs)) return error(`No elemento <keyref> é requirido o atributo "name"!`)
+    if (!("refer" in attrs) && !("system" in attrs)) return error(`No elemento <keyref> é requirido o atributo "refer"!`)
 
-    return true
+    return attrs
   }
 
   // validar os atributos de um elemento <attribute/attributeGroup>
   function check_attributeElAttrs(arr, el_name) {
-    let keys = getAttrsKeys(arr, el_name, false) // array com os nomes dos atributos
+    let attrs = check_repeatedAttrs(arr, getAttrs(arr), el_name)
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
-      if (keys.includes("ref")) return error(`O atributo "ref" é proibido num elemento <${el_name}> de schema!`)
-      if (!keys.includes("name")) return error(`O atributo "name" é requirido num elemento <${el_name}> de schema!`)
+      if ("ref" in attrs) return error(`O atributo "ref" é proibido num elemento <${el_name}> de schema!`)
+      if (!("name" in attrs)) return error(`O atributo "name" é requirido num elemento <${el_name}> de schema!`)
     }
     else {
       if (el_name == "attributeGroup") {
-        if (!keys.includes("ref")) return error(`O atributo "ref" é requirido num elemento <${el_name}> local!`)
-        if (keys.includes("name")) return error(`O atributo "name" é proibido num elemento <${el_name}> local!`)
+        if (!("ref" in attrs)) return error(`O atributo "ref" é requirido num elemento <${el_name}> local!`)
+        if ("name" in attrs) return error(`O atributo "name" é proibido num elemento <${el_name}> local!`)
       }
     }
 
     // mensagem de erro de atributos mutuamente exclusivos
     let mutexc_error = (a1,a2) => error(`Em elementos <${el_name}>, os atributos "${a1}" e "${a2}" são mutuamente exclusivos!`)
     // atributos mutuamente exclusivos
-    if (keys.includes("name") && keys.includes("ref")) return mutexc_error("name","ref")
+    if ("name" in attrs && "ref" in attrs) return mutexc_error("name","ref")
 
     if (el_name == "attribute") {
-      if (keys.includes("default") && keys.includes("fixed")) return mutexc_error("default","fixed")
-      if (keys.includes("ref") && keys.includes("form")) return mutexc_error("ref","form")
-      if (keys.includes("ref") && keys.includes("type")) return mutexc_error("ref","type")
+      if ("default" in attrs && "fixed" in attrs) return mutexc_error("default","fixed")
+      if ("ref" in attrs && "form" in attrs) return mutexc_error("ref","form")
+      if ("ref" in attrs && "type" in attrs) return mutexc_error("ref","type")
 
       // atributos com valores predefinidos
-      if (!keys.includes("use")) arr.push({attr: "use", val: "optional"})
+      if (!("use" in attrs)) attrs.use = "optional"
     }
 
-    return arr
-  }
-
-  // validar os atributos de um elemento <any/all/choice/sequence>
-  function check_occursAttrs(arr, el_name) {
-    let {keys, maxOccurs, minOccurs} = getAttrsKeys(arr, el_name, true) // array com os nomes dos atributos
-
-    // atributos com valores predefinidos
-    arr = defaultOccurs(arr, keys, maxOccurs, minOccurs)
-    return arr
+    return attrs
   }
 
   // validar os atributos de um elemento <group>
   function check_groupAttrs(arr) {
-    let {keys, maxOccurs, minOccurs} = getAttrsKeys(arr, el_name, true) // array com os nomes dos atributos
+    let attrs = check_repeatedAttrs(arr, getAttrs(arr), "group")
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
-      if (keys.includes("ref")) return error('O atributo "ref" é proibido num elemento <group> de schema!')
-      if (!keys.includes("name")) return error('O atributo "name" é requirido num elemento <group> de schema!')
+      if ("ref" in attrs) return error('O atributo "ref" é proibido num elemento <group> de schema!')
+      if (!("name" in attrs)) return error('O atributo "name" é requirido num elemento <group> de schema!')
     }
     else {
-      if (!keys.includes("ref")) return error('O atributo "ref" é requirido num elemento <group> local!')
-      if (keys.includes("name")) return error('O atributo "name" é proibido num elemento <group> local!')
+      if (!("ref" in attrs)) return error('O atributo "ref" é requirido num elemento <group> local!')
+      if ("name" in attrs) return error('O atributo "name" é proibido num elemento <group> local!')
     }
 
     // atributos com valores predefinidos
-    arr = defaultOccurs(arr, keys, maxOccurs, minOccurs)
-    return arr
+    return defaultOccurs(attrs)
   }
 
   // validar os atributos de um elemento <notation>
   function check_notationAttrs(arr) {
-    let keys = getAttrsKeys(arr, "notation", false) // array com os nomes dos atributos
+    let attrs = check_repeatedAttrs(arr, getAttrs(arr), "notation")
 
     // atributos requiridos
-    if (!keys.includes("name")) return error(`No elemento <notation> é requirido o atributo "name"!`)
-    if (!keys.includes("public") && !keys.includes("system")) return error(`No elemento <notation> é requirido pelo menos um dos atributos "public" e "system"!`)
+    if (!("name" in attrs)) return error(`No elemento <notation> é requirido o atributo "name"!`)
+    if (!("public" in attrs) && !("system" in attrs)) return error(`No elemento <notation> é requirido pelo menos um dos atributos "public" e "system"!`)
 
-    return true
+    return attrs
   }
 
   // validar o valor de atributos que sejam listas
@@ -414,19 +372,19 @@
   
   // validar os atributos de um elemento <simpleType/complexType>
   function check_localTypeAttrs(arr, el_name) {
-    let keys = getAttrsKeys(arr, el_name, false) // array com os nomes dos atributos
+    let attrs = check_repeatedAttrs(arr, getAttrs(arr), el_name)
     
     // restrições relativas à profundidade dos elementos
-    if (atRoot() && !keys.includes("name")) return error(`O atributo 'name' é requirido se o pai do elemento <${el_name}> for o <schema>!`)
-    if (!atRoot() && !curr.redefine && keys.includes("name")) return error(`O atributo 'name' é proibido se o pai do elemento <${el_name}> não for o <schema>!`)
+    if (atRoot() && !("name" in attrs)) return error(`O atributo 'name' é requirido se o pai do elemento <${el_name}> for o <schema>!`)
+    if (!atRoot() && !curr.redefine && "name" in attrs) return error(`O atributo 'name' é proibido se o pai do elemento <${el_name}> não for o <schema>!`)
 
     if (el_name == "complexType") {
       // atributos com valores predefinidos
-      if (!keys.includes("abstract")) arr.push({attr: "abstract", val: false})
-      if (!keys.includes("mixed")) arr.push({attr: "mixed", val: false})
+      if (!("abstract" in attrs)) attrs.abstract = false
+      if (!("mixed" in attrs)) attrs.mixed = false
     }
 
-    return arr
+    return attrs
   }
 
   // verificar que um elemento <complexType> não tem o atributo "mixed" e um elemento filho simpleContent
@@ -452,39 +410,30 @@
 
   // verificar que o nome do elemento de derivação, os atributos e o valor batem todos certo
   function check_constrFacetAttrs(name, arr) {
-    let keys = [] // array com os nomes dos atributos
-        
-    for (let i = 0; i < arr.length; i++) {
-      // verificar que não há atributos repetidos
-      if (keys.includes(arr[i].attr)) return error(`O elemento <${name}> não pode possuir atributos repetidos!`)
-      else {
-        keys.push(arr[i].attr)
+    let attrs = check_repeatedAttrs(arr, getAttrs(arr), name)
 
-        if (arr[i].attr == "value") {
-          // restrições relativas ao conteúdo dos atributos
-          if (name == "whiteSpace") {
-            if (!["preserve","replace","collapse"].includes(arr[i].val)) return error(`O valor do atributo "value" do elemento <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
-          } 
-          else if (name == "totalDigits") {
-            if (!/[1-9]\d*/.test(arr[i].val)) return error(`O valor do atributo "totalDigits" deve ser um inteiro positivo!`)
-            arr[i].val = parseInt(arr[i].val)
-          } 
-          else if (!(name == "pattern" || name == "enumeration")) {
-            if (!/\d+/.test(arr[i].val)) return error(`O valor do atributo "value" do elemento <${name}> deve ser um inteiro não negativo!`)
-            arr[i].val = parseInt(arr[i].val)
-          }
-        }
+    if ("value" in attrs) {
+      if (name == "whiteSpace") {
+        if (!["preserve","replace","collapse"].includes(attrs.value)) return error(`O valor do atributo "value" do elemento <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
+      }
+      else if (name == "totalDigits") {
+        if (!/[1-9]\d*/.test(attrs.value)) return error(`O valor do atributo "totalDigits" deve ser um inteiro positivo!`)
+        attrs.value = parseInt(attrs.value)
+      } 
+      else if (!(name == "pattern" || name == "enumeration")) {
+        if (!/\d+/.test(attrs.value)) return error(`O valor do atributo "value" do elemento <${name}> deve ser um inteiro não negativo!`)
+        attrs.value = parseInt(attrs.value)
       }
     }
 
     // restrições relativas à existência dos atributos
-    if (!keys.includes("value")) return error(`No elemento <${name}> é requirido o atributo "value"!`)
+    if (!("value" in attrs)) return error(`No elemento <${name}> é requirido o atributo "value"!`)
     if (name == "pattern" || name == "enumeration") {
-      if (keys.includes("fixed")) return error(`O elemento <${name}> não aceita o atributo "fixed"!`)
+      if ("fixed" in attrs) return error(`O elemento <${name}> não aceita o atributo "fixed"!`)
     }
-    else if (!keys.includes("fixed")) arr.push({attr: "fixed", val: false})
+    else if (!("fixed" in attrs)) attrs.fixed = false
 
-    return arr
+    return attrs
   }
 
   // verifica se os valores do elemento de restrição dado e de enumeração se contradizem
@@ -509,7 +458,7 @@
         
     for (let i = 0; i < arr.length; i++) {
       let key = arr[i].element,
-          value = arr[i].attrs.filter(x => x.attr === "value")[0].val
+          value = arr[i].attrs.value
       
       // só os atributos "pattern" e "enumeration" é que podem aparecer várias vezes
       if (!(key == "pattern" || key == "enumeration") && key in f) return error(`O atributo "${key}" só pode ser definido uma vez em cada elemento <${name}>!`)
@@ -562,12 +511,12 @@ DSL_text = ws comment? XML_declaration ws comment? xsd:schema { return xsd }
 
 XML_declaration = "<?xml" XML_version XML_encoding? XML_standalone? ws '?>'
 
-XML_version = ws2 "version" ws "=" ws q1:QM "1.0" q2:QM &{return checkQM(q1,q2)}
+XML_version = ws2 "version" ws "=" ws q1:QM "1.0" q2:QM &{return checkQM(q1,q2,null,null)}
 
-XML_encoding = ws2 "encoding" ws "=" ws q1:QM XML_encoding_value q2:QM &{return checkQM(q1,q2)}
+XML_encoding = ws2 "encoding" ws "=" ws q1:QM XML_encoding_value q2:QM &{return checkQM(q1,q2,null,null)}
 XML_encoding_value = "UTF-"("8"/"16") / "ISO-10646-UCS-"("2"/"4") / "ISO-8859-"[1-9] / "ISO-2022-JP" / "Shift_JIS" / "EUC-JP"
 
-XML_standalone = ws2 "standalone" ws "=" ws q1:QM XML_standalone_value q2:QM &{return checkQM(q1,q2)}
+XML_standalone = ws2 "standalone" ws "=" ws q1:QM XML_standalone_value q2:QM &{return checkQM(q1,q2,null,null)}
 XML_standalone_value = "yes" / "no"
 
 // ----- <schema> -----
@@ -582,15 +531,15 @@ close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
   return true
 }
 
-schema_attrs = el:(formDefault / blockDefault / finalDefault / xmlns /
-                     elem_id / elem_lang / schema_version / targetNamespace)+ &{return check_schemaAttrs(el)} {return el}
+schema_attrs = attrs:(formDefault / blockDefault / finalDefault / xmlns /
+                      elem_id / elem_lang / schema_version / targetNamespace)+ &{return check_schemaAttrs(attrs)} {return attrs}
 
-formDefault = ws2 attr:$(("attribute"/"element")"FormDefault") ws "=" q1:QMo val:form_values q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
-blockDefault = ws2 attr:"blockDefault" ws "=" q1:QMo val:block_values q2:QMc                        &{return checkQM(q1,q2)} {return {attr, val}}
-finalDefault = ws2 attr:"finalDefault" ws "=" q1:QMo val:finalDefault_values q2:QMc                 &{return checkQM(q1,q2)} {return {attr, val}}
-xmlns = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws val:string                                                   {prefixes.push(prefix); return {attr: "namespace", prefix, val}}
-schema_version = ws2 attr:"version" ws "=" ws val:string                                                                     {return {attr, val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
-targetNamespace = ws2 attr:"targetNamespace" ws "=" ws val:string                                                            {return {attr, val}}
+formDefault = ws2 attr:$(("attribute"/"element")"FormDefault") ws "=" q1:QMo val:form_values q2:QMc {return checkQM(q1,q2,attr,val)}
+blockDefault = ws2 attr:"blockDefault" ws "=" q1:QMo val:block_values q2:QMc                        {return checkQM(q1,q2,attr,val)}
+finalDefault = ws2 attr:"finalDefault" ws "=" q1:QMo val:finalDefault_values q2:QMc                 {return checkQM(q1,q2,attr,val)}
+xmlns = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws val:string                          {prefixes.push(prefix); return {attr: "namespace", prefix, val}}
+schema_version = ws2 attr:"version" ws "=" ws val:string                                            {return {attr, val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
+targetNamespace = ws2 attr:"targetNamespace" ws "=" ws val:string                                   {return {attr, val}}
 
 schema_content = comment? el:((redefine / include / import / annotation)* (((simpleType / complexType / group / attributeGroup) / element / attribute / notation) annotation*)*) {return cleanContent(el.flat(3))}
 
@@ -601,9 +550,7 @@ include = prefix:open_XSD_el el_name:"include" attrs:schemaLocID_attrs ws close:
           &{return check_elTags(el_name, prefix, close)}
           {return {element: el_name, attrs, content: close.content}}
 
-schemaLocID_attrs = attrs:(schemaLocation elem_id? / elem_id schemaLocation?)? 
-                &{return (attrs!==null && cleanContent(attrs).some(x => x.attr === "schemaLocation")) ? true : error(`Um elemento <include> requer o atributo "schemaLocation"!`)}
-                {return cleanContent(attrs)}
+schemaLocID_attrs = el:(schemaLocation elem_id? / elem_id schemaLocation?)? {return check_requiredAttr(getAttrs(el), "include", "schemaLocation")}
 
 schemaLocation = ws2 attr:"schemaLocation" ws "=" ws val:string {return {attr, val}}
 
@@ -614,7 +561,7 @@ import = prefix:open_XSD_el el_name:"import" attrs:import_attrs ws close:(merged
          &{return check_elTags(el_name, prefix, close)}
          {return {element: el_name, attrs, content: close.content}}
 
-import_attrs = el:(import_namespace / elem_id / schemaLocation)* &{return check_importAttrs(el)} {return el}
+import_attrs = el:(import_namespace / elem_id / schemaLocation)* {return check_repeatedAttrs(el, getAttrs(el), "import")}
 
 import_namespace = ws2 attr:"namespace" ws "=" ws val:string {return {attr, val}}
 
@@ -633,30 +580,30 @@ redefine_content = c:(annotation / (simpleType / complexType / group / attribute
 
 element = prefix:open_XSD_el el_name:$("element" {any_type = "BSC"; curr.element = true}) attrs:element_attrs ws
           close:(merged_close / openEl content:element_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) &{
-  if ((close.merged || !close.content.length) && !validateLocalEl(getAttrs(attrs))) return error("Um elemento local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
-  return check_elTags(el_name, prefix, close) && check_elemMutex(getAttrs(attrs), close.content)
+  if ((close.merged || !close.content.length) && !validateLocalEl(attrs)) return error("Um elemento local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
+  return check_elTags(el_name, prefix, close) && check_elemMutex(attrs, close.content)
 } {return {element: el_name, attrs, content: close.content}}
 
 element_attrs = el:(elem_abstract / elem_block / elem_default / elem_substitutionGroup /
                 elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
-                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)* &{return check_elemAttrs(el)} {curr.element = false; return el}
+                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)* {curr.element = false; return check_elemAttrs(el)}
 
-elem_abstract = ws2 attr:"abstract" ws "=" q1:QMo val:boolean q2:QMc                 &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_block = ws2 attr:"block" ws "=" q1:QMo val:block_values q2:QMc                  &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_default = ws2 attr:"default" ws "=" ws val:string                                                                                       {return {attr, val}}
-elem_final = ws2 attr:"final" ws "=" q1:QMo val:elem_final_values q2:QMc             &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_fixed = ws2 attr:"fixed" ws "=" ws val:string                                                                                           {return {attr, val}}
-elem_form = ws2 attr:"form" ws "=" q1:QMo val:form_values q2:QMc                     &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_id = ws2 attr:"id" ws "=" q1:QMo val:ID q2:QMc                                  &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_maxOccurs = ws2 attr:"maxOccurs" ws "=" q1:QMo val:(int/"unbounded") q2:QMc     &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_minOccurs = ws2 attr:"minOccurs" ws "=" q1:QMo val:int q2:QMc                   &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc                          &{return checkQM(q1,q2) && validateName(val,"element")} {return {attr, val}}
-elem_nillable = ws2 attr:"nillable" ws "=" q1:QMo val:boolean q2:QMc                 &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_lang = ws2 attr:"xml:lang" ws "=" q1:QMo val:language q2:QMc                    &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc                             &{return checkQM(q1,q2)}                                {queue.push({attr: "ref", args: [val, "element"]}); return {attr, val}}
-elem_source = ws2 attr:"source" ws "=" ws val:string                                                                                         {return {attr, val}}
-elem_substitutionGroup = ws2 attr:"substitutionGroup" ws "=" q1:QMo val:QName q2:QMc &{return checkQM(q1,q2)}                                {return {attr, val}}
-elem_type = ws2 attr:"type" ws "=" q1:QMo val:type_value q2:QMc                      &{return checkQM(q1,q2)}                                {return {attr, val}}
+elem_abstract = ws2 attr:"abstract" ws "=" q1:QMo val:boolean q2:QMc                                        {return checkQM(q1,q2,attr,val)}
+elem_block = ws2 attr:"block" ws "=" q1:QMo val:block_values q2:QMc                                         {return checkQM(q1,q2,attr,val)}
+elem_default = ws2 attr:"default" ws "=" ws val:string                                                      {return {attr,val}}
+elem_final = ws2 attr:"final" ws "=" q1:QMo val:elem_final_values q2:QMc                                    {return checkQM(q1,q2,attr,val)}
+elem_fixed = ws2 attr:"fixed" ws "=" ws val:string                                                          {return {attr,val}}
+elem_form = ws2 attr:"form" ws "=" q1:QMo val:form_values q2:QMc                                            {return checkQM(q1,q2,attr,val)}
+elem_id = ws2 attr:"id" ws "=" q1:QMo val:ID q2:QMc                                                         {return checkQM(q1,q2,attr,val)}
+elem_maxOccurs = ws2 attr:"maxOccurs" ws "=" q1:QMo val:(int/"unbounded") q2:QMc                            {return checkQM(q1,q2,attr,val)}
+elem_minOccurs = ws2 attr:"minOccurs" ws "=" q1:QMo val:int q2:QMc                                          {return checkQM(q1,q2,attr,val)}
+elem_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc           &{return validateName(val,"element")} {return checkQM(q1,q2,attr,val)}
+elem_nillable = ws2 attr:"nillable" ws "=" q1:QMo val:boolean q2:QMc                                        {return checkQM(q1,q2,attr,val)}
+elem_lang = ws2 attr:"xml:lang" ws "=" q1:QMo val:language q2:QMc                                           {return checkQM(q1,q2,attr,val)}
+elem_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc {queue.push({attr: "ref", args: [val, "element"]}); return checkQM(q1,q2,attr,val)}
+elem_source = ws2 attr:"source" ws "=" ws val:string                                                        {return {attr,val}}
+elem_substitutionGroup = ws2 attr:"substitutionGroup" ws "=" q1:QMo val:QName q2:QMc                        {return checkQM(q1,q2,attr,val)}
+elem_type = ws2 attr:"type" ws "=" q1:QMo val:type_value q2:QMc                                             {return checkQM(q1,q2,attr,val)}
 
 element_content = c:(annotation? (simpleType / complexType)? (keyOrUnique / keyref)*) {return cleanContent(c.flat())}
 
@@ -667,10 +614,9 @@ field = prefix:open_XSD_el el_name:"field" attrs:field_attrs ws close:(merged_cl
         &{return check_elTags(el_name, prefix, close)}
         {return {element: el_name, attrs, content: close.content}}
 
-field_attrs = attrs:(field_xpath elem_id? / elem_id field_xpath?)? 
-              &{return check_requiredAttr(attrs, "field", "xpath")} {return cleanContent(attrs)}
+field_attrs = attrs:(field_xpath elem_id? / elem_id field_xpath?)? {return check_requiredAttr(getAttrs(attrs), "field", "xpath")}
 
-field_xpath = ws2 attr:"xpath" ws "=" q1:QMo val:fieldXPath q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+field_xpath = ws2 attr:"xpath" ws "=" q1:QMo val:fieldXPath q2:QMc {return checkQM(q1,q2,attr,val)}
 
 
 // ----- <selector> -----
@@ -679,52 +625,51 @@ selector = prefix:open_XSD_el el_name:"selector" attrs:selector_attrs ws close:(
            &{return check_elTags(el_name, prefix, close)}
            {return {element: el_name, attrs, content: close.content}}
 
-selector_attrs = attrs:(selector_xpath elem_id? / elem_id selector_xpath?)? 
-                 &{return check_requiredAttr(attrs, "selector", "xpath")} {return cleanContent(attrs)}
+selector_attrs = attrs:(selector_xpath elem_id? / elem_id selector_xpath?)? {return check_requiredAttr(getAttrs(attrs), "selector", "xpath")}
 
-selector_xpath = ws2 attr:"xpath" ws "=" q1:QMo val:selectorXPath q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+selector_xpath = ws2 attr:"xpath" ws "=" q1:QMo val:selectorXPath q2:QMc {return checkQM(q1,q2,attr,val)}
 
 
 // ----- <key/unique> -----
 
 keyOrUnique = prefix:open_XSD_el el_name:$("key"/"unique") 
-              attrs:(a:keyOrUnique_attrs &{return check_requiredAttr(a, el_name, "name") && validateName(a.filter(x => x.attr=="name")[0].val, el_name)} {return a}) ws
+              attrs:(a:keyOrUnique_attrs &{return check_requiredAttr(a, el_name, "name") && validateName(a.name, el_name)} {return a}) ws
               close:(merged_close / openEl content:xpath_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
               &{return check_elTags(el_name, prefix, close)}
               {return {element: el_name, attrs, content: close.content}}
 
-keyOrUnique_attrs = attrs:(elem_constraint_name elem_id? / elem_id elem_constraint_name?)? {return cleanContent(attrs)}
+keyOrUnique_attrs = attrs:(elem_constraint_name elem_id? / elem_id elem_constraint_name?)? {return getAttrs(attrs)}
 
-elem_constraint_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+elem_constraint_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc {return checkQM(q1,q2,attr,val)}
 
 xpath_content = c:(annotation? (selector field+)) {return cleanContent(c.flat())}
 
 
 // ----- <keyref> -----
 
-keyref = prefix:open_XSD_el el_name:"keyref" attrs:(a:keyref_attrs &{return validateName(a.filter(x => x.attr=="name")[0].val, el_name)} {return a}) ws
+keyref = prefix:open_XSD_el el_name:"keyref" attrs:(a:keyref_attrs &{return validateName(a.name, el_name)} {return a}) ws
          close:(merged_close / openEl content:xpath_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
          &{return check_elTags(el_name, prefix, close)}
          {return {element: el_name, attrs, content: close.content}}
 
-keyref_attrs = el:(elem_id / elem_constraint_name / keyref_refer)* &{return check_keyrefAttrs(el)} {return el}
+keyref_attrs = attrs:(elem_id / elem_constraint_name / keyref_refer)* {return check_keyrefAttrs(attrs)}
 
-keyref_refer = ws2 attr:"refer" ws "=" q1:QMo val:QName q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+keyref_refer = ws2 attr:"refer" ws "=" q1:QMo val:QName q2:QMc {return checkQM(q1,q2,attr,val)}
 
 
 // ----- <attribute> -----
 
 attribute = prefix:open_XSD_el el_name:$("attribute" {any_type = "BS"}) attrs:attribute_attrs ws
             close:(merged_close / openEl content:attribute_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) &{
-  if ((close.merged || !close.content.length) && !validateLocalEl(getAttrs(attrs))) return error("Um atributo local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
-  return check_elTags(el_name, prefix, close) && check_attrMutex(getAttrs(attrs), close.content)
+  if ((close.merged || !close.content.length) && !validateLocalEl(attrs)) return error("Um atributo local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
+  return check_elTags(el_name, prefix, close) && check_attrMutex(attrs, close.content)
 } {return {element: el_name, attrs, content: close.content}}
 
-attribute_attrs = el:(elem_default / elem_fixed / elem_form / elem_id / attr_name / attr_ref / elem_type / attr_use)* &{return check_attributeElAttrs(el,"attribute")} {any_type = "BSC"; return el}
+attribute_attrs = el:(elem_default / elem_fixed / elem_form / elem_id / attr_name / attr_ref / elem_type / attr_use)* {any_type = "BSC"; return check_attributeElAttrs(el,"attribute")}
 
-attr_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc   &{return checkQM(q1,q2) && validateName(val,"attribute")} {return {attr, val}}
-attr_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc      &{return checkQM(q1,q2)}                                  {queue.push({attr: "ref", args: [val, "attribute"]}); return {attr, val}}
-attr_use = ws2 attr:"use" ws "=" q1:QMo val:use_values q2:QMc &{return checkQM(q1,q2)}                                  {return {attr, val}}
+attr_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc                &{return validateName(val,"attribute")} {return checkQM(q1,q2,attr,val)}
+attr_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc      {queue.push({attr: "ref", args: [val, "attribute"]}); return checkQM(q1,q2,attr,val)}
+attr_use = ws2 attr:"use" ws "=" q1:QMo val:use_values q2:QMc                                                      {return checkQM(q1,q2,attr,val)}
 
 attribute_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
@@ -733,13 +678,13 @@ attribute_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 attributeGroup = prefix:open_XSD_el el_name:"attributeGroup" attrs:attributeGroup_attrs ws
                  close:(merged_close / openEl content:attributeGroup_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-                 &{return check_elTags(el_name, prefix, close) && check_attrGroupMutex(getAttrs(attrs), close.content) && check_repeatedNames(el_name, "attribute", close.content)} 
+                 &{return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)} 
                  {return {element: el_name, attrs, content: close.content}}
 
-attributeGroup_attrs = el:(elem_id / attrGroup_name / attrGroup_ref)* &{return check_attributeElAttrs(el,"attributeGroup")} {return el}
+attributeGroup_attrs = el:(elem_id / attrGroup_name / attrGroup_ref)* {return check_attributeElAttrs(el,"attributeGroup")}
 
-attrGroup_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return checkQM(q1,q2) && validateName(val,"attributeGroup")} {return {attr, val}}
-attrGroup_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc    &{return checkQM(q1,q2)}                                       {queue.push({attr: "ref", args: [val, "attributeGroup"]}); return {attr, val}}
+attrGroup_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc           &{return validateName(val,"attributeGroup")} {return checkQM(q1,q2,attr,val)}
+attrGroup_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc {queue.push({attr: "ref", args: [val, "attributeGroup"]}); return checkQM(q1,q2,attr,val)}
 
 attributeGroup_content = c:(annotation? attributes) {return cleanContent(c.flat())}
 
@@ -750,10 +695,10 @@ anyAttribute = prefix:open_XSD_el el_name:"anyAttribute" attrs:anyAttribute_attr
                &{return check_elTags(el_name, prefix, close)} 
                {return {element: el_name, attrs, content: close.content}}
 
-anyAttribute_attrs = el:(elem_id / any_namespace / processContents)* &{return getAttrsKeys(el, "anyAttribute", false)} {return el}
+anyAttribute_attrs = el:(elem_id / any_namespace / processContents)* {return check_repeatedAttrs(el, getAttrs(el), "anyAttribute")}
 
-any_namespace = ws2 attr:"namespace" ws "=" ws val:namespace_values                                                   {return {attr, val}}
-processContents = ws2 attr:"processContents" ws "=" q1:QMo val:processContents_values q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+any_namespace = ws2 attr:"namespace" ws "=" ws val:namespace_values                          {return {attr, val}}
+processContents = ws2 attr:"processContents" ws "=" q1:QMo val:processContents_values q2:QMc {return checkQM(q1,q2,attr,val)}
 
 
 // ----- <any> -----
@@ -762,7 +707,7 @@ any = prefix:open_XSD_el el_name:"any" attrs:any_attrs ws close:(merged_close / 
       &{return check_elTags(el_name, prefix, close)} 
       {return {element: el_name, attrs, content: close.content}}
 
-any_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs / any_namespace / processContents)* &{return check_occursAttrs(el,"any")} {return el}
+any_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs / any_namespace / processContents)* {return check_occursAttrs(el,"any")}
 
 
 // ----- <simpleType> -----
@@ -771,10 +716,10 @@ simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:
              &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
              {if (!--type_depth) current_type = null; return {element: el_name, attrs, content}}
 
-simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* &{return check_localTypeAttrs(el, "simpleType")} {return el}
+simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* {return check_localTypeAttrs(el, "simpleType")}
 
-simpleType_final = ws2 attr:"final" ws "=" q1:QMo val:simpleType_final_values q2:QMc &{return checkQM(q1,q2)}                                   {return {attr, val}}
-simpleType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc                    &{return checkQM(q1,q2) && newLocalType(val,"simpleType")} {return {attr, val}}
+simpleType_final = ws2 attr:"final" ws "=" q1:QMo val:simpleType_final_values q2:QMc                       {return checkQM(q1,q2,attr,val)}
+simpleType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return newLocalType(val,"simpleType")} {return checkQM(q1,q2,attr,val)}
 
 simpleType_content = c:(annotation? (restrictionST / list / union)) {any_type = "BSC"; return cleanContent(c)}
 
@@ -784,7 +729,7 @@ simpleType_content = c:(annotation? (restrictionST / list / union)) {any_type = 
 annotation = prefix:open_XSD_el el_name:"annotation" attr:elem_id? ws
              close:(merged_close / openEl content:annotation_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
              &{return check_elTags(el_name, prefix, close)}
-             {return {element: el_name, attrs: cleanContent(attr), content: close.content}}
+             {return {element: el_name, attrs: getAttrs(attr), content: close.content}}
 
 annotation_content = (appinfo / documentation)*
 
@@ -795,12 +740,12 @@ appinfo = appinfo_simple / appinfo_prefix
 
 appinfo_simple = "<" el_name:"appinfo" attr:elem_source? ws
                  close:("/>" ws {return ""} / openEl content:appinfo_content_simple? close_appinfo_simple {schema_depth--; return content===null ? "" : content})
-                 {return {element: el_name, attrs: cleanContent(attr), content: close}}
+                 {return {element: el_name, attrs: getAttrs(attr), content: close}}
 
 appinfo_prefix = prefix:open_XSD_el el_name:"appinfo" attr:elem_source? ws
                  close:(merged_close / openEl content:appinfo_content_prefix? close_el:close_appinfo_prefix {schema_depth--; return {merged: false, ...close_el, content}})
                  &{return check_elTags(el_name, prefix, close)} 
-                 {return {element: el_name, attrs: cleanContent(attr), content: (close.content === [] || close.content === null) ? "" : close.content}}
+                 {return {element: el_name, attrs: getAttrs(attr), content: (close.content === [] || close.content === null) ? "" : close.content}}
 
 appinfo_content_simple = (!close_appinfo_simple). appinfo_content_simple* {return text().trim()}
 appinfo_content_prefix = (!close_appinfo_prefix). appinfo_content_prefix* {return text().trim()}
@@ -813,7 +758,7 @@ close_appinfo_prefix = prefix:close_XSD_prefix name:"appinfo" ws ">" ws {return 
 
 documentation = doc_simple / doc_prefix
 
-documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return cleanContent(attrs)}
+documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return getAttrs(attrs)}
 
 doc_simple = "<" el_name:"documentation" attrs:documentation_attrs ws
              close:("/>" ws {return ""} / openEl content:doc_content_simple? close_doc_simple {schema_depth--; return content===null ? "" : content})
@@ -835,12 +780,12 @@ close_doc_prefix = prefix:close_XSD_prefix name:"documentation" ws ">" ws {retur
 
 union = prefix:open_XSD_el el_name:"union" attrs:union_attrs ws 
         close:(merged_close / openEl content:union_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-        &{return check_elTags(el_name, prefix, close) && validateUnion(getAttrs(attrs), close.content)}
+        &{return check_elTags(el_name, prefix, close) && validateUnion(attrs, close.content)}
         {return {element: el_name, attrs, content: close.content}}
 
-union_attrs = attrs:(elem_id union_memberTypes? / union_memberTypes elem_id?)? {return cleanContent(attrs)}
+union_attrs = attrs:(elem_id union_memberTypes? / union_memberTypes elem_id?)? {return getAttrs(attrs)}
 
-union_memberTypes = ws2 attr:"memberTypes" ws "=" q1:QMo val:list_types q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+union_memberTypes = ws2 attr:"memberTypes" ws "=" q1:QMo val:list_types q2:QMc {return checkQM(q1,q2,attr,val)}
 
 union_content = c:(annotation? simpleType*) {return cleanContent(c.flat())}
 
@@ -849,12 +794,12 @@ union_content = c:(annotation? simpleType*) {return cleanContent(c.flat())}
 
 list = prefix:open_XSD_el el_name:"list" attrs:list_attrs ws 
        close:(merged_close / openEl content:list_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-       &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "itemType", getAttrs(attrs), close.content)}
+       &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "itemType", attrs, close.content)}
        {return {element: el_name, attrs, content: close.content}}
 
-list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return cleanContent(attrs)}
+list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return getAttrs(attrs)}
 
-list_itemType = ws2 attr:"itemType" ws "=" q1:QMo val:type_value q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+list_itemType = ws2 attr:"itemType" ws "=" q1:QMo val:type_value q2:QMc {return checkQM(q1,q2,attr,val)}
 
 list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
@@ -863,12 +808,12 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-                &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", getAttrs(attrs), close.content)}
+                &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)}
                 {return {element: el_name, attrs, content: close.content}}
 
-base_attrs = attrs:(base elem_id? / elem_id base?)? {return cleanContent(attrs)}
+base_attrs = attrs:(base elem_id? / elem_id base?)? {return getAttrs(attrs)}
 
-base = ws2 attr:"base" ws "=" q1:QMo val:type_value q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+base = ws2 attr:"base" ws "=" q1:QMo val:type_value q2:QMc {return checkQM(q1,q2,attr,val)}
                      
 restrictionST_content = h1:annotation? h2:simpleType? t:constrFacet* &{return check_restrictionST_facets(t)} {return cleanContent([h1, h2, ...t])}
 
@@ -877,7 +822,7 @@ restrictionST_content = h1:annotation? h2:simpleType? t:constrFacet* &{return ch
 
 restrictionSC = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionSC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-                &{return check_requiredBase(el_name, "simpleContent", prefix, getAttrs(attrs), close)}
+                &{return check_requiredBase(el_name, "simpleContent", prefix, attrs, close)}
                 {return {element: el_name, attrs, content: close.content}}
                      
 restrictionSC_content = c:(restrictionST_content attributes) {return cleanContent(c.flat())}
@@ -887,7 +832,7 @@ restrictionSC_content = c:(restrictionST_content attributes) {return cleanConten
 
 restrictionCC = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-                &{return check_requiredBase(el_name, "complexContent", prefix, getAttrs(attrs), close)}
+                &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)}
                 {return {element: el_name, attrs, content: close.content}}
                      
 CC_son_content = c:(annotation? (all / choiceOrSequence / group)? attributes) {return cleanContent(c.flat())}
@@ -897,7 +842,7 @@ CC_son_content = c:(annotation? (all / choiceOrSequence / group)? attributes) {r
 
 extensionSC = prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws 
               close:(merged_close / openEl content:extensionSC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-              &{return check_requiredBase(el_name, "simpleContent", prefix, getAttrs(attrs), close)}
+              &{return check_requiredBase(el_name, "simpleContent", prefix, attrs, close)}
               {return {element: el_name, attrs, content: close.content}}
                      
 extensionSC_content = c:(annotation? attributes) {return cleanContent(c.flat())}
@@ -907,37 +852,36 @@ extensionSC_content = c:(annotation? attributes) {return cleanContent(c.flat())}
 
 extensionCC = prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws 
               close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-              &{return check_requiredBase(el_name, "complexContent", prefix, getAttrs(attrs), close)}
+              &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)}
               {return {element: el_name, attrs, content: close.content}}
 
 
 // ----- <minExclusive> <minInclusive> <maxExclusive> <maxInclusive> <totalDigits <fractionDigits> <length> <minLength> <maxLength> <enumeration> <whiteSpace> <pattern> -----
 
 constrFacet = prefix:open_XSD_el el_name:constrFacet_values 
-              attrs:(a:constrFacet_attrs ws &{return check_constrFacetAttrs(el_name, a)} {return a})
+              attrs:(a:constrFacet_attrs ws {return check_constrFacetAttrs(el_name, a)})
               close:(merged_close / ann_content)
               &{return check_elTags(el_name, prefix, close)}
               {return {element: el_name, attrs, content: close.content}}
 
 constrFacet_attrs = el:(elem_id / constrFacet_fixed / constrFacet_value)* {return el}
 
-constrFacet_fixed = ws2 attr:"fixed" ws "=" q1:QMo val:boolean q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
-constrFacet_value = ws2 attr:"value" ws "=" ws val:string                                      {return {attr, val}}
+constrFacet_fixed = ws2 attr:"fixed" ws "=" q1:QMo val:boolean q2:QMc {return checkQM(q1,q2,attr,val)}
+constrFacet_value = ws2 attr:"value" ws "=" ws val:string             {return {attr, val}}
 
 
 // ----- <complexType> -----
 
 complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs ws 
               close:(merged_close / (openEl {type_depth++}) content:complexType_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-              &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(getAttrs(attrs), close.content) && check_repeatedNames(el_name, "attribute", close.content)}
+              &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)}
               {if (!--type_depth) current_type = null; return {element: el_name, attrs, content: close.content}}
 
-complexType_attrs = el:(elem_abstract / complexType_block / elem_final / elem_id / complex_mixed / complexType_name)*
-                    &{return check_localTypeAttrs(el, "complexType")} {return el}
+complexType_attrs = el:(elem_abstract / complexType_block / elem_final / elem_id / complex_mixed / complexType_name)* {return check_localTypeAttrs(el, "complexType")}
 
-complexType_block = ws2 attr:"block" ws "=" q1:QMo val:elem_final_values q2:QMc &{return checkQM(q1,q2)}                                    {return {attr, val}}
-complex_mixed = ws2 attr:"mixed" ws "=" q1:QMo val:boolean q2:QMc               &{return checkQM(q1,q2)}                                    {return {attr, val}}
-complexType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc              &{return checkQM(q1,q2) && newLocalType(val,"complexType")} {return {attr, val}}
+complexType_block = ws2 attr:"block" ws "=" q1:QMo val:elem_final_values q2:QMc                              {return checkQM(q1,q2,attr,val)}
+complex_mixed = ws2 attr:"mixed" ws "=" q1:QMo val:boolean q2:QMc                                            {return checkQM(q1,q2,attr,val)}
+complexType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return newLocalType(val,"complexType")} {return checkQM(q1,q2,attr,val)}
 
 complexType_content = c:(annotation? (simpleContent / complexContent / (all / choiceOrSequence / group)? attributes)) {return cleanContent(c.flat(2))}
 
@@ -946,7 +890,7 @@ complexType_content = c:(annotation? (simpleContent / complexContent / (all / ch
 
 simpleContent = prefix:open_XSD_el el_name:"simpleContent" attr:elem_id? ws openEl content:simpleContent_content close_el:close_XSD_el
                 &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
-                {return {element: el_name, attrs: cleanContent(attr), content}}
+                {return {element: el_name, attrs: getAttrs(attr), content}}
 
 simpleContent_content = c:(annotation? (restrictionSC / extensionSC)) {return cleanContent(c)}
 
@@ -957,7 +901,7 @@ complexContent = prefix:open_XSD_el el_name:$("complexContent" {any_type = "C"})
                  &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
                  {return {element: el_name, attrs, content}}
 
-complexContent_attrs = attrs:(complex_mixed elem_id? / elem_id complex_mixed?)? {return cleanContent(attrs)}
+complexContent_attrs = attrs:(complex_mixed elem_id? / elem_id complex_mixed?)? {return getAttrs(attrs)}
 
 complexContent_content = c:(annotation? (restrictionCC / extensionCC)) {any_type = "BSC"; return cleanContent(c)}
 
@@ -969,17 +913,17 @@ all = prefix:open_XSD_el el_name:"all" attrs:all_attrs ws
       &{return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, "element", close.content)}
       {return {element: el_name, attrs, content: close.content}}
 
-all_attrs = el:(elem_id / all_maxOccurs / all_minOccurs)* &{return check_occursAttrs(el,"all")} {return el}
+all_attrs = el:(elem_id / all_maxOccurs / all_minOccurs)* {return check_occursAttrs(el,"all")}
 
-all_maxOccurs = ws2 attr:"maxOccurs" ws "=" q1:QMo val:"1"  q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
-all_minOccurs = ws2 attr:"minOccurs" ws "=" q1:QMo val:[01] q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
+all_maxOccurs = ws2 attr:"maxOccurs" ws "=" q1:QMo val:"1"  q2:QMc {return checkQM(q1,q2,attr,val)}
+all_minOccurs = ws2 attr:"minOccurs" ws "=" q1:QMo val:[01] q2:QMc {return checkQM(q1,q2,attr,val)}
 
 all_content = c:(annotation? element*) {return cleanContent(c.flat())}
 
 
 // ----- <choice/sequence> -----
 
-choiceOrSequence = prefix:open_XSD_el el_name:$("choice"/"sequence") attrs:(a:choiceOrSeq_attrs &{return check_occursAttrs(a, el_name)} {return a}) ws 
+choiceOrSequence = prefix:open_XSD_el el_name:$("choice"/"sequence") attrs:(a:choiceOrSeq_attrs {return check_occursAttrs(a, el_name)}) ws 
                    close:(merged_close / openEl content:choiceOrSeq_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
                    &{return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, "element", close.content)}
                    {return {element: el_name, attrs, content: close.content}}
@@ -996,10 +940,10 @@ group = prefix:open_XSD_el el_name:"group" attrs:group_attrs ws
         &{return check_elTags(el_name, prefix, close)}
         {return {element: el_name, attrs, content: close.content}}
 
-group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)* &{return check_groupAttrs(el)} {return el}
+group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)* {return check_groupAttrs(el)}
 
-group_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return checkQM(q1,q2) && validateName(val,"group")} {return {attr, val}}
-group_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc    &{return checkQM(q1,q2)}                              {queue.push({attr: "ref", args: [val, "group"]}); return {attr, val}}
+group_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc           &{return validateName(val,"group")} {return checkQM(q1,q2,attr,val)}
+group_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc {queue.push({attr: "ref", args: [val, "group"]}); return checkQM(q1,q2,attr,val)}
 
 group_content = c:(annotation? (all / choiceOrSequence)) {return cleanContent(c)}
 
@@ -1010,10 +954,10 @@ notation = prefix:open_XSD_el el_name:"notation" attrs:notation_attrs ws close:(
           &{return check_elTags(el_name, prefix, close)}
           {return {element: el_name, attrs, content: close.content}}
 
-notation_attrs = el:(elem_id / notation_name / notation_URI_attrs)* &{return check_notationAttrs(el)} {return el}
+notation_attrs = el:(elem_id / notation_name / notation_URI_attrs)* {return check_notationAttrs(el)}
 
-notation_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc          &{return checkQM(q1,q2) && validateName(val,"notation")} {return {attr, val}}
-notation_URI_attrs = ws2 attr:("public" / "system") ws "=" ws val:string                                                          {return {attr, val}}
+notation_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return validateName(val,"notation")} {return checkQM(q1,q2,attr,val)}
+notation_URI_attrs = ws2 attr:("public" / "system") ws "=" ws val:string {return {attr, val}}
 
 
 // ----- Comentário -----
