@@ -274,7 +274,7 @@
       return error('A propriedade "maxOccurs" do elemento não pode ser inferior à "minOccurs"!')
 
     // atributos com valores predefinidos
-    arr = defaultOccurs(arr, keys, maxOccurs, minOccurs)
+    if (!atRoot()) arr = defaultOccurs(arr, keys, maxOccurs, minOccurs)
     if (!keys.includes("abstract")) arr.push({attr: "abstract", val: false})
     //if (!keys.includes("form")) attrs.form = //valor do atributo elementFormDefault do elemento da schema
     if (!keys.includes("nillable")) arr.push({attr: "nillable", val: false})
@@ -585,7 +585,7 @@ close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
 }
 
 schema_attrs = el:(formDefault / blockDefault / finalDefault / xmlns /
-                     elem_id / elem_lang / schema_version / targetNamespace)+ &{return check_schemaAttrs(el)} {return check_schemaAttrs(el)}
+                     elem_id / elem_lang / schema_version / targetNamespace)+ &{return check_schemaAttrs(el)} {return el}
 
 formDefault = ws2 attr:$(("attribute"/"element")"FormDefault") ws "=" q1:QMo val:form_values q2:QMc &{return checkQM(q1,q2)} {return {attr, val}}
 blockDefault = ws2 attr:"blockDefault" ws "=" q1:QMo val:block_values q2:QMc                        &{return checkQM(q1,q2)} {return {attr, val}}
