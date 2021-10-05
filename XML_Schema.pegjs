@@ -18,8 +18,6 @@
   const existsPrefix = p => prefixes.includes(p) ? true : error("Este prefixo não foi declarado no início da schema!")
   // verificar se as aspas/apóstrofes são fechados consistentemente
   const checkQM = (q1,q2) => q1 === q2 ? true : error("Deve encapsular o valor em aspas ou em apóstrofes. Não pode usar um de cada!")
-  // criar um objeto de boleanos a partir de um array com os nomes das propriedades pretendidas
-  const createObjectFrom = arr => arr.reduce((obj,item) => { obj[item] = 0; return obj }, {})
   // juntar todos os atributos do elemento num só objeto
   const getAttrs = objArr => objArr.reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
   // executar todas as invocações guardadas na queue para ver se são válidas
