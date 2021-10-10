@@ -25,6 +25,26 @@
   // executar todas as invocações guardadas na queue para ver se são válidas
   const checkQueue = () => queue.reduce((accum, curr) => accum && queueFuncs[curr.attr](...curr.args), true)
 
+  // copiar os atributos de um elemento referenciado para o elemento que o referencia
+  function complete_refElems(content, global_elems) {
+    for (let i = 0; i < content.length; i++) {
+      // verificar se é um <element> com "ref"
+      if (content[i].element == "element" && "ref" in content[i].attrs) {
+        // identificar o elemento global que referenceia
+        let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
+        // copiar os seus atributos
+        content[i].attrs = {...elem.attrs, ...content[i].attrs}
+        // apagar o atributo "ref", que já não é relevante
+        delete content[i].attrs.ref
+      }
+
+      // repetir recursivamente para os elementos filho
+      content[i].content = complete_refElems(content[i].content, global_elems)
+    }
+    
+    return content
+  }
+
   // funções invocadas pela queue
   const queueFuncs = {
     // validar se o atributo "ref" está a referenciar um <element/attribute> global válido da schema ou de uma schema importada (só se valida o prefixo, neste caso)
@@ -202,8 +222,8 @@
 
   // adicionar os valores default dos atributos "max/minOccurs"
   function defaultOccurs(attrs) {
-    if (!("maxOccurs" in attrs)) attrs.maxOccurs = "minOccurs" in attrs ? attrs.minOccurs : 1
-    else if (attrs.maxOccurs == "unbounded") attrs.maxOccurs = ("minOccurs" in attrs ? attrs.minOccurs : 0) + 100 // se o maxOccurs for unbounded, assume-se um teto de minOccurs+100
+    if (!("maxOccurs" in attrs)) attrs.maxOccurs = ("minOccurs" in attrs && attrs.minOccurs > 0) ? attrs.minOccurs : 1
+    else if (attrs.maxOccurs == "unbounded") attrs.maxOccurs = ("minOccurs" in attrs ? attrs.minOccurs : 0) + 10 // se o maxOccurs for unbounded, assume-se um teto de minOccurs+10
 
     if (!("minOccurs" in attrs)) attrs.minOccurs = !attrs.maxOccurs ? 0 : 1
     return attrs
@@ -522,7 +542,7 @@ XML_standalone_value = "yes" / "no"
 // ----- <schema> -----
 
 schema = (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
-         &{return checkQueue()} {return {element: el_name, attrs, content}}
+         &{return checkQueue()} {content = complete_refElems(content, content.filter(x => x.element == "element")); return {element: el_name, attrs, content}}
 
 close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
   if (!noSchemaPrefix() && prefix === null) return error("Precisa de prefixar o elemento de fecho da schema!")
@@ -729,7 +749,7 @@ simpleType_content = c:(annotation? (restrictionST / list / union)) {any_type = 
 annotation = prefix:open_XSD_el el_name:"annotation" attr:elem_id? ws
              close:(merged_close / openEl content:annotation_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
              &{return check_elTags(el_name, prefix, close)}
-             {return {element: el_name, attrs: getAttrs(attr), content: close.content}}
+             {return null} //{return {element: el_name, attrs: getAttrs(attr), content: close.content}}
 
 annotation_content = (appinfo / documentation)*
 
@@ -915,8 +935,8 @@ all = prefix:open_XSD_el el_name:"all" attrs:all_attrs ws
 
 all_attrs = el:(elem_id / all_maxOccurs / all_minOccurs)* {return check_occursAttrs(el,"all")}
 
-all_maxOccurs = ws2 attr:"maxOccurs" ws "=" q1:QMo val:"1"  q2:QMc {return checkQM(q1,q2,attr,val)}
-all_minOccurs = ws2 attr:"minOccurs" ws "=" q1:QMo val:[01] q2:QMc {return checkQM(q1,q2,attr,val)}
+all_maxOccurs = ws2 attr:"maxOccurs" ws "=" q1:QMo val:"1"  q2:QMc {return checkQM(q1,q2,attr,parseInt(val))}
+all_minOccurs = ws2 attr:"minOccurs" ws "=" q1:QMo val:[01] q2:QMc {return checkQM(q1,q2,attr,parseInt(val))}
 
 all_content = c:(annotation? element*) {return cleanContent(c.flat())}
 
