@@ -29,13 +29,17 @@
   function complete_refElems(content, global_elems) {
     for (let i = 0; i < content.length; i++) {
       // verificar se é um <element> com "ref"
-      if (content[i].element == "element" && "ref" in content[i].attrs) {
-        // identificar o elemento global que referenceia
-        let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
-        // copiar os seus atributos
-        content[i].attrs = {...elem.attrs, ...content[i].attrs}
-        // apagar o atributo "ref", que já não é relevante
-        delete content[i].attrs.ref
+      if (content[i].element == "element") {
+        if ("ref" in content[i].attrs) {
+          // identificar o elemento global que referenceia
+          let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
+          // copiar os seus atributos
+          content[i].attrs = {...elem.attrs, ...content[i].attrs}
+          // apagar o atributo "ref", que já não é relevante
+          delete content[i].attrs.ref
+        }
+        // se for um elemento básico (sem "ref" nem filhos) e não tiver "type", assume-se que é string
+        else if (!("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
       }
 
       // repetir recursivamente para os elementos filho

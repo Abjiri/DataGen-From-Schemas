@@ -6,10 +6,10 @@ function XSD2DSL(content, prefix) {
 
     let elements = content.filter(x => x.element == "element")
     for (let i = 0; i < elements.length; i++) {
-        let collection = parseElement(elements[i], prefix, depth)
+        let {elem_str, _} = parseElement(elements[i], prefix, depth)
 
-        if (collection.length > 0) {
-            str += '\t'.repeat(depth) + collection
+        if (elem_str.length > 0) {
+            str += '\t'.repeat(depth) + elem_str
             if (i < elements.length-1) str += ","
             str += "\n"
         }
@@ -20,15 +20,15 @@ function XSD2DSL(content, prefix) {
 }
 
 function parseElement(el, prefix, depth) {
-    let name = `${el.attrs.name}: `, str = ""
+    let name = `${el.attrs.name}: `, elem_str = ""
     let occurs = "maxOccurs" in el.attrs ? randomize(el.attrs.minOccurs, el.attrs.maxOccurs) : 1
 
     for (let i = 0; i < occurs; i++) {
         let parsed = parseElementAux(el, prefix, depth)
-        if (parsed.length > 0) str += name + parsed + (i < occurs-1 ? `,\n${'\t'.repeat(depth)}` : "")
+        if (parsed.length > 0) elem_str += name + parsed + (i < occurs-1 ? `,\n${'\t'.repeat(depth)}` : "")
     }
 
-    return str
+    return {elem_str, occurs}
 }
 
 function parseElementAux(el, prefix, depth) {
@@ -92,6 +92,12 @@ function parseSimpleType(child, prefix) {
 function parseComplexType(el, prefix, depth) {
     let all = el.content.filter(x => x.element == "all")
     if (all.length > 0) return parseAll(all[0], prefix, depth+1)
+    
+    let sequence = el.content.filter(x => x.element == "sequence")
+    if (sequence.length > 0) return "{\n" + parseSequence(sequence[0], prefix, depth+1).slice(0, -1) + `\n${'\t'.repeat(depth)}}`
+    
+    let choice = el.content.filter(x =>  x.element == "choice")
+    if (choice.length > 0) return "{\n" + parseChoice(choice[0], prefix, depth+1) + `\n${'\t'.repeat(depth)}}`
 }
 
 function parseAll(el, prefix, depth) {
@@ -104,11 +110,11 @@ function parseAll(el, prefix, depth) {
 
     elements.forEach(x => {
         // dar parse a cada elemento
-        let elem_str = parseElement(x, prefix, depth)
+        let {elem_str, occurs} = parseElement(x, prefix, depth)
 
         if (elem_str.length > 0) {
             // contar o nr de elementos total (tendo em conta max/minOccurs de cada um)
-            nr_elems += (elem_str.match(/\n/g) || []).length
+            nr_elems += occurs
 
             // dar parse a todos os elementos e guardar as respetivas strings num array
             elements_str.push(`\n${'\t'.repeat(depth)}${elem_str},`)
@@ -121,6 +127,79 @@ function parseAll(el, prefix, depth) {
     str = str.slice(0, -1) + `\n${'\t'.repeat(--depth)}} }`
 
     return str
+}
+
+function parseSequence(el, prefix, depth) {
+    let str = ""
+
+    // se minOccurs = 0, dar uma probabilidade de 30% de o elemento aparecer vazio no XML
+    if (!el.attrs.minOccurs && (!el.attrs.maxOccurs || Math.random() < 0.3)) return ""
+
+    // repetir os filhos um nº aleatório de vezes, entre os limites dos atributos max/minOccurs
+    for (let i = 0; i < randomize(1, el.attrs.maxOccurs); i++) {
+        el.content.forEach(x => {
+            let parsed
+
+            // na string de um <element>, é preciso por tabs e vírgula
+            if (x.element == "element") {
+                let {elem_str, _} = parseElement(x, prefix, depth)
+                parsed = `${'\t'.repeat(depth)}${elem_str},\n`
+            }
+            // a string de uma <sequence> já vem formatada
+            if (x.element == "sequence") {
+                parsed = parseSequence(x, prefix, depth)
+                if (parsed.length > 0) parsed += "\n"
+            }
+            // a string de uma <choice> já vem formatada
+            if (x.element == "choice") parsed = parseChoice(x, prefix, depth) + ",\n"
+        
+            str += parsed
+        })
+    }
+
+    return str.slice(0, -1)
+}
+
+function parseChoice(el, prefix, depth) {
+    // a var choice é para indicar se o último elemento filtrado foi uma choice
+    let str = "", choice = false
+
+    // se minOccurs = 0, dar uma probabilidade de 30% de o elemento aparecer vazio no XML
+    if (!el.attrs.minOccurs && (!el.attrs.maxOccurs || Math.random() < 0.3)) return ""
+
+    // escolher um dos filhos um nº aleatório de vezes, entre os limites dos atributos max/minOccurs
+    for (let i = 0; i < randomize(1, el.attrs.maxOccurs); i++) {
+        // usar a primitiva or para fazer exclusividade mútua
+        str += `${'\t'.repeat(depth++)}or() {\n`
+
+        el.content.forEach(x => {
+            let parsed
+            choice = false
+
+            // na string de um <element>, é preciso por tabs e vírgula
+            if (x.element == "element") {
+                let {elem_str, _} = parseElement(x, prefix, depth)
+                parsed = `${'\t'.repeat(depth)}${elem_str},\n`
+            }
+            // a string de uma <sequence> já vem formatada
+            /* if (x.element == "sequence") {
+                parsed = parseSequence(x, prefix, depth)
+                if (parsed.length > 0) parsed += "\n"
+            } */
+            // a string de uma <choice> já vem formatada
+            if (x.element == "choice") {
+                parsed = parseChoice(x, prefix, depth) + "\n"
+                choice = true
+            }
+        
+            str += parsed
+        })
+
+        str = str.slice(0, choice ? -1 : -2)
+        str += `\n${'\t'.repeat(--depth)}},\n`
+    }
+
+    return str.slice(0, -2)
 }
 
 let built_in_types = ["float","double","decimal","integer","nonPositiveInteger","nonNegativeInteger","negativeInteger","positiveInteger","long","int","short","byte","unsignedLong","unsignedInt","unsignedShort","unsignedByte",
@@ -144,33 +223,33 @@ function parseType(type, prefix) {
     let dsl
 
     // numéricos
-    if (type == "float") dsl = [Math.random() < 0.5 ? "-" : "", {moustache: "float", args: [0.0000000000000000000000000000000000000118, 340000000000000000000000000000000000000]}]
-    if (type == "double") dsl = [Math.random() < 0.5 ? "-" : "", {moustache: "float", args: [0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000223, 18000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000]}]
-    if (type == "decimal") dsl = [{moustache: "float", args: [-999999999999999999999999999999.999, 999999999999999999999999999999.999]}]
-    if (type == "integer") dsl = [{moustache: "integer", args: [-999999999999999999999999999999, 999999999999999999999999999999]}]
-    if (type == "nonPositiveInteger") dsl = [{moustache: "integer", args: [-999999999999999999999999999999, 0]}]
-    if (type == "nonNegativeInteger") dsl = [{moustache: "integer", args: [0, 999999999999999999999999999999]}]
-    if (type == "negativeInteger") dsl = [{moustache: "integer", args: [-999999999999999999999999999999, -1]}]
-    if (type == "positiveInteger") dsl = [{moustache: "integer", args: [1, 999999999999999999999999999999]}]
-    if (type == "long") dsl = [{moustache: "integer", args: [-9223372036854775808, 9223372036854775807]}]
-    if (type == "int") dsl = [{moustache: "integer", args: [-2147483648, 2147483647]}]
-    if (type == "short") dsl = [{moustache: "integer", args: [-32768, 32767]}]
-    if (type == "byte") dsl = [{moustache: "integer", args: [-128, 127]}]
-    if (type == "unsignedLong") dsl = [{moustache: "integer", args: [0, 18446744073709551615]}]
-    if (type == "unsignedInt") dsl = [{moustache: "integer", args: [0, 4294967295]}]
-    if (type == "unsignedShort") dsl = [{moustache: "integer", args: [0, 65535]}]
-    if (type == "unsignedByte") dsl = [{moustache: "integer", args: [0, 255]}]
+    if (type == "float") dsl = [Math.random() < 0.5 ? "-" : "", {moustache: "float", args: ["0.0000000000000000000000000000000000000118", "340000000000000000000000000000000000000"]}]
+    if (type == "double") dsl = [Math.random() < 0.5 ? "-" : "", {moustache: "float", args: ["0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000223", "18000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"]}]
+    if (type == "decimal") dsl = [{moustache: "float", args: ["-999999999999999999999999999999.999", "999999999999999999999999999999.999"]}]
+    if (type == "integer") dsl = [{moustache: "integer", args: ["-999999999999999999999999999999", "999999999999999999999999999999"]}]
+    if (type == "nonPositiveInteger") dsl = [{moustache: "integer", args: ["-999999999999999999999999999999", "0"]}]
+    if (type == "nonNegativeInteger") dsl = [{moustache: "integer", args: ["0", "999999999999999999999999999999"]}]
+    if (type == "negativeInteger") dsl = [{moustache: "integer", args: ["-999999999999999999999999999999", "-1"]}]
+    if (type == "positiveInteger") dsl = [{moustache: "integer", args: ["1", "999999999999999999999999999999"]}]
+    if (type == "long") dsl = [{moustache: "integer", args: ["-9223372036854775808", "9223372036854775807"]}]
+    if (type == "int") dsl = [{moustache: "integer", args: ["-2147483648", "2147483647"]}]
+    if (type == "short") dsl = [{moustache: "integer", args: ["-32768", "32767"]}]
+    if (type == "byte") dsl = [{moustache: "integer", args: ["-128", "127"]}]
+    if (type == "unsignedLong") dsl = [{moustache: "integer", args: ["0", "18446744073709551615"]}]
+    if (type == "unsignedInt") dsl = [{moustache: "integer", args: ["0", "4294967295"]}]
+    if (type == "unsignedShort") dsl = [{moustache: "integer", args: ["0", "65535"]}]
+    if (type == "unsignedByte") dsl = [{moustache: "integer", args: ["0", "255"]}]
 
     // data/hora
     if (type == "dateTime") dsl = [{moustache: "date", args: ['"01-01-1950"']}]
     if (type == "date") dsl = [{moustache: "date", args: ['"01-01-1950"', '"YYYY-MM-DD"']}]
-    if (type == "time") dsl = [{moustache: "time", args: ['"hh:mm:ss"', 24, false]}]
-    if (type == "gDay") dsl = [{moustache: "integer", args: [1, 31]}]
-    if (type == "gMonth") dsl = [{moustache: "integer", args: [1, 12]}]
-    if (type == "gYear") dsl = [{moustache: "integer", args: [1950, 2010]}]
-    if (type == "gYearMonth") dsl = [{moustache: "integer", args: [1950, 2010]}, "-", {moustache: "integer", args: [1, 12]}]
-    if (type == "gMonthDay") dsl = ["--", {moustache: "integer", args: [1, 12]}, "-", {moustache: "integer", args: [1, 31]}]
-    if (type == "duration") dsl = ["P", {moustache: "integer", args: [1950, 2010]}, "Y", {moustache: "integer", args: [1, 12]}, "M", {moustache: "integer", args: [1, 31]}, "DT", {moustache: "integer", args: [0, 23]}, "H", {moustache: "integer", args: [0, 59]}, "M", {moustache: "integer", args: [0, 59]}, "S"]
+    if (type == "time") dsl = [{moustache: "time", args: ['"hh:mm:ss"', "24", false]}]
+    if (type == "gDay") dsl = [{moustache: "integer", args: ["1", "31"]}]
+    if (type == "gMonth") dsl = [{moustache: "integer", args: ["1", "12"]}]
+    if (type == "gYear") dsl = [{moustache: "integer", args: ["1950", "2010"]}]
+    if (type == "gYearMonth") dsl = [{moustache: "integer", args: ["1950", "2010"]}, "-", {moustache: "integer", args: ["1", "12"]}]
+    if (type == "gMonthDay") dsl = ["--", {moustache: "integer", args: ["1", "12"]}, "-", {moustache: "integer", args: ["1", "31"]}]
+    if (type == "duration") dsl = ["P", {moustache: "integer", args: ["1950", "2010"]}, "Y", {moustache: "integer", args: ["1", "12"]}, "M", {moustache: "integer", args: ["1", "31"]}, "DT", {moustache: "integer", args: ["0", "23"]}, "H", {moustache: "integer", args: ["0", "59"]}, "M", {moustache: "integer", args: ["0", "59"]}, "S"]
 
     // string
     if (type == "string") dsl = [randomString(randomize(10,50))]
@@ -227,7 +306,7 @@ let content = [
     {
        "element": "element",
        "attrs": {
-          "name": "AA",
+          "name": "zooAnimals",
           "abstract": false,
           "nillable": false
        },
@@ -240,47 +319,146 @@ let content = [
              },
              "content": [
                 {
-                   "element": "all",
+                   "element": "sequence",
                    "attrs": {
                       "minOccurs": 0,
-                      "maxOccurs": 1
+                      "maxOccurs": 5
                    },
                    "content": [
                       {
-                         "element": "element",
+                         "element": "sequence",
                          "attrs": {
-                            "name": "title",
-                            "type": "xs:int",
                             "minOccurs": 0,
-                            "maxOccurs": 1,
-                            "abstract": false,
-                            "nillable": false
+                            "maxOccurs": 2
                          },
-                         "content": []
+                         "content": [
+                            {
+                               "element": "element",
+                               "attrs": {
+                                  "name": "elephant",
+                                  "type": "xs:int",
+                                  "maxOccurs": 1,
+                                  "minOccurs": 1,
+                                  "abstract": false,
+                                  "nillable": false
+                               },
+                               "content": []
+                            },
+                            {
+                               "element": "element",
+                               "attrs": {
+                                  "name": "bear",
+                                  "type": "xs:boolean",
+                                  "maxOccurs": 3,
+                                  "minOccurs": 1,
+                                  "abstract": false,
+                                  "nillable": false
+                               },
+                               "content": []
+                            }
+                         ]
                       },
                       {
                          "element": "element",
                          "attrs": {
-                            "name": "forename",
+                            "name": "giraffe",
                             "type": "xs:date",
-                            "minOccurs": 0,
-                            "maxOccurs": 10,
-                            "abstract": false,
-                            "nillable": false
-                         },
-                         "content": []
-                      },
-                      {
-                         "element": "element",
-                         "attrs": {
-                            "name": "surname",
-                            "type": "xs:byte",
                             "maxOccurs": 1,
                             "minOccurs": 1,
                             "abstract": false,
                             "nillable": false
                          },
                          "content": []
+                      },
+                      {
+                         "element": "sequence",
+                         "attrs": {
+                            "maxOccurs": 2,
+                            "minOccurs": 1
+                         },
+                         "content": [
+                            {
+                               "element": "element",
+                               "attrs": {
+                                  "name": "dog",
+                                  "type": "xs:ID",
+                                  "maxOccurs": 1,
+                                  "minOccurs": 1,
+                                  "abstract": false,
+                                  "nillable": false
+                               },
+                               "content": []
+                            },
+                            {
+                               "element": "element",
+                               "attrs": {
+                                  "name": "cat",
+                                  "type": "xs:short",
+                                  "maxOccurs": 1,
+                                  "minOccurs": 1,
+                                  "abstract": false,
+                                  "nillable": false
+                               },
+                               "content": []
+                            }
+                         ]
+                      },
+                      {
+                         "element": "choice",
+                         "attrs": {
+                            "maxOccurs": 1,
+                            "minOccurs": 1
+                         },
+                         "content": [
+                            {
+                               "element": "element",
+                               "attrs": {
+                                  "name": "selected",
+                                  "type": "xs:int",
+                                  "maxOccurs": 1,
+                                  "minOccurs": 1,
+                                  "abstract": false,
+                                  "nillable": false
+                               },
+                               "content": []
+                            },
+                            {
+                               "element": "element",
+                               "attrs": {
+                                  "name": "unselected",
+                                  "type": "xs:int",
+                                  "maxOccurs": 1,
+                                  "minOccurs": 1,
+                                  "abstract": false,
+                                  "nillable": false
+                               },
+                               "content": []
+                            },
+                            {
+                               "element": "element",
+                               "attrs": {
+                                  "name": "dimpled",
+                                  "type": "xs:int",
+                                  "maxOccurs": 1,
+                                  "minOccurs": 1,
+                                  "abstract": false,
+                                  "nillable": false
+                               },
+                               "content": []
+                            },
+                            {
+                               "element": "element",
+                               "attrs": {
+                                  "name": "perforated",
+                                  "type": "xs:int",
+                                  "maxOccurs": 1,
+                                  "minOccurs": 1,
+                                  "abstract": false,
+                                  "nillable": false
+                               },
+                               "content": []
+                            }
+                         ]
                       }
                    ]
                 }
