@@ -1,3 +1,6 @@
+// nr de sequências que vão ser criadas na DSL como objetos com a chave DATAGEN_FROM_SCHEMAS_SEQUENCE_\d e convertidas posteriormente na tradução JSON-XML do DataGen
+let special_sequences = 0
+
 function XSD2DSL(content, prefix) {
    let str = "<!LANGUAGE pt>\n{\n"
    let depth = 1
@@ -144,7 +147,7 @@ function parseSequence(el, prefix, depth, keys) {
 
    // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
    for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {
-      let parsed = parseSeqChoice_content(str, el.content, prefix, depth, keys)
+      let parsed = parseSeqChoice_content(el.element, str, el.content, prefix, depth, keys)
 
       str = parsed.str
       keys = parsed.keys
@@ -161,7 +164,7 @@ function parseChoice(el, prefix, depth, keys) {
       // usar a primitiva or para fazer exclusividade mútua
       str += `${'\t'.repeat(depth++)}or() {\n`
 
-      let parsed = parseSeqChoice_content(str, el.content, prefix, depth, keys)
+      let parsed = parseSeqChoice_content(el.element, str, el.content, prefix, depth, keys)
       keys = parsed.keys
 
       str = parsed.str.slice(0, -2) + `\n${'\t'.repeat(--depth)}},\n`
@@ -170,7 +173,7 @@ function parseChoice(el, prefix, depth, keys) {
    return {str: str.slice(0, -2), keys}
 }
 
-function parseSeqChoice_content(str, content, prefix, depth, keys) {
+function parseSeqChoice_content(parent, str, content, prefix, depth, keys) {
    // a var choice é para indicar se o último elemento filtrado foi uma choice
    let choice
 
@@ -189,7 +192,16 @@ function parseSeqChoice_content(str, content, prefix, depth, keys) {
       // a string de uma <sequence> já vem formatada
       if (x.element == "sequence") {
          parsed = parseSequence(x, prefix, depth, keys)
-         if (parsed.str.length > 0) str += parsed.str + "\n"
+
+         if (parsed.str.length > 0) {
+            if (parent == "choice") {
+               // para uma sequence dentro de uma choice, queremos escolher a sequência inteira e não apenas um dos seus elementos
+               // por isso, cria-se um objeto na DSL com uma chave especial que posteriormente é removido na tradução para XML
+               parsed.str = "\t" + parsed.str.replace(/\n\t/g, "\n\t\t").slice(0, -1)
+               str += `${'\t'.repeat(depth)}DATAGEN_FROM_SCHEMAS__SEQUENCE_${++special_sequences}: {\n${parsed.str}\n${'\t'.repeat(depth)}},\n`
+            }
+            else str += parsed.str + "\n"
+         }
       }
       // a string de uma <choice> já vem formatada
       if (x.element == "choice") {
@@ -335,50 +347,53 @@ let content = [
             },
             "content": [
                {
-                  "element": "sequence",
+                  "element": "choice",
                   "attrs": {
-                     "minOccurs": 0,
+                     "minOccurs": 1,
                      "maxOccurs": 5
                   },
                   "content": [
                      {
-                        "element": "sequence",
+                        "element": "element",
                         "attrs": {
-                           "minOccurs": 0,
-                           "maxOccurs": 2
+                           "name": "selected",
+                           "type": "xs:int",
+                           "maxOccurs": 1,
+                           "minOccurs": 1,
+                           "abstract": false,
+                           "nillable": false
                         },
-                        "content": [
-                           {
-                              "element": "element",
-                              "attrs": {
-                                 "name": "elephant",
-                                 "type": "xs:int",
-                                 "maxOccurs": 1,
-                                 "minOccurs": 1,
-                                 "abstract": false,
-                                 "nillable": false
-                              },
-                              "content": []
-                           },
-                           {
-                              "element": "element",
-                              "attrs": {
-                                 "name": "bear",
-                                 "type": "xs:boolean",
-                                 "maxOccurs": 3,
-                                 "minOccurs": 1,
-                                 "abstract": false,
-                                 "nillable": false
-                              },
-                              "content": []
-                           }
-                        ]
+                        "content": []
                      },
                      {
                         "element": "element",
                         "attrs": {
-                           "name": "giraffe",
-                           "type": "xs:date",
+                           "name": "unselected",
+                           "type": "xs:int",
+                           "maxOccurs": 1,
+                           "minOccurs": 1,
+                           "abstract": false,
+                           "nillable": false
+                        },
+                        "content": []
+                     },
+                     {
+                        "element": "element",
+                        "attrs": {
+                           "name": "dimpled",
+                           "type": "xs:int",
+                           "maxOccurs": 1,
+                           "minOccurs": 1,
+                           "abstract": false,
+                           "nillable": false
+                        },
+                        "content": []
+                     },
+                     {
+                        "element": "element",
+                        "attrs": {
+                           "name": "perforated",
+                           "type": "xs:int",
                            "maxOccurs": 1,
                            "minOccurs": 1,
                            "abstract": false,
@@ -422,8 +437,8 @@ let content = [
                      {
                         "element": "choice",
                         "attrs": {
-                           "maxOccurs": 1,
-                           "minOccurs": 1
+                           "minOccurs": 1,
+                           "maxOccurs": 5
                         },
                         "content": [
                            {
@@ -475,6 +490,39 @@ let content = [
                               "content": []
                            }
                         ]
+                     },
+                     {
+                        "element": "sequence",
+                        "attrs": {
+                           "maxOccurs": 2,
+                           "minOccurs": 1
+                        },
+                        "content": [
+                           {
+                              "element": "element",
+                              "attrs": {
+                                 "name": "doga",
+                                 "type": "xs:ID",
+                                 "maxOccurs": 1,
+                                 "minOccurs": 1,
+                                 "abstract": false,
+                                 "nillable": false
+                              },
+                              "content": []
+                           },
+                           {
+                              "element": "element",
+                              "attrs": {
+                                 "name": "cata",
+                                 "type": "xs:short",
+                                 "maxOccurs": 1,
+                                 "minOccurs": 1,
+                                 "abstract": false,
+                                 "nillable": false
+                              },
+                              "content": []
+                           }
+                        ]
                      }
                   ]
                }
@@ -484,5 +532,4 @@ let content = [
    }
 ]
 
-//console.log(XSD2DSL(content, "xs"))
-console.log(Math.random().toString(36).substring(2))
+console.log(XSD2DSL(content, "xs"))
