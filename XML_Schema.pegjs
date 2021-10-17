@@ -26,24 +26,23 @@
   const checkQueue = () => queue.reduce((accum, curr) => accum && queueFuncs[curr.attr](...curr.args), true)
 
   // copiar os atributos de um elemento referenciado para o elemento que o referencia
-  function complete_refElems(content, global_elems) {
+  function complete_refs(content, global_elems) {
     for (let i = 0; i < content.length; i++) {
       // verificar se é um <element> com "ref"
-      if (content[i].element == "element") {
-        if ("ref" in content[i].attrs) {
-          // identificar o elemento global que referenceia
-          let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
-          // copiar os seus atributos
-          content[i].attrs = {...elem.attrs, ...content[i].attrs}
-          // apagar o atributo "ref", que já não é relevante
-          delete content[i].attrs.ref
-        }
-        // se for um elemento básico (sem "ref" nem filhos) e não tiver "type", assume-se que é string
-        else if (!("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
+      if ("ref" in content[i].attrs) {
+        // identificar o elemento global que referenceia
+        let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
+        // copiar os seus atributos e o conteúdo
+        content[i].attrs = {...elem.attrs, ...content[i].attrs}
+        content[i].content = elem.content
+        // apagar o atributo "ref", que já não é relevante
+        delete content[i].attrs.ref
       }
+      // se for um elemento básico (sem "ref" nem filhos) e não tiver "type", assume-se que é string
+      else if (content[i].element == "element" && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
 
       // repetir recursivamente para os elementos filho
-      content[i].content = complete_refElems(content[i].content, global_elems)
+      content[i].content = complete_refs(content[i].content, global_elems)
     }
     
     return content
@@ -546,7 +545,7 @@ XML_standalone_value = "yes" / "no"
 // ----- <schema> -----
 
 schema = (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
-         &{return checkQueue()} {content = complete_refElems(content, content.filter(x => x.element == "element")); return {element: el_name, attrs, content}}
+         &{return checkQueue()} {content = complete_refs(content, content); return {element: el_name, attrs, content}}
 
 close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
   if (!noSchemaPrefix() && prefix === null) return error("Precisa de prefixar o elemento de fecho da schema!")
