@@ -545,7 +545,7 @@ XML_standalone_value = "yes" / "no"
 // ----- <schema> -----
 
 schema = (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
-         &{return checkQueue()} {content = complete_refs(content, content); return {element: el_name, attrs, content}}
+         &{return checkQueue()} {content = complete_refs(content, content); return {element: el_name, attrs, content: content.filter(x => x.element == "element")}}
 
 close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
   if (!noSchemaPrefix() && prefix === null) return error("Precisa de prefixar o elemento de fecho da schema!")

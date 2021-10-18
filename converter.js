@@ -1,14 +1,10 @@
-// nr de sequências que vão ser criadas na DSL como objetos com a chave DATAGEN_FROM_SCHEMAS_SEQUENCE_\d e convertidas posteriormente na tradução JSON-XML do DataGen
-let special_sequences = 0
-// strings DSL dos elementos globais
-let global_elems = {}
+// nr de elementos que vão ser criados como objetos temporariamente na DSL com uma chave especial 
+// e convertidos posteriormente para a forma original na tradução JSON-XML do DataGen
+let temp_structs = 0
 
 function XSD2DSL(content, prefix) {
    let str = "<!LANGUAGE pt>\n{\n"
    let depth = 1
-
-   // parse de tudo menos <element>s
-   parseGlobalEls(content.filter(x => x.element != "element"), prefix, depth)
 
    let elements = content.filter(x => x.element == "element")
    for (let i = 0; i < elements.length; i++) {
@@ -23,12 +19,6 @@ function XSD2DSL(content, prefix) {
 
    str += "}"
    return str
-}
-
-function parseGlobalEls(content, prefix, depth) {
-   let groups = content.filter(x => x.element == "group")
-   for (let i = 0; i < groups.length; i++) global_elems[groups[i].attrs.name] = parseGroup(groups[i], prefix, depth+1, {}).str
-   console.log(global_elems)
 }
 
 function parseElement(el, prefix, depth, keys) {
@@ -50,27 +40,27 @@ function parseElement(el, prefix, depth, keys) {
 }
 
 function parseElementAux(el, prefix, depth) {
-    let attrs = el.attrs
+   let attrs = el.attrs
 
-    // parsing dos atributos -----
-    /* if ("abstract" in attrs) */
-    if ("nillable" in attrs) {
-        // se "nillable" for true, dar uma probabilidade de 30% de o conteúdo do elemento no XML ser nil
-        if (attrs.nillable && Math.random() < 0.3) return "{ nil: true }"
-    }
-    if ("fixed" in attrs) return attrs.fixed
-    if ("type" in attrs) return `'${typeToString(parseType(attrs.type, prefix))}'` /* arranjar maneira de dar randomize aos tipos cujo valor calculo aqui e não no DataGen */
-    if ("default" in attrs) return attrs.default /* verificar como é que é possível especificar valores diferentes do default na schema */
+   // parsing dos atributos -----
+   /* if ("abstract" in attrs) */
+   if ("nillable" in attrs) {
+      // se "nillable" for true, dar uma probabilidade de 30% de o conteúdo do elemento no XML ser nil
+      if (attrs.nillable && Math.random() < 0.3) return "{ nil: true }"
+   }
+   if ("fixed" in attrs) return attrs.fixed
+   if ("default" in attrs) return attrs.default
+   if ("type" in attrs) return `'${typeToString(parseType(attrs.type, prefix))}'`
 
-    // parsing do conteúdo -----
-    let simpleType = el.content.filter(x => x.element == "simpleType")
-    if (simpleType.length > 0) return `'${parseSimpleType(simpleType[0].content[0], prefix)}'` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
+   // parsing do conteúdo -----
+   let simpleType = el.content.filter(x => x.element == "simpleType")
+   if (simpleType.length > 0) return `'${parseSimpleType(simpleType[0].content[0], prefix)}'` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
 
-    let complexType = el.content.filter(x => x.element == "complexType")
-    if (complexType.length > 0) {
-        let ct_value = parseComplexType(complexType[0], prefix, depth)
-        return !ct_value.length ? "{}" : (ct_value)
-    }
+   let complexType = el.content.filter(x => x.element == "complexType")
+   if (complexType.length > 0) {
+      let ct_value = parseComplexType(complexType[0], prefix, depth)
+      return !ct_value.length ? "{}" : (ct_value)
+   }
 }
 
 function parseSimpleType(child, prefix) {
@@ -108,17 +98,59 @@ function parseSimpleType(child, prefix) {
 }
 
 function parseComplexType(el, prefix, depth) {
-   let group = el.content.filter(x => x.element == "group")
-   if (group.length > 0) return parseGroup(group[0], prefix, depth+1, {})
+   let parsed = {attrs: "", content: ""}
 
-   let all = el.content.filter(x => x.element == "all")
-   if (all.length > 0) return parseAll(all[0], prefix, depth+1, {})
+   parsed.attrs = parseAttributeGroup(el, prefix, depth+1)
+
+   for (let i = 0; i < el.content.length; i++) {
+      switch (el.content[i].element) {
+         case "group": parsed.content = parseGroup(el.content[i], prefix, depth+1, {}).str.slice(0, -2); break;
+         case "all": parsed.content = parseAll(el.content[i], prefix, depth+2, {}).str; break;
+         case "sequence": parsed.content = parseSequence(el.content[i], prefix, depth+1, {}).str.slice(0, -1); break;
+         case "choice": parsed.content = parseChoice(el.content[i], prefix, depth+1, {}).str; break;
+      }
+   }
    
-   let sequence = el.content.filter(x => x.element == "sequence")
-   if (sequence.length > 0) return "{\n" + parseSequence(sequence[0], prefix, depth+1, {}).str.slice(0, -1) + `\n${'\t'.repeat(depth)}}`
-   
-   let choice = el.content.filter(x =>  x.element == "choice")
-   if (choice.length > 0) return "{\n" + parseChoice(choice[0], prefix, depth+1, {}).str + `\n${'\t'.repeat(depth)}}`
+   return `{\n${parsed.attrs},\n${parsed.content}\n${'\t'.repeat(depth)}}`
+}
+
+const chooseQM = str => str.includes('"') ? "'" : '"'
+
+function parseAttribute(el, prefix, depth) {
+   let attrs = el.attrs
+   let str = `${attrs.name}: `, value = ""
+
+   // parsing dos atributos -----
+   if (attrs.use == "prohibited") return ""
+   if ("fixed" in attrs) value = attrs.fixed
+   if ("default" in attrs) value = attrs.default
+
+   // se tiver um valor predefinido, verifica se tem "/' dentro para encapsular com o outro
+   if (value.length > 0) {
+      let qm = chooseQM(value)
+      return '\t'.repeat(depth) + str + qm + value + qm
+   }
+
+   if ("type" in attrs) value = `'${typeToString(parseType(attrs.type, prefix))}'.string()`
+
+   return '\t'.repeat(depth) + str + value
+}
+
+function parseAttributeGroup(el, prefix, depth) {
+   let str = ""
+
+   for (let i = 0; i < el.content.length; i++) {
+      let parsed = ""
+
+      switch (el.content[i].element) {
+         case "attribute": parsed = parseAttribute(el.content[i], prefix, depth); break;
+         case "attributeGroup": parsed = parseAttributeGroup(el.content[i], prefix, depth); break;
+      }
+      
+      if (parsed.length > 0) str += parsed + ",\n"
+   }
+
+   return str.slice(0, -2)
 }
 
 function parseGroup(el, prefix, depth, keys) {
@@ -129,12 +161,20 @@ function parseGroup(el, prefix, depth, keys) {
       let parsed
 
       switch (el.content[0].element) {
-         case "all": parsed = parseAll(el.content[0], prefix, depth, keys); break;
-         case "choice": parsed = parseChoice(el.content[0], prefix, depth, keys); break;
+         case "all":
+            parsed = parseAll(el.content[0], prefix, depth+2, keys)
+            
+            if (parsed.str.length > 0) {
+               // ajustar a formatação e remover o \n no fim para meter uma vírgula antes
+               parsed.str = parsed.str.replace(/\n\t+/g, "\n" + "\t".repeat(depth+2)).replace(/\t+}/, "\t".repeat(depth+1) + "}")
+               parsed.str = `${'\t'.repeat(depth)}DATAGEN_FROM_SCHEMAS__TEMP_${++temp_structs}: {\n${parsed.str}\n${'\t'.repeat(depth)}},`
+            }
+            break;
+         case "choice": parsed = parseChoice(el.content[0], prefix, depth, keys); parsed.str += ","; break;
          case "sequence": parsed = parseSequence(el.content[0], prefix, depth, keys); break;
       }
 
-      str += parsed.str + "\n"
+      if (parsed.str.length > 0) str += parsed.str + "\n"
       keys = parsed.keys
    }
 
@@ -146,7 +186,7 @@ function parseAll(el, prefix, depth, keys) {
    let elements_str = [], nr_elems = 0
 
    // se minOccurs = 0, dar uma probabilidade de 30% de o elemento não aparecer no XML
-   if (!el.attrs.minOccurs && Math.random() < 0.3) return ""
+   if (!el.attrs.minOccurs && Math.random() < 0.3) return {str: "", keys}
 
    elements.forEach(x => {
       // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
@@ -166,9 +206,9 @@ function parseAll(el, prefix, depth, keys) {
    })
 
    // usar a primitiva at_least para randomizar a ordem dos elementos
-   let str = `{ at_least(${nr_elems}) {`
+   let str = `${'\t'.repeat(depth-1)}at_least(${nr_elems}) {`
    str += elements_str.join("")
-   str = str.slice(0, -1) + `\n${'\t'.repeat(--depth)}} }`
+   str = str.slice(0, -1) + `\n${'\t'.repeat(depth-1)}}`
 
    return {str, keys}
 }
@@ -235,7 +275,7 @@ function parseCT_child_content(parent, str, content, prefix, depth, keys) {
                // para uma sequence dentro de uma choice, queremos escolher a sequência inteira e não apenas um dos seus elementos
                // por isso, cria-se um objeto na DSL com uma chave especial que posteriormente é removido na tradução para XML
                parsed.str = "\t" + parsed.str.replace(/\n\t/g, "\n\t\t").slice(0, -1)
-               str += `${'\t'.repeat(depth)}DATAGEN_FROM_SCHEMAS__SEQUENCE_${++special_sequences}: {\n${parsed.str}\n${'\t'.repeat(depth)}},\n`
+               str += `${'\t'.repeat(depth)}DATAGEN_FROM_SCHEMAS__TEMP_${++temp_structs}: {\n${parsed.str}\n${'\t'.repeat(depth)}},\n`
             }
             else str += parsed.str + "\n"
          }
@@ -304,7 +344,7 @@ function parseType(type, prefix) {
    if (type == "duration") dsl = ["P", {moustache: "integer", args: ["1950", "2010"]}, "Y", {moustache: "integer", args: ["1", "12"]}, "M", {moustache: "integer", args: ["1", "31"]}, "DT", {moustache: "integer", args: ["0", "23"]}, "H", {moustache: "integer", args: ["0", "59"]}, "M", {moustache: "integer", args: ["0", "59"]}, "S"]
 
    // string
-   if (type == "string") dsl = [{moustache: "lorem", args: ['"phrase"', "1", "3"]}]
+   if (type == "string") dsl = [{moustache: "lorem", args: ['"words"', "3", "10"]}]
    if (type == "normalizedString") dsl = normalizedString(randomize(10,50))
    if (type == "token") dsl = normalizedString(randomize(30,50)).trim().replace(/ +/g," ")
 
@@ -352,237 +392,60 @@ function hexBinary(length) {
 
 const btoa = str => Buffer.from(str, 'binary').toString('base64')
 
-String.prototype.hexEncode = function(){
-   var hex, i;
-
-   var result = "";
-   for (i=0; i<this.length; i++) {
-      hex = this.charCodeAt(i).toString(16);
-      result += ("000"+hex).slice(-4);
-   }
-
-   return result
-}
-
 
 
 // TESTE
 
 let content = [
    {
-      "element": "complexType",
+      "element": "element",
       "attrs": {
-         "name": "ShirtType",
+         "name": "thing1",
+         "type": "xs:string",
          "abstract": false,
-         "mixed": false
+         "nillable": false
+      },
+      "content": []
+   },
+   {
+      "element": "element",
+      "attrs": {
+         "name": "thing2",
+         "type": "xs:string",
+         "abstract": false,
+         "nillable": false
+      },
+      "content": []
+   },
+   {
+      "element": "element",
+      "attrs": {
+         "name": "thing3",
+         "type": "xs:string",
+         "abstract": false,
+         "nillable": false
+      },
+      "content": []
+   },
+   {
+      "element": "element",
+      "attrs": {
+         "name": "teste",
+         "abstract": false,
+         "nillable": false
       },
       "content": [
          {
-            "element": "sequence",
+            "element": "complexType",
             "attrs": {
-               "maxOccurs": 1,
-               "minOccurs": 1
+               "abstract": false,
+               "mixed": false
             },
             "content": [
                {
                   "element": "group",
                   "attrs": {
-                     "name": "ProductPropertyGroup",
-                     "maxOccurs": 1,
-                     "minOccurs": 0
-                  },
-                  "content": [
-                     {
-                        "element": "sequence",
-                        "attrs": {
-                           "maxOccurs": 1,
-                           "minOccurs": 1
-                        },
-                        "content": [
-                           {
-                              "element": "group",
-                              "attrs": {
-                                 "name": "DescriptionGroup",
-                                 "maxOccurs": 1,
-                                 "minOccurs": 1
-                              },
-                              "content": [
-                                 {
-                                    "element": "sequence",
-                                    "attrs": {
-                                       "maxOccurs": 1,
-                                       "minOccurs": 1
-                                    },
-                                    "content": [
-                                       {
-                                          "element": "element",
-                                          "attrs": {
-                                             "name": "description",
-                                             "type": "xs:string",
-                                             "maxOccurs": 1,
-                                             "minOccurs": 1,
-                                             "abstract": false,
-                                             "nillable": false
-                                          },
-                                          "content": []
-                                       },
-                                       {
-                                          "element": "element",
-                                          "attrs": {
-                                             "name": "comment",
-                                             "type": "xs:string",
-                                             "minOccurs": 0,
-                                             "maxOccurs": 1,
-                                             "abstract": false,
-                                             "nillable": false
-                                          },
-                                          "content": []
-                                       }
-                                    ]
-                                 }
-                              ]
-                           },
-                           {
-                              "element": "element",
-                              "attrs": {
-                                 "name": "number",
-                                 "type": "xs:integer",
-                                 "maxOccurs": 1,
-                                 "minOccurs": 1,
-                                 "abstract": false,
-                                 "nillable": false
-                              },
-                              "content": []
-                           },
-                           {
-                              "element": "element",
-                              "attrs": {
-                                 "name": "name",
-                                 "type": "xs:string",
-                                 "maxOccurs": 1,
-                                 "minOccurs": 1,
-                                 "abstract": false,
-                                 "nillable": false
-                              },
-                              "content": []
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "element": "element",
-                  "attrs": {
-                     "name": "size",
-                     "type": "SizeType",
-                     "maxOccurs": 1,
-                     "minOccurs": 1,
-                     "abstract": false,
-                     "nillable": false
-                  },
-                  "content": []
-               }
-            ]
-         },
-         {
-            "element": "attributeGroup",
-            "attrs": {
-               "name": "IdentifierGroup"
-            },
-            "content": [
-               {
-                  "element": "attribute",
-                  "attrs": {
-                     "name": "id",
-                     "type": "xs:ID",
-                     "use": "required"
-                  },
-                  "content": []
-               },
-               {
-                  "element": "attribute",
-                  "attrs": {
-                     "name": "version",
-                     "type": "xs:decimal",
-                     "use": "optional"
-                  },
-                  "content": []
-               }
-            ]
-         },
-         {
-            "element": "attribute",
-            "attrs": {
-               "name": "effDate",
-               "type": "xs:date",
-               "use": "optional"
-            },
-            "content": []
-         }
-      ]
-   },
-   {
-      "element": "group",
-      "attrs": {
-         "name": "DescriptionGroup",
-         "maxOccurs": 1,
-         "minOccurs": 3
-      },
-      "content": [
-         {
-            "element": "sequence",
-            "attrs": {
-               "maxOccurs": 1,
-               "minOccurs": 1
-            },
-            "content": [
-               {
-                  "element": "element",
-                  "attrs": {
-                     "name": "description",
-                     "type": "xs:string",
-                     "maxOccurs": 1,
-                     "minOccurs": 1,
-                     "abstract": false,
-                     "nillable": false
-                  },
-                  "content": []
-               },
-               {
-                  "element": "element",
-                  "attrs": {
-                     "name": "comment",
-                     "type": "xs:string",
-                     "minOccurs": 0,
-                     "maxOccurs": 1,
-                     "abstract": false,
-                     "nillable": false
-                  },
-                  "content": []
-               }
-            ]
-         }
-      ]
-   },
-   {
-      "element": "group",
-      "attrs": {
-         "name": "ProductPropertyGroup",
-         "maxOccurs": 1,
-         "minOccurs": 1
-      },
-      "content": [
-         {
-            "element": "sequence",
-            "attrs": {
-               "maxOccurs": 1,
-               "minOccurs": 1
-            },
-            "content": [
-               {
-                  "element": "group",
-                  "attrs": {
-                     "name": "DescriptionGroup",
+                     "name": "myGroupOfThings",
                      "maxOccurs": 1,
                      "minOccurs": 1
                   },
@@ -597,24 +460,36 @@ let content = [
                            {
                               "element": "element",
                               "attrs": {
-                                 "name": "description",
+                                 "name": "thing1",
                                  "type": "xs:string",
-                                 "maxOccurs": 1,
-                                 "minOccurs": 1,
                                  "abstract": false,
-                                 "nillable": false
+                                 "nillable": false,
+                                 "maxOccurs": 1,
+                                 "minOccurs": 1
                               },
                               "content": []
                            },
                            {
                               "element": "element",
                               "attrs": {
-                                 "name": "comment",
+                                 "name": "thing2",
                                  "type": "xs:string",
-                                 "minOccurs": 0,
-                                 "maxOccurs": 1,
                                  "abstract": false,
-                                 "nillable": false
+                                 "nillable": false,
+                                 "maxOccurs": 1,
+                                 "minOccurs": 1
+                              },
+                              "content": []
+                           },
+                           {
+                              "element": "element",
+                              "attrs": {
+                                 "name": "thing3",
+                                 "type": "xs:string",
+                                 "abstract": false,
+                                 "nillable": false,
+                                 "maxOccurs": 1,
+                                 "minOccurs": 1
                               },
                               "content": []
                            }
@@ -623,87 +498,65 @@ let content = [
                   ]
                },
                {
-                  "element": "element",
+                  "element": "attributeGroup",
                   "attrs": {
-                     "name": "number",
-                     "type": "xs:integer",
-                     "maxOccurs": 1,
-                     "minOccurs": 1,
-                     "abstract": false,
-                     "nillable": false
-                  },
-                  "content": []
-               },
-               {
-                  "element": "element",
-                  "attrs": {
-                     "name": "name",
-                     "type": "xs:string",
-                     "maxOccurs": 1,
-                     "minOccurs": 1,
-                     "abstract": false,
-                     "nillable": false
-                  },
-                  "content": []
-               }
-            ]
-         }
-      ]
-   },
-   {
-      "element": "attributeGroup",
-      "attrs": {
-         "name": "IdentifierGroup"
-      },
-      "content": [
-         {
-            "element": "attribute",
-            "attrs": {
-               "name": "id",
-               "type": "xs:ID",
-               "use": "required"
-            },
-            "content": []
-         },
-         {
-            "element": "attribute",
-            "attrs": {
-               "name": "version",
-               "type": "xs:decimal",
-               "use": "optional"
-            },
-            "content": []
-         }
-      ]
-   },
-   {
-      "element": "complexType",
-      "attrs": {
-         "name": "SizeType",
-         "abstract": false,
-         "mixed": false
-      },
-      "content": [
-         {
-            "element": "simpleContent",
-            "attrs": {},
-            "content": [
-               {
-                  "element": "extension",
-                  "attrs": {
-                     "base": "xs:integer"
+                     "name": "myAttributeGroupB"
                   },
                   "content": [
                      {
                         "element": "attribute",
                         "attrs": {
-                           "name": "system",
-                           "type": "xs:token",
+                           "name": "someattribute20",
+                           "type": "xs:date",
                            "use": "optional"
                         },
                         "content": []
+                     },
+                     {
+                        "element": "attributeGroup",
+                        "attrs": {
+                           "name": "myAttributeGroupA"
+                        },
+                        "content": [
+                           {
+                              "element": "attribute",
+                              "attrs": {
+                                 "name": "someattribute10",
+                                 "type": "xs:integer",
+                                 "use": "optional"
+                              },
+                              "content": []
+                           },
+                           {
+                              "element": "attribute",
+                              "attrs": {
+                                 "name": "someattribute11",
+                                 "type": "xs:string",
+                                 "use": "optional"
+                              },
+                              "content": []
+                           }
+                        ]
                      }
                   ]
+               },
+               {
+                  "element": "attribute",
+                  "attrs": {
+                     "name": "attr2",
+                     "type": "xs:ID",
+                     "use": "optional"
+                  },
+                  "content": []
+               },
+               {
+                  "element": "attribute",
+                  "attrs": {
+                     "name": "attr3",
+                     "type": "xs:short",
+                     "use": "prohibited"
+                  },
+                  "content": []
                }
             ]
          }
