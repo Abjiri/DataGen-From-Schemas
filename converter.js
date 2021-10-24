@@ -25,7 +25,7 @@ function parseElement(el, prefix, depth, keys) {
    // schemaElem indica se é o <element> é uma coleção ou não
    let elem_str = "", schemaElem = keys === null
    // se for aninhado, numerar as suas ocorrências para não dar overwrite na geração do DataGen
-   let name = () => `${el.attrs.name}${schemaElem ? "" : `_${keys[el.attrs.name]++}__DATAGEN_FROM_SCHEMAS`}: ` 
+   let name = () => `${schemaElem ? "" : `DFS_${keys[el.attrs.name]++}__`}${el.attrs.name}: ` 
    let occurs = schemaElem ? 1 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
 
    for (let i = 0; i < occurs; i++) {
@@ -53,48 +53,86 @@ function parseElementAux(el, prefix, depth) {
    if ("type" in attrs) return `'${typeToString(parseType(attrs.type, prefix))}'`
 
    // parsing do conteúdo -----
-   let simpleType = el.content.filter(x => x.element == "simpleType")
-   if (simpleType.length > 0) return `'${parseSimpleType(simpleType[0].content[0], prefix)}'` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
-
-   let complexType = el.content.filter(x => x.element == "complexType")
-   if (complexType.length > 0) {
-      let ct_value = parseComplexType(complexType[0], prefix, depth)
-      return !ct_value.length ? "{}" : (ct_value)
-   }
+   let type = el.content.shift()
+   if (type.element == "simpleType") return `'${parseSimpleType(type.content[0], prefix)}'` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
+   else return parseComplexType(type, prefix, depth)
 }
 
 function parseSimpleType(child, prefix) {
-    if (child.element == "list") {
-        let value = "itemType" in child.attrs ? typeToString(parseType(child.attrs.itemType, prefix)) : parseSimpleType(child.content[0].content[0], prefix) /* não sei se isto funciona */
-        
-        let list_len = randomize(3,10)
-        return `${value} `.repeat(list_len).slice(0,-1)
-    }
+   if (child.element == "list") {
+      let value = "itemType" in child.attrs ? typeToString(parseType(child.attrs.itemType, prefix)) : parseSimpleType(child.content[0].content[0], prefix) /* não sei se isto funciona */
+      
+      let list_len = randomize(3,10)
+      return `${value} `.repeat(list_len).slice(0,-1)
+   }
 
-    if (child.element == "union") {
-        let values = []
-        if ("memberTypes" in child.attrs) values = child.attrs.memberTypes.map(x => typeToString(parseType(x, prefix)))
-        child.content.forEach(x => values.push(parseSimpleType(x.content[0], prefix)))
-        
-        return values[randomize(0,values.length-1)]
-    }
+   if (child.element == "union") {
+      let values = []
+      if ("memberTypes" in child.attrs) values = child.attrs.memberTypes.map(x => typeToString(parseType(x, prefix)))
+      child.content.forEach(x => values.push(parseSimpleType(x.content[0], prefix)))
+      
+      return values[randomize(0,values.length-1)]
+   }
 
-    if (child.element == "restriction") {
-        let base = parseType(attrs.base, prefix)
-        let moustache = base[base.length-1]
+   if (child.element == "restriction") return parseST_Restriction(child, prefix)
+}
 
-        /* o que faz o simpleType filho numa restriction? */
-        child.content.forEach(x => {
-            /* para já, só vou assumir max/min Inc/Exc para tipos numéricos */
+function parseST_Restriction(el, prefix) {
+   let type = parseTypeName(attrs.base, prefix)
+   let base = parseType(attrs.base, prefix), base_len = base.length
+
+   /* o que faz o simpleType filho numa restriction? */
+   el.content.forEach(x => {
+      if (["minInclusive","maxInclusive","minExclusive","maxExclusive"].includes(x.element)) {
+         // tipos numéricos
+         if (num_types.includes(type)) {
+            let moustache = base[base_len-1]
+
             if (x.element == "minInclusive") moustache.args[0] = x.attrs.value
             if (x.element == "maxInclusive") moustache.args[1] = x.attrs.value
             if (x.element == "minExclusive") moustache.args[0] = x.attrs.value + (moustache.moustache == "integer" ? 1 : 0.001)
             if (x.element == "maxExclusive") moustache.args[1] = x.attrs.value - (moustache.moustache == "integer" ? 1 : 0.001)
-        })
 
-        base[base.length-1] = moustache
-        return typeToString(base)
-    }
+            base[base_len-1] = moustache
+         }
+
+         // data/hora
+         if (datetime_types.includes(type)) {
+            if (type == "dateTime") dsl = [{moustache: "date", args: ['"01-01-1900"']}]
+            if (type == "date") dsl = [{moustache: "date", args: ['"01-01-1950"', '"YYYY-MM-DD"']}]
+            if (type == "time") dsl = [{moustache: "time", args: ['"hh:mm:ss"', "24", false]}]
+            if (type == "gDay") dsl = [{moustache: "integer", args: ["1", "31"]}]
+            if (type == "gMonth") dsl = [{moustache: "integer", args: ["1", "12"]}]
+            if (type == "gYear") dsl = [{moustache: "integer", args: ["1950", "2010"]}]
+            if (type == "gYearMonth") dsl = [{moustache: "integer", args: ["1950", "2010"]}, "-", {moustache: "integer", args: ["1", "12"]}]
+            if (type == "gMonthDay") dsl = ["--", {moustache: "integer", args: ["1", "12"]}, "-", {moustache: "integer", args: ["1", "31"]}]
+            if (type == "duration") dsl = ["P", {moustache: "integer", args: ["1950", "2010"]}, "Y", {moustache: "integer", args: ["1", "12"]}, "M", {moustache: "integer", args: ["1", "31"]}, "DT", {moustache: "integer", args: ["0", "23"]}, "H", {moustache: "integer", args: ["0", "59"]}, "M", {moustache: "integer", args: ["0", "59"]}, "S"]
+
+            let value
+
+            switch (type) {
+               case "dateTime":
+               case "date":
+                  if (x.attrs.value[0] == "-") base[0].args[0] = '"01-01-0000"'
+                  else {
+                     let arg = x.attrs.value.substring(0,10).split("-")
+                     value = `"${arg[2]}-${arg[1]}-${arg[0]}"`
+                  }
+                  break
+               case "time": value = x.attrs.value.substring(0,8); break;
+               case "gDay": value = x.attrs.value.substring(3,5); break;
+               case "gMonth": value = x.attrs.value.substring(2,4); break;
+               case "gYear":
+                  if (x.attrs.value[0] == "-") x.attrs.value = x.attrs.value.substring(1)
+                  value = x.attrs.value.substring(0,4)
+                  break
+               case "gYearMonth": 
+            }
+         }
+      }
+   })
+
+   return typeToString(base)
 }
 
 function parseComplexType(el, prefix, depth) {
@@ -111,14 +149,18 @@ function parseComplexType(el, prefix, depth) {
       }
    }
    
-   return `{\n${parsed.attrs},\n${parsed.content}\n${'\t'.repeat(depth)}}`
+   if (!parsed.attrs.length && !parsed.content.length) return "{ missing(100) {empty: true} }"
+
+   let str = "{\n"
+   if (parsed.attrs.length > 0) str += parsed.attrs + ",\n"
+   return str + `${parsed.content}\n${'\t'.repeat(depth)}}`
 }
 
 const chooseQM = str => str.includes('"') ? "'" : '"'
 
 function parseAttribute(el, prefix, depth) {
    let attrs = el.attrs
-   let str = `${attrs.name}: `, value = ""
+   let str = `DFS_ATTR__${attrs.name}: `, value = ""
 
    // parsing dos atributos -----
    if (attrs.use == "prohibited") return ""
@@ -167,7 +209,7 @@ function parseGroup(el, prefix, depth, keys) {
             if (parsed.str.length > 0) {
                // ajustar a formatação e remover o \n no fim para meter uma vírgula antes
                parsed.str = parsed.str.replace(/\n\t+/g, "\n" + "\t".repeat(depth+2)).replace(/\t+}/, "\t".repeat(depth+1) + "}")
-               parsed.str = `${'\t'.repeat(depth)}DATAGEN_FROM_SCHEMAS__TEMP_${++temp_structs}: {\n${parsed.str}\n${'\t'.repeat(depth)}},`
+               parsed.str = `${'\t'.repeat(depth)}DFS_TEMP__${++temp_structs}: {\n${parsed.str}\n${'\t'.repeat(depth)}},`
             }
             break;
          case "choice": parsed = parseChoice(el.content[0], prefix, depth, keys); parsed.str += ","; break;
@@ -184,9 +226,6 @@ function parseGroup(el, prefix, depth, keys) {
 function parseAll(el, prefix, depth, keys) {
    let elements = el.content.filter(x => x.element == "element")
    let elements_str = [], nr_elems = 0
-
-   // se minOccurs = 0, dar uma probabilidade de 30% de o elemento não aparecer no XML
-   if (!el.attrs.minOccurs && Math.random() < 0.3) return {str: "", keys}
 
    elements.forEach(x => {
       // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
@@ -207,8 +246,12 @@ function parseAll(el, prefix, depth, keys) {
 
    // usar a primitiva at_least para randomizar a ordem dos elementos
    let str = `${'\t'.repeat(depth-1)}at_least(${nr_elems}) {`
-   str += elements_str.join("")
-   str = str.slice(0, -1) + `\n${'\t'.repeat(depth-1)}}`
+   if (elements_str.length > 0) str += elements_str.join("").slice(0, -1)
+   else str += `\n${'\t'.repeat(depth)}empty: true` // se o conteúdo for vazio, colocar uma propriedade filler para usar o missing(100)
+   str += `\n${'\t'.repeat(depth-1)}}`
+
+   // se minOccurs = 0, dar uma probabilidade de 30% de o elemento não aparecer no XML
+   if (!elements_str.length || !el.attrs.minOccurs && Math.random() < 0.3) str = str.replace(/at_least\(\d+\)/, "missing(100)")
 
    return {str, keys}
 }
@@ -275,7 +318,7 @@ function parseCT_child_content(parent, str, content, prefix, depth, keys) {
                // para uma sequence dentro de uma choice, queremos escolher a sequência inteira e não apenas um dos seus elementos
                // por isso, cria-se um objeto na DSL com uma chave especial que posteriormente é removido na tradução para XML
                parsed.str = "\t" + parsed.str.replace(/\n\t/g, "\n\t\t").slice(0, -1)
-               str += `${'\t'.repeat(depth)}DATAGEN_FROM_SCHEMAS__TEMP_${++temp_structs}: {\n${parsed.str}\n${'\t'.repeat(depth)}},\n`
+               str += `${'\t'.repeat(depth)}DFS_TEMP__${++temp_structs}: {\n${parsed.str}\n${'\t'.repeat(depth)}},\n`
             }
             else str += parsed.str + "\n"
          }
@@ -294,25 +337,29 @@ function parseCT_child_content(parent, str, content, prefix, depth, keys) {
    return {str, choice, keys}
 }
 
-let built_in_types = ["float","double","decimal","integer","nonPositiveInteger","nonNegativeInteger","negativeInteger","positiveInteger","long","int","short","byte","unsignedLong","unsignedInt","unsignedShort","unsignedByte",
-                      "dateTime","date","time","gDay","gMonth","gYear","gYearMonth","gMonthDay","duration",
-                      "string","normalizedString","token",
-                      "hexBinary","base64Binary",
-                      "boolean"]
+let num_types = ["float","double","decimal","integer","nonPositiveInteger","nonNegativeInteger","negativeInteger","positiveInteger","long","int","short","byte","unsignedLong","unsignedInt","unsignedShort","unsignedByte"]
+let datetime_types = ["dateTime","date","time","gDay","gMonth","gYear","gYearMonth","gMonthDay","duration"]
+let string_types = ["string","normalizedString","token"]
+let bin_types = ["hexBinary","base64Binary"]
+let built_in_types = [...num_types, ...datetime_types, ...string_types, ...bin_types, "boolean"]
 
-function parseType(type, prefix) {
+function parseTypeName(type, prefix) {
    if (type.includes(':')) {
       let split = type.split(':')
 
       if (split[0] == prefix) {
          type = split[1] // remover o prefixo do nome do tipo
 
-         if (!built_in_types.includes(type)) {} // é um tipo local da schema
+         if (!built_in_types.includes(type)) {return "local_schema"} // é um tipo local da schema
+         return type
       }
-      else {} // é um tipo de outra schema
+      else {return "other_schema"} // é um tipo de outra schema
    }
+}
 
+function parseType(type, prefix) {
    let dsl
+   type = parseTypeName(type, prefix)
 
    // numéricos
    if (type == "float") dsl = [Math.random() < 0.5 ? "-" : "", {moustache: "float", args: ["0.0000000000000000000000000000000000000118", "340000000000000000000000000000000000000"]}]
@@ -400,37 +447,7 @@ let content = [
    {
       "element": "element",
       "attrs": {
-         "name": "thing1",
-         "type": "xs:string",
-         "abstract": false,
-         "nillable": false
-      },
-      "content": []
-   },
-   {
-      "element": "element",
-      "attrs": {
-         "name": "thing2",
-         "type": "xs:string",
-         "abstract": false,
-         "nillable": false
-      },
-      "content": []
-   },
-   {
-      "element": "element",
-      "attrs": {
-         "name": "thing3",
-         "type": "xs:string",
-         "abstract": false,
-         "nillable": false
-      },
-      "content": []
-   },
-   {
-      "element": "element",
-      "attrs": {
-         "name": "teste",
+         "name": "zooAnimals",
          "abstract": false,
          "nillable": false
       },
@@ -443,118 +460,10 @@ let content = [
             },
             "content": [
                {
-                  "element": "group",
+                  "element": "all",
                   "attrs": {
-                     "name": "myGroupOfThings",
-                     "maxOccurs": 1,
-                     "minOccurs": 1
-                  },
-                  "content": [
-                     {
-                        "element": "sequence",
-                        "attrs": {
-                           "maxOccurs": 1,
-                           "minOccurs": 1
-                        },
-                        "content": [
-                           {
-                              "element": "element",
-                              "attrs": {
-                                 "name": "thing1",
-                                 "type": "xs:string",
-                                 "abstract": false,
-                                 "nillable": false,
-                                 "maxOccurs": 1,
-                                 "minOccurs": 1
-                              },
-                              "content": []
-                           },
-                           {
-                              "element": "element",
-                              "attrs": {
-                                 "name": "thing2",
-                                 "type": "xs:string",
-                                 "abstract": false,
-                                 "nillable": false,
-                                 "maxOccurs": 1,
-                                 "minOccurs": 1
-                              },
-                              "content": []
-                           },
-                           {
-                              "element": "element",
-                              "attrs": {
-                                 "name": "thing3",
-                                 "type": "xs:string",
-                                 "abstract": false,
-                                 "nillable": false,
-                                 "maxOccurs": 1,
-                                 "minOccurs": 1
-                              },
-                              "content": []
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "element": "attributeGroup",
-                  "attrs": {
-                     "name": "myAttributeGroupB"
-                  },
-                  "content": [
-                     {
-                        "element": "attribute",
-                        "attrs": {
-                           "name": "someattribute20",
-                           "type": "xs:date",
-                           "use": "optional"
-                        },
-                        "content": []
-                     },
-                     {
-                        "element": "attributeGroup",
-                        "attrs": {
-                           "name": "myAttributeGroupA"
-                        },
-                        "content": [
-                           {
-                              "element": "attribute",
-                              "attrs": {
-                                 "name": "someattribute10",
-                                 "type": "xs:integer",
-                                 "use": "optional"
-                              },
-                              "content": []
-                           },
-                           {
-                              "element": "attribute",
-                              "attrs": {
-                                 "name": "someattribute11",
-                                 "type": "xs:string",
-                                 "use": "optional"
-                              },
-                              "content": []
-                           }
-                        ]
-                     }
-                  ]
-               },
-               {
-                  "element": "attribute",
-                  "attrs": {
-                     "name": "attr2",
-                     "type": "xs:ID",
-                     "use": "optional"
-                  },
-                  "content": []
-               },
-               {
-                  "element": "attribute",
-                  "attrs": {
-                     "name": "attr3",
-                     "type": "xs:short",
-                     "use": "prohibited"
+                     "minOccurs": 0,
+                     "maxOccurs": 1
                   },
                   "content": []
                }

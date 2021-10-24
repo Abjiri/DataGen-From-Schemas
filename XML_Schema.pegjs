@@ -468,6 +468,151 @@
     return true
   }
 
+  // determinar se o tipo é built_in ou não e se é desta schema ou não (a este ponto, já foi validado)
+  function getTypeInfo(type, prefix) {
+    let builtin_types = Object.values(built_in_types).flat()
+
+    if (type.includes(':')) {
+      let split = type.split(':')
+      type = split[1] // remover o prefixo do nome do tipo
+
+      return {type, built_in: builtin_types.includes(type), local_schema: split[0] == prefix, prefix: split[0]}
+    }
+
+    // tipo built_in ou local desta schema
+    return {type, built_in: builtin_types.includes(type), local_schema: !builtin_types.includes(type), prefix}
+  }
+
+  // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
+  function check_constrFacetBase(base, content) {
+    let type = getTypeInfo(base, default_prefix)
+
+    for (let i = 0; i < content.length; i++) {
+      if (content[i].element != "simpleType") {
+        content[i].attrs.value = check_constrFacetBase_aux(base, type, content[i].attrs.value)
+      }
+    }
+
+    return content
+  }
+
+  // verificar se o valor pertence ao espaço léxico do tipo em que se baseia (por regex)
+  function check_constrFacetBase_aux(base, type, value) {
+    let error_msg = `"${value}" não é um valor válido para o tipo "${base}"!`
+
+    // tipo built_in
+    if (type.built_in) {
+      switch (type.type) {
+        case "boolean":
+          if (value === "true") value = true
+          else if (value === "false") value = false
+          else return error(error_msg); break
+        case "byte":
+        case "int":
+        case "long":
+        case "short":
+        case "unsignedByte":
+        case "unsignedInt":
+        case "unsignedLong":
+        case "unsignedShort":
+          if (!/^(\+|\-)?\d+$/.test(value)) return error(error_msg)
+          value = parseInt(value)
+
+          let min, max
+          if (type.type == "byte") {min = -128; max = 127}
+          if (type.type == "short") {min = -32768; max = 32767}
+          if (type.type == "int") {min = -2147483648; max = 2147483647}
+          if (type.type == "long") {min = -9223372036854775808; max = 9223372036854775807}
+          if (type.type == "unsignedByte") {min = 0; max = 255}
+          if (type.type == "unsignedShort") {min = 0; max = 65535}
+          if (type.type == "unsignedInt") {min = 0; max = 4294967295}
+          if (type.type == "unsignedLong") {min = 0; max = 18446744073709551615}
+
+          if (value === NaN || !(value >= min && value <= max)) return error(error_msg); break
+        case "date":
+          if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+        case "dateTime":
+          if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+        case "decimal":
+          if (!/^(\+|-)?(\.\d+|\d+(\.\d+)?)$/.test(value)) return error(error_msg)
+          value = parseFloat(value); break
+        case "double":
+        case "float":
+          if (!/^((\+|-)?((\.\d+|\d+(\.\d+)?)([eE](\+|-)?\d+)?)|-?INF|NaN)$/.test(value)) return error(error_msg)
+          value = type.type == "double" ? parseDouble(value) : parseFloat(value); break
+        case "duration":
+          if (!/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/.test(value)) return error(error_msg); break
+        case "ENTITIES":
+        case "IDREFS":
+          if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*([ \t\n\r]+([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*)*$/.test(value)) return error(error_msg)
+          value = value.split(/[ \t\n\r]+/); break
+        case "ENTITY":
+        case "ID":
+        case "IDREF":
+        case "NCName":
+          if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
+        case "gDay":
+          if (!/^\-{3}(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+          value = parseInt(value.substring(3,5)); break
+        case "gMonth":
+          if (!/^\-{2}(0[1-9]|1[0-2])(\-{2})?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+          value = parseInt(value.substring(2,4)); break
+        case "gMonthDay":
+          if (!/^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+          value = {day: parseInt(value.substring(5,7)), month: parseInt(value.substring(2,4))}; break
+        case "gYear":
+          if (!/^\-?\d{4,5}(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+          value = parseInt(value.match(/\-?\d+/)); break
+        case "gYearMonth":
+          if (!/^\-?\d{4,5}\-(0[1-9]|1[0-2])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+          let year = parseInt(value.match(/^\-?\d+/))
+          value = value.replace(/^\-?\d+\-/, "")
+          value = {year, month: parseInt(value.match(/^\d+/))}; break
+        case "integer":
+          if (!/^\-?\d+$/.test(value)) return error(error_msg)
+          value = parseInt(value); break
+        case "language":
+          if (!/^([a-zA-Z]{2}|[iI]\-[a-zA-Z]+|[xX]\-[a-zA-Z]{1,8})(\-[a-zA-Z]{1,8})*$/.test(value)) return error(error_msg); break
+        case "Name":
+          if (!/^([a-zA-Z_:]|[^\x00-\x7F])([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
+        case "negativeInteger":
+          if (!/^-\d+$/.test(value)) return error(error_msg)
+          value = parseInt(value)
+          if (value === NaN || !(value <= -1)) return error(error_msg); break
+        case "NMTOKEN":
+          if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+$/.test(value)) return error(error_msg); break
+        case "NMTOKENS":
+          if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+([ \t\n\r]+([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+)*$/.test(value)) return error(error_msg)
+          value = value.split(/[ \t\n\r]+/); break
+        case "nonNegativeInteger":
+          if (!/^\+?\d+$/.test(value)) return error(error_msg)
+          value = parseInt(value)
+          if (value === NaN || !(value >= 0)) return error(error_msg); break
+        case "nonPositiveInteger":
+          if (!/^0+|\-\d+$/.test(value)) return error(error_msg)
+          value = parseInt(value)
+          if (value === NaN || !(value <= 0)) return error(error_msg); break
+        case "positiveInteger":
+          if (!/^\+?\d+$/.test(value)) return error(error_msg)
+          value = parseInt(value)
+          if (value === NaN || !(value >= 1)) return error(error_msg); break
+        case "normalizedString":
+          value = value.trim().replace(/[\t\n\r]/g," "); break
+        case "NOTATION":
+        case "QName":
+          if (!/^(([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*:)?([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg)
+          let split = value.split(":")
+          if (split.length == 2 && !existsPrefix(split[0])) return error(error_msg); break
+        case "time":
+          if (!/^([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+        case "token":
+          value = value.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," "); break
+      }
+    }
+
+    return value
+  }
+
   // conta o número de casas decimais de um float
   function precision(a) {
     if (!isFinite(a)) return 0
@@ -832,7 +977,7 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)}
-                {return {element: el_name, attrs, content: close.content}}
+                {return {element: el_name, attrs, content: check_constrFacetBase(attrs.base, close.content)}}
 
 base_attrs = attrs:(base elem_id? / elem_id base?)? {return getAttrs(attrs)}
 
