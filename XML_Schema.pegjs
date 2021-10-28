@@ -432,6 +432,8 @@
   }
 
   // verificar que o nome do elemento de derivação, os atributos e o valor batem todos certo
+  // nesta função, só se verifica o espaço léxico do atributo "value" dos elementos <totalDigits>, <fractionDigits>, <length>, <minLength>, <maxLength>, <whiteSpace> e <pattern>
+  // para verificar os restantes elementos, é preciso o tipo base, faz-se mais à frente
   function check_constrFacetAttrs(name, arr) {
     let attrs = check_repeatedAttrs(arr, getAttrs(arr), name)
 
@@ -440,11 +442,11 @@
         if (!["preserve","replace","collapse"].includes(attrs.value)) return error(`O valor do atributo "value" do elemento <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
       }
       else if (name == "totalDigits") {
-        if (!/[1-9]\d*/.test(attrs.value)) return error(`O valor do atributo "totalDigits" deve ser um inteiro positivo!`)
+        if (!/\+?[1-9]\d*/.test(attrs.value)) return error(`O valor do atributo "totalDigits" deve ser um inteiro positivo!`)
         attrs.value = parseInt(attrs.value)
       } 
-      else if (!(name == "pattern" || name == "enumeration")) {
-        if (!/\d+/.test(attrs.value)) return error(`O valor do atributo "value" do elemento <${name}> deve ser um inteiro não negativo!`)
+      else if (["fractionDigits","length","minLength","maxLength"].includes(name)) {
+        if (!/\+?\d+/.test(attrs.value)) return error(`O valor do atributo "value" do elemento <${name}> deve ser um inteiro não negativo!`)
         attrs.value = parseInt(attrs.value)
       }
     }
@@ -457,15 +459,6 @@
     else if (!("fixed" in attrs)) attrs.fixed = false
 
     return attrs
-  }
-
-  // verifica se os valores do elemento de restrição dado e de enumeração se contradizem
-  function contradictoryFacets(obj, facet, func) {
-    if (facet in obj && "enumeration" in obj) {
-      let vals = obj.enumeration.filter(func)
-      if (vals.length > 0) return error(`O valor '${vals[0]}' do atributo "enumeration" contradiz o valor do atributo "${facet}"!`)
-    }
-    return true
   }
 
   // determinar se o tipo é built_in ou não e se é desta schema ou não (a este ponto, já foi validado)
@@ -484,13 +477,44 @@
   }
 
   // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
-  function check_constrFacetBase(base, content) {
-    let type = getTypeInfo(base, default_prefix)
+  // esta função só verifica o espaço léxico do atributo "value" dos elementos <minExclusive>, <minInclusive>, <maxExclusive>, <maxInclusive> e <enumeration>
+  // os restantes não dependem do tipo base e já foram verificados antes
+  function check_constrFacetBase(base, type, content) {
+    // criar um array com os nomes de todos os constraining facets do tipo base
+    let content_els = content.map(x => x.element)
+    if (content_els[0] == "simpleType") content_els.shift()
 
+    // criar array com o nome dos constraining facets válidos para o tipo em questão
+    let facets
+    switch (type.type) {
+      case "anyURI": case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "language": case "Name": case "NCName": 
+      case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
+        facets = ["enumeration","length","maxLength","minLength","pattern"]; break
+
+      case "boolean": facets = ["pattern"]; break
+
+      case "byte": case "decimal": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger": case "nonPositiveInteger":
+      case "positiveInteger": case "short": case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
+        facets = ["enumeration","fractionDigits","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern","totalDigits"]; break
+
+      case "date": case "dateTime": case "double": case "duration": case "float": case "gDay": case "gMonth": case "gMonthDay": case "gYear": case "gYearMonth": case "time":
+      facets = ["enumeration","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern"]; break
+
+      case "ENTITIES": case "IDREFS": case "NMTOKENS": 
+        facets = ["enumeration","length","maxLength","minLength"]; break
+    }
+
+    // o elemento <whiteSpace> pode aparecer em qualquer tipo base
+    facets.push("whiteSpace")
+
+    // verificar se facets possui todos os elementos de content_els para ver se há algum constraining facet inválido no tipo em questão
+    if (!content_els.every(v => facets.includes(v)))
+      return error(`O tipo "${type.type}" só permite os elementos de restrição <${facets.join(">, <")}>!`)
+
+    // verificar se o atributo "value" pertence ao espaço léxico do tipo base
     for (let i = 0; i < content.length; i++) {
-      if (content[i].element != "simpleType") {
+      if (["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) 
         content[i].attrs.value = check_constrFacetBase_aux(base, type, content[i].attrs.value)
-      }
     }
 
     return content
@@ -530,9 +554,13 @@
 
           if (value === NaN || !(value >= min && value <= max)) return error(error_msg); break
         case "date":
-          if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+          if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+          value = value.match(/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/)[0]
+          break
         case "dateTime":
-          if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+          if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+          value = value.match(/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/)[0]
+          break
         case "decimal":
           if (!/^(\+|-)?(\.\d+|\d+(\.\d+)?)$/.test(value)) return error(error_msg)
           value = parseFloat(value); break
@@ -621,17 +649,22 @@
     return p
   }
 
-  function check_restrictionST_facets(arr) {
+  // validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
+  function check_restrictionST_facets(el_name, base, content) {
+    // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
+    let type = getTypeInfo(base, default_prefix)
+    content = check_constrFacetBase(base, type, content)
+
     let f = {pattern: [], enumeration: []} // objeto com os pares chave-valor
         
-    for (let i = 0; i < arr.length; i++) {
-      let key = arr[i].element,
-          value = arr[i].attrs.value
+    for (let i = 0; i < content.length; i++) {
+      let key = content[i].element,
+          value = content[i].attrs.value
       
       // só os atributos "pattern" e "enumeration" é que podem aparecer várias vezes
-      if (!(key == "pattern" || key == "enumeration") && key in f) return error(`O atributo "${key}" só pode ser definido uma vez em cada elemento <${name}>!`)
+      if (key == "pattern" || key == "enumeration") f[key].push(value)
       else {
-        if (key == "pattern" || key == "enumeration") f[key].push(value)
+        if (key in f) return error(`O elemento "${key}" só pode ser definido uma vez em cada elemento <${el_name}>!`)
         else f[key] = value
       }
     }
@@ -639,36 +672,68 @@
     // se não houver elementos "pattern" ou "enumeration", apagar essas chaves do objeto
     if (!f.enumeration.length) delete f.enumeration
     if (!f.pattern.length) delete f.pattern
-    else f.pattern = f.pattern.join("|") // se houver vários patterns no mesmo passo de derivação, são ORed juntos
+    else f.pattern = new RegExp(f.pattern.map(x => '('+x+')').join("|")) // se houver vários patterns no mesmo passo de derivação, são ORed juntos
     
-    let err1 = (a1,a2,e) => error(`Num elemento <restriction>, o valor do atributo "${a1}" não pode ser superior${e?" ou igual":""} ao do "${a2}"!`)
-    let err2 = (a1,a2) => error(`Não pode especificar ambos os atributos "${a1}" e "${a2}" no mesmo passo de derivação!`)
-    
-    // restrições relativas a colisões entre os valores de atributos diretamente relacionados
-    if ("length" in f) {
-      if ("minLength" in f && f.minLength > f.length) return err1("minLength", "length", false)
-      if ("maxLength" in f && f.maxLength < f.length) return err1("length", "maxLength", false)
-    }
-    if ("minLength" in f && "maxLength" in f && f.minLength > f.maxLength) return err1("minLength", "maxLength", false)
-    if ("minInclusive" in f && "maxInclusive" in f && f.minInclusive > f.maxInclusive) return err1("minInclusive", "maxInclusive", false)
-    if ("minExclusive" in f && "maxExclusive" in f && f.minExclusive > f.maxExclusive) return err1("minExclusive", "maxExclusive", false)
-    if ("minExclusive" in f && "maxInclusive" in f && f.minExclusive >= f.maxInclusive) return err1("minExclusive", "maxInclusive", true)
-    if ("minInclusive" in f && "maxExclusive" in f && f.minInclusive >= f.maxExclusive) return err1("minInclusive", "maxExclusive", true)
-    if ("totalDigits" in f && "fractionDigits" in f && f.fractionDigits > f.totalDigits) return err1("fractionDigits", "totalDigits", false)
+    let err1 = (a1,a2) => error(`Os atributos <${a1}> e <${a2}> são mutuamente exclusivos no mesmo passo de derivação!`)
+    let err2 = (a1,a2,eq,int) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor do elemento <${a1}> deve ser inferior${eq ? " ou igual" : ""} ao do <${a2}>${int ? " - 1" : ""}!`)
+    let err3 = (el,val,lim,ord,eq) => error(`O valor ${val} do elemento <enumeration> é ${ord}erior${eq ? " ou igual" : ""} a ${lim}, o que contradiz o elemento <${el}>!`)
+    let err4 = (a1,a2,dig,val) => error(`O valor "${val}" do elemento <${a1}> só permite valores com mais de ${dig} dígitos, o que contradiz o elemento <${a2}>!`)
+    let err5 = (el,dig,val,frac) => error(`O valor "${val}" do elemento <enumeration> tem mais do que ${dig} dígitos${frac ? " fracionários" : ""}, o que contradiz o elemento <${el}>!`)
+    let err6 = (val) => error(`O valor "${val}" do elemento <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern>!`)
+    let err7 = (el,val,len,or) => error(`O valor "${val} do elemento <enumeration> não tem comprimento igual${or==0 ? "" : ` ou ${or==1 ? "sup" : "inf"}erior`} a ${len}, o que contradiz o elemento <${el}>!`)
+    let err8 = (el) => error(`É um erro o tipo base não ter um elemento filho <${el}> se a restrição atual o tem, e a restrição atual ou o tipo base têm um elemento filho <length>!`)
 
-    // restrições relativas a colisões entre os valores de atributos indiretamente relacionados
-    let result
-    if ((result = contradictoryFacets(f, "length", x => x.length != f.length)) !== true) return result
-    if ((result = contradictoryFacets(f, "minLength", x => x.length < f.minLength)) !== true) return result
-    if ((result = contradictoryFacets(f, "maxLength", x => x.length > f.maxLength)) !== true) return result
-    if ((result = contradictoryFacets(f, "totalDigits", x => x.replace(/^0+/,'').replace(/0+$/,'').length > f.totalDigits)) !== true) return result
-    if ((result = contradictoryFacets(f, "fractionDigits", x => precision(parseFloat(x)) > f.fractionDigits)) !== true) return result
+    // função para contar o número de dígitos significativos num número
+    let countDigits = num => String(num).replace(/\-|\./g, "").length
+    // função para contar o número de dígitos da parte inteira de um número (positivo)
+    let countIntDigits = num => String(num).replace(/\.\d+/, "").length
+    // função para contar o número de dígitos fracionários de um número
+    let countFracDigits = num => num%1 === 0 ? 0 : String(num).replace(/\-?\d*\./, "").length
+    // função para verificar se o tipo base é um tipo de números inteiros
+    let isBaseInt = base => ["byte","int","integer","long","short","negativeInteger","nonNegativeInteger","nonPositiveInteger","positiveInteger"].includes(base) || base.startsWith("unsigned")
  
     // atributos mutuamente exclusivos
-    if ("maxInclusive" in f && "maxExclusive" in f) return err2("maxInclusive", "maxExclusive")
-    if ("minInclusive" in f && "minExclusive" in f) return err2("minInclusive", "minExclusive")
+    if ("maxInclusive" in f && "maxExclusive" in f) return err1("maxInclusive", "maxExclusive")
+    if ("minInclusive" in f && "minExclusive" in f) return err1("minInclusive", "minExclusive")
+    if ("length" in f && "maxLength" in f) return err8("maxLength")
+    if ("length" in f && "minLength" in f) return err8("minLength")
 
-    return true
+    // restrições relativas a colisões entre os valores dos constraining facets
+    if ("enumeration" in f) {
+      for (let i = 0; i < f.enumeration.length; i++) {
+        if ("totalDigits" in f && countDigits(f.enumeration[i]) > f.totalDigits) return err5("totalDigits", f.totalDigits, f.enumeration[i], false)
+        if ("fractionDigits" in f && countFracDigits(f.enumeration[i]) > f.fractionDigits) return err5("fractionDigits", f.fractionDigits, f.enumeration[i], true)
+        if ("maxExclusive" in f && f.enumeration[i] >= f.maxExclusive) return err3("maxExclusive", f.enumeration[i], f.maxExclusive, "sup", true)
+        if ("maxInclusive" in f && f.enumeration[i] > f.maxInclusive) return err3("maxInclusive", f.enumeration[i], f.maxInclusive, "sup", false)
+        if ("minExclusive" in f && f.enumeration[i] <= f.minExclusive) return err3("minExclusive", f.enumeration[i], f.minExclusive, "inf", true)
+        if ("minInclusive" in f && f.enumeration[i] < f.minInclusive) return err3("minInclusive", f.enumeration[i], f.minInclusive, "inf", false)
+        if ("pattern" in f && !f.pattern.test(f.enumeration[i])) return err6(f.enumeration[i])
+        if ("length" in f && f.enumeration[i].length != f.length) return err7("length", f.enumeration[i], f.length, 0)
+        if ("maxLength" in f && f.enumeration[i].length > f.maxLength) return err7("maxLength", f.enumeration[i], f.length, -1)
+        if ("minLength" in f && f.enumeration[i].length < f.minLength) return err7("minLength", f.enumeration[i], f.length, 1)
+      }
+    }
+    if ("totalDigits" in f) {
+      if ("fractionDigits" in f && f.fractionDigits > f.totalDigits) return err2("fractionDigits", "totalDigits", true, false)
+      if ("minExclusive" in f && f.minExclusive > 0 && countIntDigits(f.minExclusive) > f.totalDigits) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
+      if ("minInclusive" in f && f.minInclusive > 0 && countIntDigits(f.minInclusive) > f.totalDigits) return err4("minInclusive", "totalDigits", f.totalDigits, f.minInclusive)
+    }
+    if ("maxExclusive" in f) {
+      if ("minInclusive" in f && f.minInclusive > f.maxExclusive) return err2("minInclusive", "maxExclusive", false, false)
+      if ("minExclusive" in f) {
+        if (isBaseInt(type.type) && f.minExclusive >= f.maxExclusive-1) return err2("minExclusive", "maxExclusive", false, true)
+        else if (f.minExclusive >= f.maxExclusive) return err2("minExclusive", "maxExclusive", false, false)
+      }
+    }
+    if ("maxInclusive" in f) {
+      if ("minExclusive" in f && f.minExclusive >= f.maxInclusive) return err2("minExclusive", "maxInclusive", false, false)
+      if ("minInclusive" in f && f.minInclusive > f.maxInclusive) return err2("minInclusive", "maxInclusive", true, false)
+    }
+    if ("maxLength" in f) {
+      if ("minLength" in f && f.minLength > f.maxLength) return err2("minLength", "maxLength", true, false)
+    }
+
+    return content
   }
 }
 
@@ -977,13 +1042,13 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)}
-                {return {element: el_name, attrs, content: check_constrFacetBase(attrs.base, close.content)}}
+                {return {element: el_name, attrs, content: check_restrictionST_facets(el_name, attrs.base, close.content)}}
 
 base_attrs = attrs:(base elem_id? / elem_id base?)? {return getAttrs(attrs)}
 
 base = ws2 attr:"base" ws "=" q1:QMo val:type_value q2:QMc {return checkQM(q1,q2,attr,val)}
                      
-restrictionST_content = h1:annotation? h2:simpleType? t:constrFacet* &{return check_restrictionST_facets(t)} {return cleanContent([h1, h2, ...t])}
+restrictionST_content = h1:annotation? h2:simpleType? t:constrFacet* {return cleanContent([h1, h2, ...t])}
 
 
 // ----- <restriction> (simpleContent) -----

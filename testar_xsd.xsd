@@ -9,6 +9,28 @@
     <xs:attributeGroup name="a"></xs:attributeGroup>
     <xs:attribute name="a"></xs:attribute>
     
+    <xs:element name="aaaa">
+        <xs:simpleType>
+            <xs:restriction base="xs:int">
+                <xs:fractionDigits value="0"></xs:fractionDigits>
+                <xs:totalDigits value="1"></xs:totalDigits>
+                <xs:minExclusive value="5"></xs:minExclusive>
+            </xs:restriction>
+        </xs:simpleType>
+    </xs:element>
+    
+    <xs:simpleType name="ex">
+        <xs:restriction base="xs:string">
+            <xs:whiteSpace value="replace"></xs:whiteSpace>
+            <xs:length value="3"></xs:length>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="ex2">
+        <xs:restriction base="ex">
+        </xs:restriction>
+    </xs:simpleType>
+    
     <xs:element name="agds" block=" #all " type="xs:string"></xs:element>
     
     <xs:attributeGroup name="myAttributeGroup">

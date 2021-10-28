@@ -81,6 +81,24 @@ function parseST_Restriction(el, prefix) {
    let type = parseTypeName(attrs.base, prefix)
    let base = parseType(attrs.base, prefix), base_len = base.length
 
+   switch (type) {
+      case "anyURI": case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "language": case "Name": case "NCName": 
+      case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
+         facets = ["enumeration","length","maxLength","minLength","pattern"]; break
+
+      case "boolean": facets = ["pattern"]; break
+
+      case "byte": case "decimal": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger": case "nonPositiveInteger":
+      case "positiveInteger": case "short": case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
+         facets = ["enumeration","fractionDigits","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern","totalDigits"]; break
+
+      case "date": case "dateTime": case "double": case "duration": case "float": case "gDay": case "gMonth": case "gMonthDay": case "gYear": case "gYearMonth": case "time":
+      facets = ["enumeration","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern"]; break
+
+      case "ENTITIES": case "IDREFS": case "NMTOKENS": 
+         facets = ["enumeration","length","maxLength","minLength"]; break
+   }
+
    /* o que faz o simpleType filho numa restriction? */
    el.content.forEach(x => {
       if (["minInclusive","maxInclusive","minExclusive","maxExclusive"].includes(x.element)) {
@@ -98,11 +116,11 @@ function parseST_Restriction(el, prefix) {
 
          // data/hora
          if (datetime_types.includes(type)) {
-            if (type == "dateTime") dsl = [{moustache: "date", args: ['"01-01-1900"']}]
+            if (type == "dateTime") dsl = [{moustache: "date", args: ['"01-01-1950"']}]
             if (type == "date") dsl = [{moustache: "date", args: ['"01-01-1950"', '"YYYY-MM-DD"']}]
             if (type == "time") dsl = [{moustache: "time", args: ['"hh:mm:ss"', "24", false]}]
-            if (type == "gDay") dsl = [{moustache: "integer", args: ["1", "31"]}]
-            if (type == "gMonth") dsl = [{moustache: "integer", args: ["1", "12"]}]
+            if (type == "gDay") dsl = ["---", {moustache: "integer", args: ["1", "31"]}]
+            if (type == "gMonth") dsl = ["--", {moustache: "integer", args: ["1", "12"]}]
             if (type == "gYear") dsl = [{moustache: "integer", args: ["1950", "2010"]}]
             if (type == "gYearMonth") dsl = [{moustache: "integer", args: ["1950", "2010"]}, "-", {moustache: "integer", args: ["1", "12"]}]
             if (type == "gMonthDay") dsl = ["--", {moustache: "integer", args: ["1", "12"]}, "-", {moustache: "integer", args: ["1", "31"]}]
@@ -115,7 +133,7 @@ function parseST_Restriction(el, prefix) {
                case "date":
                   if (x.attrs.value[0] == "-") base[0].args[0] = '"01-01-0000"'
                   else {
-                     let arg = x.attrs.value.substring(0,10).split("-")
+                     let arg = x.attrs.value.split("-")
                      value = `"${arg[2]}-${arg[1]}-${arg[0]}"`
                   }
                   break
@@ -383,8 +401,8 @@ function parseType(type, prefix) {
    if (type == "dateTime") dsl = [{moustache: "date", args: ['"01-01-1950"']}]
    if (type == "date") dsl = [{moustache: "date", args: ['"01-01-1950"', '"YYYY-MM-DD"']}]
    if (type == "time") dsl = [{moustache: "time", args: ['"hh:mm:ss"', "24", false]}]
-   if (type == "gDay") dsl = [{moustache: "integer", args: ["1", "31"]}]
-   if (type == "gMonth") dsl = [{moustache: "integer", args: ["1", "12"]}]
+   if (type == "gDay") dsl = ["---", {moustache: "integer", args: ["1", "31"]}]
+   if (type == "gMonth") dsl = ["--", {moustache: "integer", args: ["1", "12"]}]
    if (type == "gYear") dsl = [{moustache: "integer", args: ["1950", "2010"]}]
    if (type == "gYearMonth") dsl = [{moustache: "integer", args: ["1950", "2010"]}, "-", {moustache: "integer", args: ["1", "12"]}]
    if (type == "gMonthDay") dsl = ["--", {moustache: "integer", args: ["1", "12"]}, "-", {moustache: "integer", args: ["1", "31"]}]
