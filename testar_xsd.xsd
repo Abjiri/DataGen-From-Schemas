@@ -11,18 +11,16 @@
     
     <xs:element name="aaaa">
         <xs:simpleType>
-            <xs:restriction base="xs:int">
-                <xs:fractionDigits value="0"></xs:fractionDigits>
-                <xs:totalDigits value="1"></xs:totalDigits>
-                <xs:minExclusive value="5"></xs:minExclusive>
+            <xs:restriction base="xs:string">
+                <xs:maxLength value="2"></xs:maxLength>
+                <xs:length value="3"></xs:length>
             </xs:restriction>
         </xs:simpleType>
     </xs:element>
     
     <xs:simpleType name="ex">
-        <xs:restriction base="xs:string">
-            <xs:whiteSpace value="replace"></xs:whiteSpace>
-            <xs:length value="3"></xs:length>
+        <xs:restriction base="xs:NMTOKENS">
+            <xs:whiteSpace value="collapse"></xs:whiteSpace>
         </xs:restriction>
     </xs:simpleType>
     

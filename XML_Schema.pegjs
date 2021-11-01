@@ -10,6 +10,190 @@
   let derived_types = ["normalizedString","token","language","NMTOKEN","NMTOKENS","Name","NCName","ID","IDREF","IDREFS","ENTITY","ENTITIES","integer","nonPositiveInteger","negativeInteger","long","int","short","byte","nonNegativeInteger","unsignedLong","unsignedInt","unsignedShort","unsignedByte","positiveInteger"]
   let built_in_types = {primitive_types, derived_types}
 
+  // prefixo definido na declaração da schema
+  let default_prefix = null
+
+  // função para contar o número de dígitos significativos num número
+  let countDigits = num => String(num).replace(/\-|\./g, "").length
+  // função para contar o número de dígitos da parte inteira de um número (positivo)
+  let countIntDigits = num => String(num).replace(/\.\d+/, "").length
+  // função para contar o número de dígitos fracionários de um número
+  let countFracDigits = num => num%1 === 0 ? 0 : String(num).replace(/\-?\d*\./, "").length
+  // função para verificar se o tipo base é um tipo de números inteiros
+  let isBaseInt = base => ["byte","int","integer","long","short","negativeInteger","nonNegativeInteger","nonPositiveInteger","positiveInteger"].includes(base) || base.startsWith("unsigned")
+
+  // array dos tipos embutidos da XML Schema em formato da DSL ({element, attrs, content})
+  let simpleTypes = create_simpleTypes()
+
+  // criar um objeto com todos os tipos embutidos da XML Schema, com a estrutura da DSL {element, attrs, content}
+  function create_simpleTypes() {
+    let obj = {}
+    
+    // colocar os tipos primitivos no objeto
+    for (let i = 0; i < primitive_types.length; i++) {
+      let x = primitive_types[i]
+
+      obj[x] = {facets: [{
+        element: "whiteSpace",
+        attrs: {
+          value: x == "string" ? "preserve" : "collapse",
+          fixed: true
+        },
+        content: []
+      }]}
+
+      if (x == "string") obj[x].facets[0].attrs.fixed = false
+    }
+
+    // colocar os tipo derivados no objeto
+    let derivedTypes = [
+      ["integer", "decimal", [["fractionDigits", 0, true]]],
+      ["nonPositiveInteger", "integer", [["maxInclusive", 0, false]]],
+      ["negativeInteger", "nonPositiveInteger", [["maxInclusive", -1, false]]],
+      ["long", "integer", [["minInclusive", -9223372036854775808, false], ["maxInclusive", 9223372036854775807, false]]],
+      ["int", "long", [["minInclusive", -2147483648, false], ["maxInclusive", 2147483647, false]]],
+      ["short", "int", [["minInclusive", -32768, false], ["maxInclusive", 32767, false]]],
+      ["byte", "short", [["minInclusive", -128, false], ["maxInclusive", 127, false]]],
+      ["nonNegativeInteger", "integer", [["minInclusive", 0, false]]],
+      ["positiveInteger", "nonNegativeInteger", [["minInclusive", 1, false]]],
+      ["unsignedLong", "nonNegativeInteger", [["maxInclusive", 18446744073709551615, false]]],
+      ["unsignedInt", "unsignedLong", [["maxInclusive", 4294967295, false]]],
+      ["unsignedShort", "unsignedInt", [["maxInclusive", 65535, false]]],
+      ["unsignedByte", "unsignedShort", [["maxInclusive", 255, false]]],
+      ["normalizedString", "string", [["whiteSpace", "replace", false]]],
+      ["token", "normalizedString", [["whiteSpace", "collapse", false]]],
+      ["language", "token", [["pattern", "([a-zA-Z]{2}|[iI]-[a-zA-Z]+|[xX]-[a-zA-Z]{1,8})(-[a-zA-Z]{1,8})*", false]]],
+      ["Name", "token", [["pattern", "\i\c*", false]]],
+      ["NCName", "Name", [["pattern", "[\i-[:]][\c-[:]]*", false]]],
+      ["ID", "NCName", []],
+      ["IDREF", "NCName", []],
+      ["ENTITY", "NCName", []],
+      ["NMTOKEN", "token", [["pattern", "\c+", false]]]
+    ]
+    
+    derivedTypes.map(x => {
+      obj[x[0]] = {facets: restrict_simpleType2(x[0], getTypeInfo(`${default_prefix}:${x[1]}`, default_prefix), x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}, content: []}}), obj)}
+    })
+    
+    return obj
+  }
+
+  // name = nome do novo tipo, st_content = conteúdo do novo simpleType
+  function restrict_simpleType(name, st_content) {
+    // se não for uma restriction, não há nada a verificar
+    if (st_content[0].element != "restriction") return st_content
+
+    let base = getTypeInfo(st_content[0].attrs.base, default_prefix) // tipo base
+    let new_content = st_content[0].content // constraining facets do novo tipo
+
+    // se estiver a restringir um tipo embutido, o tipo embutido base vai ser esse mesmo
+    let built_in_base = base.type
+    // caso contrário, vai ser o tipo embutido base do simpleType em questão
+    if (!Object.values(built_in_types).flat().includes(built_in_base)) built_in_base = simpleTypes[built_in_base].built_in_base
+
+    return {facets: restrict_simpleType2(name, base, new_content, simpleTypes), built_in_base}
+  }
+
+  // name = nome do novo tipo, base = nome do tipo base, new_content = facetas do novo tipo, st = simpleTypes
+  function restrict_simpleType2(name, base, new_content, st) {
+    let base_content = JSON.parse(JSON.stringify(st[base.type].facets)) // constraining facets do tipo base
+    let base_els = base_content.map(x => x.element) // nomes das constraining facets do tipo base
+
+    for (let i = 0; i < new_content.length; i++) {
+      let new_facet = new_content[i].element // nome da faceta em questão no tipo novo
+      let new_value = new_content[i].attrs.value // valor da faceta em questão no tipo novo
+
+      // função para invocar a função auxiliar que verifica uma condição de recursividade
+      let aux = arr => arr.reduce((acc,cur) => restrict_simpleType_aux(name, `${base.prefix}:${base.type}`, cur[0], new_facet, base_els, base_content, new_value, cur[1]) && acc, true)
+
+      switch (new_facet) {
+        case "totalDigits": aux([["totalDigits", "inf_eq"]]); break
+        case "fractionDigits": aux([["totalDigits", "inf_eq"], ["fractionDigits", "inf_eq"], ["enumeration", "frac_enum"]]); break
+        case "maxExclusive": aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf_eq"], 
+                                  ["maxInclusive", "inf_eq"], ["minExclusive", "sup"], ["minInclusive", "sup"], ["enumeration", "include"]]); break
+        case "maxInclusive":
+        case "minInclusive": aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf"], 
+                                  ["maxInclusive", "inf_eq"], ["minExclusive", "sup"], ["minInclusive", "sup_eq"], ["enumeration", "include"]]); break
+        case "minExclusive": aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf"], 
+                                  ["maxInclusive", "inf"], ["minExclusive", "sup_eq"], ["minInclusive", "sup_eq"], ["enumeration", "include"]]); break
+        case "pattern": aux([["enumeration", "match_parent"]]); break
+        case "enumeration": aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf"], 
+                                 ["maxInclusive", "inf_eq"], ["minExclusive", "sup"], ["minInclusive", "sup_eq"], ["enumeration", "include"],
+                                 ["pattern", "match_child"], ["length", "len_eq"], ["maxLength", "len_inf_eq"], ["minLength", "len_sup_eq"]]); break
+        case "length": aux([["enumeration", "len_parent_eq"], ["length", "eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
+        case "maxLength":
+        case "minLength": aux([["enumeration", "len_parent_sup_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
+        case "whiteSpace": aux([["whiteSpace", "whiteSpace"]]); break
+      }
+      
+      // atualizar o valor de uma faceta, depois de verificar todas as condições de recursividade
+      if (base_els.includes(new_facet)) {
+        let index = base_content.findIndex(x => x.element == new_facet)
+
+        // patterns em passos de derivação diferentes são ANDed
+        if (new_facet == "pattern") base_content[index].attrs.value = `(?=${base_content[index].attrs.value})(?=${new_value}).*`
+        else base_content[index].attrs.value = new_value
+      }
+      else base_content.push(new_content[i])
+    }
+    
+    return base_content
+  }
+
+  function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, base_content, new_value, cond) {
+    // tipos de mensagens de erro
+    let err_str = {
+      fixed: facet => `o valor para <${facet}> foi fixado a`,
+      compare: (facet, comp) => `deve ser ${comp} ${comp == "=" ? "a" : "que "}o valor de <${facet}> que foi definido como`,
+      length: (facet, inf_sup) => `o seu comprimento deve ser ${inf_sup}= ao valor de <${facet}> que foi definido como`,
+      digits: (base_val, frac) => `o número total de dígitos${frac ? " fracionários" : ""} foi limitado a ${base_val}`,
+      enum: () => `não pertence ao espaço de valores de enumeração do tipo base, '${base}'`,
+      parent_enum: () => `nenhum dos valores do espaço de enumeração do tipo base, '${base}', obedece a essa restrição`,
+      match_child: (facet) => `não obedece ao formato de <${facet}> que foi definido como`,
+      ws: () => `o valor de <whiteSpace> foi definido como`
+    }
+
+    let err = (facet, base_val, new_val, err_type, err_args, end) => 
+      error(`Na definição d${name !== undefined ? `e '${name}'` : "o novo simpleType"}, o valor '${new_val}' da faceta <${facet}> é inválido, porque ${err_str[err_type](...err_args)}${end ? ` '${base_val}' num dos seus tipos ancestrais` : ""}!`)
+
+    if (base_els.includes(base_facet)) {
+      // ir buscar o valor da faceta em questão ao tipo base
+      let index = base_content.findIndex(x => x.element == base_facet)
+      let base_attrs = base_content[index].attrs
+      let base_value = base_attrs.value
+
+      // se a faceta já existir no tipo base, verificar se é fixed lá
+      if (base_facet == new_facet && base_facet != "enumeration") {
+        if (base_attrs.fixed && base_value != new_value) return err(new_facet, base_value, new_value, "fixed", [new_facet], true)
+      }
+
+      let err_args = []
+      switch (cond) {
+        case "eq": if (!(base_value == new_value)) err_args = ["compare", [base_facet, "="], true]; break
+        case "inf": if (!(base_value > new_value)) err_args = ["compare", [base_facet, "<"], true]; break
+        case "inf_eq": if (!(base_value >= new_value)) err_args = ["compare", [base_facet, "<="], true]; break
+        case "sup": if (!(base_value < new_value)) err_args = ["compare", [base_facet, ">"], true]; break
+        case "sup_eq": if (!(base_value <= new_value)) err_args = ["compare", [base_facet, ">="], true]; break
+        case "len_eq": if (!(base_value == new_value.length)) err_args = ["length", [base_facet, ""], true]; break
+        case "len_inf_eq": if (!(base_value >= new_value.length)) err_args = ["length", [base_facet, "<"], true]; break
+        case "len_sup_eq": if (!(base_value <= new_value.length)) err_args = ["length", [base_facet, ">"], true]; break
+        case "frac_enum": if (Math.min(base_value.map(x => countFracDigits(x))) > new_value) err_args = ["parent_enum", [], false]; break
+        case "inf_dig": if (base_value < countDigits(new_value)) err_args = ["digits", [base_value, false], true]; break
+        case "inf_fracDig": if (base_value < countFracDigits(new_value)) err_args = ["digits", [base_value, true], true]; break
+        case "include": if (!base_value.includes(new_value)) err_args = ["enum", [], false]; break
+        case "match_parent": if (!base_value.some(x => new RegExp(new_value).test(x))) err_args = ["parent_enum", [], false]; break
+        case "match_child": if (!new RegExp(base_value).test(new_value)) err_args = ["match_child", [base_facet], true]; break
+        case "len_parent_eq": if (!base_value.some(x => x.length == new_value)) err_args = ["parent_enum", [], false]; break
+        case "len_parent_inf_eq": if (!base_value.some(x => x.length >= new_value)) err_args = ["parent_enum", [], false]; break
+        case "len_parent_sup_eq": if (!base_value.some(x => x.length <= new_value)) err_args = ["parent_enum", [], false]; break
+        case "whiteSpace": if ((base_value == "collapse" && base_value != new_value) || (base_value == "replace" && new_value == "preserve")) err_args = ["ws", [], true]; break
+      }
+
+      if (err_args.length > 0) return err(new_facet, base_value, new_value, ...err_args)
+    }
+    return true
+  }
+
   // verificar se o elemento pai é o <schema>
   const atRoot = () => !schema_depth
   // verificar se não foi definido um prefixo para a schema
@@ -66,7 +250,7 @@
       }
       if (prefix == null || prefix == default_prefix) {
         if (!existsLocalType(type)) return error(`Tem de referenciar um ${error_msg[curr_any_type]} válido!`)
-        if (!curr_el && type === curr_type) return error(`Definições circulares detetadas para o tipo "${type}"! Isto significa que o "${type}" está contido na sua própria hierarquia, o que é um erro.`)
+        if (!curr_el && type === curr_type) return error(`Definições circulares detetadas para o tipo '${type}'! Isto significa que o '${type}' está contido na sua própria hierarquia, o que é um erro.`)
       }
       return true
     }
@@ -74,8 +258,6 @@
 
   // Schema ------------------------------
 
-  // prefixo definido na declaração da schema
-  let default_prefix = null
   // prefixos de namespaces declarados na schema
 	let prefixes = []
   // atributos da schema
@@ -146,9 +328,9 @@
   // validar os atributos de um elemento <any/all/choice/sequence>
   const check_occursAttrs = (arr, el_name) => defaultOccurs(check_repeatedAttrs(arr, getAttrs(arr), el_name))
   // verificar se o novo id é único na schema
-  const validateID = id => !ids.includes(id) ? true : error(`O valor do atributo 'id' deve ser único na schema! Existe mais do que um elemento na schema com o id "${id}"!`)
+  const validateID = id => !ids.includes(id) ? true : error(`O valor do atributo 'id' deve ser único na schema! Existe mais do que um elemento na schema com o id '${id}'!`)
   // verificar se o atributo em questão está presente
-  const check_requiredAttr = (attrs, el_name, attr_name) => attr_name in attrs ? attrs : error(`Um elemento <${el_name}> requer o atributo "${attr_name}"!`)
+  const check_requiredAttr = (attrs, el_name, attr_name) => attr_name in attrs ? attrs : error(`Um elemento <${el_name}> requer o atributo '${attr_name}'!`)
   // se for null, converte para array vazio; senão, remove os nulls do array
   const cleanContent = content => content === null ? [] : content.filter(e => e !== null)
 
@@ -182,20 +364,20 @@
 
   // validar as tags e verificar se o atributo "base" está presente
   function check_requiredBase(el_name, parent_el, prefix, attrs, close) {
-    if (!("base" in attrs)) return error(`O atributo "base" é requirido num elemento <${el_name}> (${parent_el})!`)
+    if (!("base" in attrs)) return error(`O atributo 'base' é requirido num elemento <${el_name}> (${parent_el})!`)
     return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, "attribute", close.content)
   }
   
   // verificar que um elemento <element> não tem o atributo "ref" e um dos elementos filhos mutualmente exclusivos com esse
   function check_elemMutex(attrs, content) {
     if ("ref" in attrs && content.some(x => ["simpleType","complexType","key","keyref","unique"].includes(x.element)))
-      return error(`Se o atributo "ref" está presente num elemento <element>, o seu conteúdo não pode conter nenhum elemento <simpleType>, <complexType>, <key>, <keyref> ou <unique>!`)
+      return error(`Se o atributo 'ref' está presente num elemento <element>, o seu conteúdo não pode conter nenhum elemento <simpleType>, <complexType>, <key>, <keyref> ou <unique>!`)
     return true
   }
 
   // verificar que um elemento <attribute> não tem um elemento filho <simpleType> e um dos atributos mutualmente exclusivos com esse
   function check_attrMutex(attrs, content) {
-    let error_msg = attr => `O atributo "${attr}" só pode estar presente no elemento <attribute> quando o seu conteúdo não contém um elemento <simpleType>!`
+    let error_msg = attr => `O atributo '${attr}' só pode estar presente no elemento <attribute> quando o seu conteúdo não contém um elemento <simpleType>!`
 
     if (content.some(x => x.element === "simpleType")) {
       if ("type" in attrs) return error(error_msg("type"))
@@ -208,7 +390,7 @@
   // verificar que um elemento <attributeGroup> não tem conteúdo se tiver o atributo "ref"
   function check_attrGroupMutex(attrs, content) {
     if ("ref" in attrs && content.some(x => x.element != "annotation"))
-      return error('Se um elemento <attributeGroup> tiver o atributo "ref" especificado, o seu conteúdo só pode ser, no máximo, um elemento <annotation>!')
+      return error("Se um elemento <attributeGroup> tiver o atributo 'ref' especificado, o seu conteúdo só pode ser, no máximo, um elemento <annotation>!")
     return true
   }
 
@@ -219,7 +401,7 @@
 
     // verificar se há nomes repetidos no array
     let duplicates = names.filter((item, index) => names.indexOf(item) !== index)
-    if (duplicates.length > 0) return error(`Os elementos <${el_name}> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <${el_name}> com o nome "${duplicates[0]}".`)
+    if (duplicates.length > 0) return error(`Os elementos <${el_name}> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <${el_name}> com o nome '${duplicates[0]}'.`)
     return true
   }
 
@@ -238,16 +420,16 @@
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
-      if ("ref" in attrs) return error('O atributo "ref" é proibido num elemento <element> de schema!')
-      if ("maxOccurs" in attrs) return error('O atributo "maxOccurs" é proibido num elemento <element> de schema!')
-      if ("minOccurs" in attrs) return error('O atributo "minOccurs" é proibido num elemento <element> de schema!')
-      if (!("name" in attrs)) return error('O atributo "name" é requirido num elemento <element> de schema!')
+      if ("ref" in attrs) return error("O atributo 'ref' é proibido num elemento <element> de schema!")
+      if ("maxOccurs" in attrs) return error("O atributo 'maxOccurs' é proibido num elemento <element> de schema!")
+      if ("minOccurs" in attrs) return error("O atributo 'minOccurs' é proibido num elemento <element> de schema!")
+      if (!("name" in attrs)) return error("O atributo 'name' é requirido num elemento <element> de schema!")
     }
     // elementos aninhados
-    else if ("final" in attrs) return error('O atributo "final" é proibido num elemento <element> local!')
+    else if ("final" in attrs) return error("O atributo 'final' é proibido num elemento <element> local!")
 
     // mensagem de erro de atributos mutuamente exclusivos
-    let mutexc_error = (a1,a2) => error(`Em elementos <element>, os atributos "${a1}" e "${a2}" são mutuamente exclusivos!`)
+    let mutexc_error = (a1,a2) => error(`Em elementos <element>, os atributos '${a1}' e '${a2}' são mutuamente exclusivos!`)
     // atributos mutuamente exclusivos
     if ("default" in attrs && "fixed" in attrs) return mutexc_error("default","fixed")
     if ("ref" in attrs && "block" in attrs) return mutexc_error("ref","block")
@@ -260,7 +442,7 @@
 
     // maxOccurs não pode ser inferior a minOccurs
     if ("maxOccurs" in attrs && "minOccurs" in attrs && attrs.maxOccurs < attrs.minOccurs)
-      return error('A propriedade "maxOccurs" do elemento não pode ser inferior à "minOccurs"!')
+      return error("A propriedade 'maxOccurs' do elemento não pode ser inferior à 'minOccurs'!")
 
     // atributos com valores predefinidos
     if (!atRoot()) attrs = defaultOccurs(attrs)
@@ -276,8 +458,8 @@
     let attrs = check_repeatedAttrs(arr, getAttrs(arr), "keyref")
 
     // atributos requiridos
-    if (!("name" in attrs)) return error(`No elemento <keyref> é requirido o atributo "name"!`)
-    if (!("refer" in attrs) && !("system" in attrs)) return error(`No elemento <keyref> é requirido o atributo "refer"!`)
+    if (!("name" in attrs)) return error(`No elemento <keyref> é requirido o atributo 'name'!`)
+    if (!("refer" in attrs) && !("system" in attrs)) return error(`No elemento <keyref> é requirido o atributo 'refer'!`)
 
     return attrs
   }
@@ -288,18 +470,18 @@
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
-      if ("ref" in attrs) return error(`O atributo "ref" é proibido num elemento <${el_name}> de schema!`)
-      if (!("name" in attrs)) return error(`O atributo "name" é requirido num elemento <${el_name}> de schema!`)
+      if ("ref" in attrs) return error(`O atributo 'ref' é proibido num elemento <${el_name}> de schema!`)
+      if (!("name" in attrs)) return error(`O atributo 'name' é requirido num elemento <${el_name}> de schema!`)
     }
     else {
       if (el_name == "attributeGroup") {
-        if (!("ref" in attrs)) return error(`O atributo "ref" é requirido num elemento <${el_name}> local!`)
-        if ("name" in attrs) return error(`O atributo "name" é proibido num elemento <${el_name}> local!`)
+        if (!("ref" in attrs)) return error(`O atributo 'ref' é requirido num elemento <${el_name}> local!`)
+        if ("name" in attrs) return error(`O atributo 'name' é proibido num elemento <${el_name}> local!`)
       }
     }
 
     // mensagem de erro de atributos mutuamente exclusivos
-    let mutexc_error = (a1,a2) => error(`Em elementos <${el_name}>, os atributos "${a1}" e "${a2}" são mutuamente exclusivos!`)
+    let mutexc_error = (a1,a2) => error(`Em elementos <${el_name}>, os atributos '${a1}' e '${a2}' são mutuamente exclusivos!`)
     // atributos mutuamente exclusivos
     if ("name" in attrs && "ref" in attrs) return mutexc_error("name","ref")
 
@@ -321,12 +503,12 @@
 
     // restrições relativas à profundidade dos elementos
     if (atRoot()) { // elementos da schema
-      if ("ref" in attrs) return error('O atributo "ref" é proibido num elemento <group> de schema!')
-      if (!("name" in attrs)) return error('O atributo "name" é requirido num elemento <group> de schema!')
+      if ("ref" in attrs) return error("O atributo 'ref' é proibido num elemento <group> de schema!")
+      if (!("name" in attrs)) return error("O atributo 'name' é requirido num elemento <group> de schema!")
     }
     else {
-      if (!("ref" in attrs)) return error('O atributo "ref" é requirido num elemento <group> local!')
-      if ("name" in attrs) return error('O atributo "name" é proibido num elemento <group> local!')
+      if (!("ref" in attrs)) return error("O atributo 'ref' é requirido num elemento <group> local!")
+      if ("name" in attrs) return error("O atributo 'name' é proibido num elemento <group> local!")
     }
 
     // atributos com valores predefinidos
@@ -338,8 +520,8 @@
     let attrs = check_repeatedAttrs(arr, getAttrs(arr), "notation")
 
     // atributos requiridos
-    if (!("name" in attrs)) return error(`No elemento <notation> é requirido o atributo "name"!`)
-    if (!("public" in attrs) && !("system" in attrs)) return error(`No elemento <notation> é requirido pelo menos um dos atributos "public" e "system"!`)
+    if (!("name" in attrs)) return error(`No elemento <notation> é requirido o atributo 'name'!`)
+    if (!("public" in attrs) && !("system" in attrs)) return error(`No elemento <notation> é requirido pelo menos um dos atributos 'public' e 'system'!`)
 
     return attrs
   }
@@ -353,7 +535,7 @@
   // validar o valor do atributo "namespace" de um elemento <any/anyAttribute>, se não for ##any nem ##other
   function check_namespace(l) {
     let arr = l.split(/[ \t\n\r]+/)
-    let error_msg = 'O valor do atributo "namespace" deve corresponder a ((##any | ##other) | Lista de (referência_URI | (##targetNamespace | ##local)))!'
+    let error_msg = "O valor do atributo 'namespace' deve corresponder a ((##any | ##other) | Lista de (referência_URI | (##targetNamespace | ##local)))!"
 
     // verificar que não tem mais do que 1 URI
     if (arr.filter(x => x != "##local" && x != "##targetNamespace").length > 1) return error(error_msg)
@@ -379,10 +561,10 @@
                                   (any_type == "C" && local_types.complexType.includes(type))
   // validar um elemento <union> - verificar que referencia algum tipo
   const validateUnion = (attrs,content) => ("memberTypes" in attrs ? attrs.memberTypes.length : 0) + content.filter(e => e.element === "simpleType").length > 0 ? true : 
-                                           error(`Um elemento <union> deve ter o atributo "memberTypes" não vazio e/ou pelo menos um elemento filho <simpleType>!`)
+                                           error(`Um elemento <union> deve ter o atributo 'memberTypes' não vazio e/ou pelo menos um elemento filho <simpleType>!`)
   // validar o atributo base de um elemento <restriction> (simpleContent)
   const validateBaseSC = base => (!local_types.complexType.includes(base) || local_types.simpleContent.includes(base)) ? true :
-                                  error('Num elemento <restriction> (simpleContent), para o atributo "base" poder referenciar um <complexType>, o tipo desse elemento deve ser um tipo embutido, <simpleType> ou <simpleContent>!')
+                                  error("Num elemento <restriction> (simpleContent), para o atributo 'base' poder referenciar um <complexType>, o tipo desse elemento deve ser um tipo embutido, <simpleType> ou <simpleContent>!")
 
 
   // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes respetiva caso seja único
@@ -413,7 +595,7 @@
   // verificar que um elemento <complexType> não tem o atributo "mixed" e um elemento filho simpleContent
   function check_complexTypeMutex(attrs, content) {
     if (attrs.mixed && content.some(x => x.element == "simpleContent"))
-      return error('Se um elemento <complexType> tiver um elemento filho <simpleContent>, não é permitido o atributo "mixed"!')
+      return error("Se um elemento <complexType> tiver um elemento filho <simpleContent>, não é permitido o atributo 'mixed'!")
 
     if (content.filter(x => ["simpleContent","complexContent","group","sequence","choice","all"].includes(x.element)).length > 1)
       return error('Um elemento <complexType> só pode conter apenas um dos seguintes elementos: <simpleContent>, <complexContent>, <group>, <sequence>, <choice> ou <all>!')
@@ -425,9 +607,9 @@
   // validar o tipo de um elemento de derivação - tem de ter ou o atributo de referência ou um elemento filho <simpleType>
   function check_derivingType(elem, attr, attrs, content) {
     if (attr in attrs && content.some(x => x.element === "simpleType"))
-      return error(`A utilização do elemento filho <simpleType> e do atributo "${attr}" é mutualmente exclusiva no elemento <${elem}>!`)
+      return error(`A utilização do elemento filho <simpleType> e do atributo '${attr}' é mutualmente exclusiva no elemento <${elem}>!`)
     if (!(attr in attrs) && !content.length)
-      return error(`Um elemento <${elem}> deve ter o atributo "${attr}" ou um elemento filho <simpleType> para indicar o tipo a derivar!`)
+      return error(`Um elemento <${elem}> deve ter o atributo '${attr}' ou um elemento filho <simpleType> para indicar o tipo a derivar!`)
     return true
   }
 
@@ -439,22 +621,22 @@
 
     if ("value" in attrs) {
       if (name == "whiteSpace") {
-        if (!["preserve","replace","collapse"].includes(attrs.value)) return error(`O valor do atributo "value" do elemento <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
+        if (!["preserve","replace","collapse"].includes(attrs.value)) return error(`O valor do atributo 'value' do elemento <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
       }
       else if (name == "totalDigits") {
-        if (!/\+?[1-9]\d*/.test(attrs.value)) return error(`O valor do atributo "totalDigits" deve ser um inteiro positivo!`)
+        if (!/\+?[1-9]\d*/.test(attrs.value)) return error(`O valor do atributo 'totalDigits' deve ser um inteiro positivo!`)
         attrs.value = parseInt(attrs.value)
       } 
       else if (["fractionDigits","length","minLength","maxLength"].includes(name)) {
-        if (!/\+?\d+/.test(attrs.value)) return error(`O valor do atributo "value" do elemento <${name}> deve ser um inteiro não negativo!`)
+        if (!/\+?\d+/.test(attrs.value)) return error(`O valor do atributo 'value' do elemento <${name}> deve ser um inteiro não negativo!`)
         attrs.value = parseInt(attrs.value)
       }
     }
 
     // restrições relativas à existência dos atributos
-    if (!("value" in attrs)) return error(`No elemento <${name}> é requirido o atributo "value"!`)
+    if (!("value" in attrs)) return error(`No elemento <${name}> é requirido o atributo 'value'!`)
     if (name == "pattern" || name == "enumeration") {
-      if ("fixed" in attrs) return error(`O elemento <${name}> não aceita o atributo "fixed"!`)
+      if ("fixed" in attrs) return error(`O elemento <${name}> não aceita o atributo 'fixed'!`)
     }
     else if (!("fixed" in attrs)) attrs.fixed = false
 
@@ -485,7 +667,10 @@
     if (content_els[0] == "simpleType") content_els.shift()
 
     // criar array com o nome dos constraining facets válidos para o tipo em questão
-    let facets
+    let facets = []
+    // se não for um simpleType embutido, vai buscar a base embutida dele para saber que facetas se podem usar
+    if (!Object.values(built_in_types).flat().includes(type.type)) type.type = simpleTypes[type.type].built_in_base
+
     switch (type.type) {
       case "anyURI": case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "language": case "Name": case "NCName": 
       case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
@@ -509,7 +694,7 @@
 
     // verificar se facets possui todos os elementos de content_els para ver se há algum constraining facet inválido no tipo em questão
     if (!content_els.every(v => facets.includes(v)))
-      return error(`O tipo "${type.type}" só permite os elementos de restrição <${facets.join(">, <")}>!`)
+      return error(`O tipo '${type.type}' só permite os elementos de restrição <${facets.join(">, <")}>!`)
 
     // verificar se o atributo "value" pertence ao espaço léxico do tipo base
     for (let i = 0; i < content.length; i++) {
@@ -522,7 +707,7 @@
 
   // verificar se o valor pertence ao espaço léxico do tipo em que se baseia (por regex)
   function check_constrFacetBase_aux(base, type, value) {
-    let error_msg = `"${value}" não é um valor válido para o tipo "${base}"!`
+    let error_msg = `'${value}' não é um valor válido para o tipo '${base}'!`
 
     // tipo built_in
     if (type.built_in) {
@@ -651,8 +836,9 @@
 
   // validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
   function check_restrictionST_facets(el_name, base, content) {
-    // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
     let type = getTypeInfo(base, default_prefix)
+
+    // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
     content = check_constrFacetBase(base, type, content)
 
     let f = {pattern: [], enumeration: []} // objeto com os pares chave-valor
@@ -664,7 +850,7 @@
       // só os atributos "pattern" e "enumeration" é que podem aparecer várias vezes
       if (key == "pattern" || key == "enumeration") f[key].push(value)
       else {
-        if (key in f) return error(`O elemento "${key}" só pode ser definido uma vez em cada elemento <${el_name}>!`)
+        if (key in f) return error(`O elemento '${key}' só pode ser definido uma vez em cada elemento <${el_name}>!`)
         else f[key] = value
       }
     }
@@ -672,25 +858,16 @@
     // se não houver elementos "pattern" ou "enumeration", apagar essas chaves do objeto
     if (!f.enumeration.length) delete f.enumeration
     if (!f.pattern.length) delete f.pattern
-    else f.pattern = new RegExp(f.pattern.map(x => '('+x+')').join("|")) // se houver vários patterns no mesmo passo de derivação, são ORed juntos
+    else f.pattern = f.pattern.map(x => '('+x+')').join("|") // se houver vários patterns no mesmo passo de derivação, são ORed juntos
     
     let err1 = (a1,a2) => error(`Os atributos <${a1}> e <${a2}> são mutuamente exclusivos no mesmo passo de derivação!`)
     let err2 = (a1,a2,eq,int) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor do elemento <${a1}> deve ser inferior${eq ? " ou igual" : ""} ao do <${a2}>${int ? " - 1" : ""}!`)
-    let err3 = (el,val,lim,ord,eq) => error(`O valor ${val} do elemento <enumeration> é ${ord}erior${eq ? " ou igual" : ""} a ${lim}, o que contradiz o elemento <${el}>!`)
-    let err4 = (a1,a2,dig,val) => error(`O valor "${val}" do elemento <${a1}> só permite valores com mais de ${dig} dígitos, o que contradiz o elemento <${a2}>!`)
-    let err5 = (el,dig,val,frac) => error(`O valor "${val}" do elemento <enumeration> tem mais do que ${dig} dígitos${frac ? " fracionários" : ""}, o que contradiz o elemento <${el}>!`)
-    let err6 = (val) => error(`O valor "${val}" do elemento <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern>!`)
-    let err7 = (el,val,len,or) => error(`O valor "${val} do elemento <enumeration> não tem comprimento igual${or==0 ? "" : ` ou ${or==1 ? "sup" : "inf"}erior`} a ${len}, o que contradiz o elemento <${el}>!`)
+    let err3 = (el,val,lim,ord,eq) => error(`O valor '${val}' do elemento <enumeration> é ${ord}erior${eq ? " ou igual" : ""} a ${lim}, o que contradiz o elemento <${el}>!`)
+    let err4 = (a1,a2,dig,val) => error(`O valor '${val}' do elemento <${a1}> só permite valores com mais de ${dig} dígitos, o que contradiz o elemento <${a2}>!`)
+    let err5 = (el,dig,val,frac) => error(`O valor '${val}' do elemento <enumeration> tem mais do que ${dig} dígitos${frac ? " fracionários" : ""}, o que contradiz o elemento <${el}>!`)
+    let err6 = (val) => error(`O valor '${val}' do elemento <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern>!`)
+    let err7 = (el,val,len,or) => error(`O valor '${val}' do elemento <enumeration> não tem comprimento igual${or==0 ? "" : ` ou ${or==1 ? "sup" : "inf"}erior`} a ${len}, o que contradiz o elemento <${el}>!`)
     let err8 = (el) => error(`É um erro o tipo base não ter um elemento filho <${el}> se a restrição atual o tem, e a restrição atual ou o tipo base têm um elemento filho <length>!`)
-
-    // função para contar o número de dígitos significativos num número
-    let countDigits = num => String(num).replace(/\-|\./g, "").length
-    // função para contar o número de dígitos da parte inteira de um número (positivo)
-    let countIntDigits = num => String(num).replace(/\.\d+/, "").length
-    // função para contar o número de dígitos fracionários de um número
-    let countFracDigits = num => num%1 === 0 ? 0 : String(num).replace(/\-?\d*\./, "").length
-    // função para verificar se o tipo base é um tipo de números inteiros
-    let isBaseInt = base => ["byte","int","integer","long","short","negativeInteger","nonNegativeInteger","nonPositiveInteger","positiveInteger"].includes(base) || base.startsWith("unsigned")
  
     // atributos mutuamente exclusivos
     if ("maxInclusive" in f && "maxExclusive" in f) return err1("maxInclusive", "maxExclusive")
@@ -707,7 +884,7 @@
         if ("maxInclusive" in f && f.enumeration[i] > f.maxInclusive) return err3("maxInclusive", f.enumeration[i], f.maxInclusive, "sup", false)
         if ("minExclusive" in f && f.enumeration[i] <= f.minExclusive) return err3("minExclusive", f.enumeration[i], f.minExclusive, "inf", true)
         if ("minInclusive" in f && f.enumeration[i] < f.minInclusive) return err3("minInclusive", f.enumeration[i], f.minInclusive, "inf", false)
-        if ("pattern" in f && !f.pattern.test(f.enumeration[i])) return err6(f.enumeration[i])
+        if ("pattern" in f && !new RegExp(f.pattern).test(f.enumeration[i])) return err6(f.enumeration[i])
         if ("length" in f && f.enumeration[i].length != f.length) return err7("length", f.enumeration[i], f.length, 0)
         if ("maxLength" in f && f.enumeration[i].length > f.maxLength) return err7("maxLength", f.enumeration[i], f.length, -1)
         if ("minLength" in f && f.enumeration[i].length < f.minLength) return err7("minLength", f.enumeration[i], f.length, 1)
@@ -946,8 +1123,12 @@ any_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs / any_namespace / proc
 // ----- <simpleType> -----
 
 simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:simpleType_attrs ws (openEl {type_depth++}) ws content:simpleType_content close_el:close_XSD_el
-             &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
-             {if (!--type_depth) current_type = null; return {element: el_name, attrs, content}}
+             &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} {
+  if (!--type_depth) current_type = null
+  content = restrict_simpleType(attrs.name, content)
+  if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(content))
+  return {element: el_name, attrs, content: content.facets}
+}
 
 simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* {return check_localTypeAttrs(el, "simpleType")}
 
