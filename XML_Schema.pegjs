@@ -5,11 +5,6 @@
 
   // queue para invocações de funções de validação de referências na schema (refs e types) - para os elementos referenciados não terem de aparecer antes das referências
   let queue = []
-  // tipos embutidos da XML Schema
-  let primitive_types = ["string","boolean","decimal","float","double","duration","dateTime","time","date","gYearMonth","gYear","gMonthDay","gDay","gMonth","hexBinary","base64Binary","anyURI","QName","NOTATION"]
-  let derived_types = ["normalizedString","token","language","NMTOKEN","NMTOKENS","Name","NCName","ID","IDREF","IDREFS","ENTITY","ENTITIES","integer","nonPositiveInteger","negativeInteger","long","int","short","byte","nonNegativeInteger","unsignedLong","unsignedInt","unsignedShort","unsignedByte","positiveInteger"]
-  let built_in_types = {primitive_types, derived_types}
-
   // prefixo definido na declaração da schema
   let default_prefix = null
 
@@ -22,12 +17,21 @@
   // função para verificar se o tipo base é um tipo de números inteiros
   let isBaseInt = base => ["byte","int","integer","long","short","negativeInteger","nonNegativeInteger","nonPositiveInteger","positiveInteger"].includes(base) || base.startsWith("unsigned")
 
+  // criar array com os nomes do tipos embutidos da XML Schema
+  const built_in_types = () => {
+    let types = []
+    for (let p in simpleTypes) if (!("built_in_base" in simpleTypes[p])) types.push(p)
+    return types
+  }
+
   // array dos tipos embutidos da XML Schema em formato da DSL ({element, attrs, content})
   let simpleTypes = create_simpleTypes()
 
   // criar um objeto com todos os tipos embutidos da XML Schema, com a estrutura da DSL {element, attrs, content}
   function create_simpleTypes() {
     let obj = {}
+    
+    let primitive_types = ["string","boolean","decimal","float","double","duration","dateTime","time","date","gYearMonth","gYear","gMonthDay","gDay","gMonth","hexBinary","base64Binary","anyURI","QName","NOTATION"]
     
     // colocar os tipos primitivos no objeto
     for (let i = 0; i < primitive_types.length; i++) {
@@ -72,7 +76,7 @@
     ]
     
     derivedTypes.map(x => {
-      obj[x[0]] = {facets: restrict_simpleType2(x[0], getTypeInfo(`${default_prefix}:${x[1]}`, default_prefix), x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}, content: []}}), obj)}
+      obj[x[0]] = {facets: restrict_simpleType2(x[0], {type: x[1], prefix: default_prefix}, x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}, content: []}}), obj)}
     })
     
     return obj
@@ -89,7 +93,7 @@
     // se estiver a restringir um tipo embutido, o tipo embutido base vai ser esse mesmo
     let built_in_base = base.type
     // caso contrário, vai ser o tipo embutido base do simpleType em questão
-    if (!Object.values(built_in_types).flat().includes(built_in_base)) built_in_base = simpleTypes[built_in_base].built_in_base
+    if (!built_in_types().includes(built_in_base)) built_in_base = simpleTypes[built_in_base].built_in_base
 
     return {facets: restrict_simpleType2(name, base, new_content, simpleTypes), built_in_base}
   }
@@ -244,7 +248,7 @@
         C: "complexType"
       }
         
-      if (curr_any_type != "C" && Object.values(built_in_types).flat().includes(type)) {
+      if (curr_any_type != "C" && built_in_types().includes(type)) {
         return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
                                                         ${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
       }
@@ -320,8 +324,8 @@
   let names = {attribute: [], attributeGroup: [], element: [], elem_constraint: [], group: [], notation: []}
   // atributos "id" de elementos da schema - têm de ser únicos
   let ids = []
-  // boleanos para saber se está a ser processado um <element> (para a função validationQueue.type) ou um <redefine>
-  let curr = {element: false, redefine: false}
+  // boleanos para saber se está a ser processado um <element> (para a função validationQueue.type), um <group> ou um <redefine>
+  let curr = {element: false, group: false, redefine: false}
 
   // validar um elemento <element/attribute> básico - verificar que tem os atributos essenciais
   const validateLocalEl = attrs => "ref" in attrs || "name" in attrs
@@ -389,6 +393,8 @@
 
   // verificar que um elemento <attributeGroup> não tem conteúdo se tiver o atributo "ref"
   function check_attrGroupMutex(attrs, content) {
+    if (!atRoot() && content.length > 0) return error("Os elementos <attributeGroup> devem ser definidos globalmente e referenciados dentro de outros elementos!")
+
     if ("ref" in attrs && content.some(x => x.element != "annotation"))
       return error("Se um elemento <attributeGroup> tiver o atributo 'ref' especificado, o seu conteúdo só pode ser, no máximo, um elemento <annotation>!")
     return true
@@ -407,10 +413,13 @@
 
   // adicionar os valores default dos atributos "max/minOccurs"
   function defaultOccurs(attrs) {
-    if (!("maxOccurs" in attrs)) attrs.maxOccurs = ("minOccurs" in attrs && attrs.minOccurs > 0) ? attrs.minOccurs : 1
-    else if (attrs.maxOccurs == "unbounded") attrs.maxOccurs = ("minOccurs" in attrs ? attrs.minOccurs : 0) + 10 // se o maxOccurs for unbounded, assume-se um teto de minOccurs+10
+    // os elementos dentro de um group não podem possuir estes atributos, logo não colocar por default
+    if (!curr.group) {
+      if (!("maxOccurs" in attrs)) attrs.maxOccurs = ("minOccurs" in attrs && attrs.minOccurs > 0) ? attrs.minOccurs : 1
+      else if (attrs.maxOccurs == "unbounded") attrs.maxOccurs = ("minOccurs" in attrs ? attrs.minOccurs : 0) + 10 // se o maxOccurs for unbounded, assume-se um teto de minOccurs+10
 
-    if (!("minOccurs" in attrs)) attrs.minOccurs = !attrs.maxOccurs ? 0 : 1
+      if (!("minOccurs" in attrs)) attrs.minOccurs = !attrs.maxOccurs ? 0 : 1
+    }
     return attrs
   }
 
@@ -604,6 +613,15 @@
     return true
   }
 
+  // verificar que o filho de um <group> não tem os atributos 'max/minOccurs'
+  function check_groupContent(content) {
+    if (!atRoot() && content.length > 0) return error("Os elementos <group> devem ser definidos globalmente e referenciados dentro de outros elementos!")
+
+    if (content.some(x => "maxOccurs" in x.attrs || "minOccurs" in x.attrs))
+      return error(`O elemento filho de um <group> não podem possuir os atributos 'maxOccurs' ou 'minOccurs'! Só o elemento <group> em si.`)
+    return true
+  }
+
   // validar o tipo de um elemento de derivação - tem de ter ou o atributo de referência ou um elemento filho <simpleType>
   function check_derivingType(elem, attr, attrs, content) {
     if (attr in attrs && content.some(x => x.element === "simpleType"))
@@ -645,7 +663,7 @@
 
   // determinar se o tipo é built_in ou não e se é desta schema ou não (a este ponto, já foi validado)
   function getTypeInfo(type, prefix) {
-    let builtin_types = Object.values(built_in_types).flat()
+    let builtin_types = built_in_types()
 
     if (type.includes(':')) {
       let split = type.split(':')
@@ -669,7 +687,7 @@
     // criar array com o nome dos constraining facets válidos para o tipo em questão
     let facets = []
     // se não for um simpleType embutido, vai buscar a base embutida dele para saber que facetas se podem usar
-    if (!Object.values(built_in_types).flat().includes(type.type)) type.type = simpleTypes[type.type].built_in_base
+    if (!built_in_types().includes(type.type)) type.type = simpleTypes[type.type].built_in_base
 
     switch (type.type) {
       case "anyURI": case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "language": case "Name": case "NCName": 
@@ -1351,10 +1369,10 @@ choiceOrSeq_content = c:(annotation? (element / choiceOrSequence / group / any)*
 
 group = prefix:open_XSD_el el_name:"group" attrs:group_attrs ws 
         close:(merged_close / openEl content:group_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-        &{return check_elTags(el_name, prefix, close)}
-        {return {element: el_name, attrs, content: close.content}}
+        &{return check_elTags(el_name, prefix, close) && check_groupContent(close.content)}
+        {curr.group = false; return {element: el_name, attrs, content: close.content}}
 
-group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)* {return check_groupAttrs(el)}
+group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)* {let attrs = check_groupAttrs(el); curr.group = true; return attrs}
 
 group_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc           &{return validateName(val,"group")} {return checkQM(q1,q2,attr,val)}
 group_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc {queue.push({attr: "ref", args: [val, "group"]}); return checkQM(q1,q2,attr,val)}
