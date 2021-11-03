@@ -37,7 +37,7 @@
     for (let i = 0; i < primitive_types.length; i++) {
       let x = primitive_types[i]
 
-      obj[x] = {facets: [{
+      obj[x] = {content: [{
         element: "whiteSpace",
         attrs: {
           value: x == "string" ? "preserve" : "collapse",
@@ -46,7 +46,7 @@
         content: []
       }]}
 
-      if (x == "string") obj[x].facets[0].attrs.fixed = false
+      if (x == "string") obj[x].content[0].attrs.fixed = false
     }
 
     // colocar os tipo derivados no objeto
@@ -76,7 +76,7 @@
     ]
     
     derivedTypes.map(x => {
-      obj[x[0]] = {facets: restrict_simpleType2(x[0], {type: x[1], prefix: default_prefix}, x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}, content: []}}), obj)}
+      obj[x[0]] = {content: restrict_simpleType2(x[0], {type: x[1], prefix: default_prefix}, x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}, content: []}}), obj)}
     })
     
     return obj
@@ -90,12 +90,12 @@
     let type = getTypeInfo(st_content[0].attrs.base) // tipo base
     let new_content = st_content[0].content // constraining facets do novo tipo
 
-    return {facets: restrict_simpleType2(name, type, new_content, simpleTypes), built_in_base: type.base}
+    return {built_in_base: type.base, content: restrict_simpleType2(name, type, new_content, simpleTypes)}
   }
 
   // name = nome do novo tipo, base = nome do tipo base, new_content = facetas do novo tipo, st = simpleTypes
   function restrict_simpleType2(name, base, new_content, st) {
-    let base_content = JSON.parse(JSON.stringify(st[base.type].facets)) // constraining facets do tipo base
+    let base_content = JSON.parse(JSON.stringify(st[base.type].content)) // constraining facets do tipo base
     let base_els = base_content.map(x => x.element) // nomes das constraining facets do tipo base
 
     for (let i = 0; i < new_content.length; i++) {
@@ -133,7 +133,7 @@
         let index = base_content.findIndex(x => x.element == new_facet)
 
         // patterns em passos de derivação diferentes são ANDed
-        if (new_facet == "pattern") base_content[index].attrs.value = `(?=${base_content[index].attrs.value})(?=${new_value}).*`
+        if (new_facet == "pattern") base_content[index].attrs.value = `^(?=${base_content[index].attrs.value})(?=${new_value}).*$`
         else base_content[index].attrs.value = new_value
       }
       else base_content.push(new_content[i])
@@ -876,16 +876,16 @@
     // se não houver elementos "pattern" ou "enumeration", apagar essas chaves do objeto
     if (!f.enumeration.length) delete f.enumeration
     if (!f.pattern.length) delete f.pattern
-    else f.pattern = f.pattern.map(x => '('+x+')').join("|") // se houver vários patterns no mesmo passo de derivação, são ORed juntos
+    else f.pattern = f.pattern.map(x => '^('+x+')$').join("|") // se houver vários patterns no mesmo passo de derivação, são ORed juntos
     
-    let err1 = (a1,a2) => error(`Os atributos <${a1}> e <${a2}> são mutuamente exclusivos no mesmo passo de derivação!`)
-    let err2 = (a1,a2,eq,int) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor do elemento <${a1}> deve ser inferior${eq ? " ou igual" : ""} ao do <${a2}>${int ? " - 1" : ""}!`)
-    let err3 = (el,val,lim,ord,eq) => error(`O valor '${val}' do elemento <enumeration> é ${ord}erior${eq ? " ou igual" : ""} a ${lim}, o que contradiz o elemento <${el}>!`)
+    let err1 = (a1,a2) => error(`As facetas <${a1}> e <${a2}> são mutuamente exclusivas no mesmo passo de derivação!`)
+    let err2 = (a1,a2,eq,int) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor do elemento <${a1}> deve ser <${eq} ao do <${a2}>${int ? " - 1" : ""}!`)
+    let err3 = (el,val,lim,comp) => error(`O valor '${val}' do elemento <enumeration> é ${comp} a ${lim}, o que contradiz o elemento <${el}>!`)
     let err4 = (a1,a2,dig,val) => error(`O valor '${val}' do elemento <${a1}> só permite valores com mais de ${dig} dígitos, o que contradiz o elemento <${a2}>!`)
     let err5 = (el,dig,val,frac) => error(`O valor '${val}' do elemento <enumeration> tem mais do que ${dig} dígitos${frac ? " fracionários" : ""}, o que contradiz o elemento <${el}>!`)
-    let err6 = (val) => error(`O valor '${val}' do elemento <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern>!`)
-    let err7 = (el,val,len,or) => error(`O valor '${val}' do elemento <enumeration> não tem comprimento igual${or==0 ? "" : ` ou ${or==1 ? "sup" : "inf"}erior`} a ${len}, o que contradiz o elemento <${el}>!`)
-    let err8 = (el) => error(`É um erro o tipo base não ter um elemento filho <${el}> se a restrição atual o tem, e a restrição atual ou o tipo base têm um elemento filho <length>!`)
+    let err6 = (val) => error(`O valor '${val}' do elemento <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern> no mesmo passo de derivação!`)
+    let err7 = (el,val,len,comp) => error(`O valor '${val}' do elemento <enumeration> não tem comprimento ${comp} ${len}, o que contradiz o elemento <${el}>!`)
+    let err8 = (el) => error(`É um erro o tipo base não ter a faceta <${el}> se a restrição atual o tem, e a restrição atual ou o tipo base têm a faceta <length>!`)
  
     // atributos mutuamente exclusivos
     if ("maxInclusive" in f && "maxExclusive" in f) return err1("maxInclusive", "maxExclusive")
@@ -898,41 +898,40 @@
       for (let i = 0; i < f.enumeration.length; i++) {
         if ("totalDigits" in f && countDigits(f.enumeration[i]) > f.totalDigits) return err5("totalDigits", f.totalDigits, f.enumeration[i], false)
         if ("fractionDigits" in f && countFracDigits(f.enumeration[i]) > f.fractionDigits) return err5("fractionDigits", f.fractionDigits, f.enumeration[i], true)
-        if ("maxExclusive" in f && f.enumeration[i] >= f.maxExclusive) return err3("maxExclusive", f.enumeration[i], f.maxExclusive, "sup", true)
-        if ("maxInclusive" in f && f.enumeration[i] > f.maxInclusive) return err3("maxInclusive", f.enumeration[i], f.maxInclusive, "sup", false)
-        if ("minExclusive" in f && f.enumeration[i] <= f.minExclusive) return err3("minExclusive", f.enumeration[i], f.minExclusive, "inf", true)
-        if ("minInclusive" in f && f.enumeration[i] < f.minInclusive) return err3("minInclusive", f.enumeration[i], f.minInclusive, "inf", false)
+        if ("maxExclusive" in f && f.enumeration[i] >= f.maxExclusive) return err3("maxExclusive", f.enumeration[i], f.maxExclusive, ">=")
+        if ("maxInclusive" in f && f.enumeration[i] > f.maxInclusive) return err3("maxInclusive", f.enumeration[i], f.maxInclusive, ">")
+        if ("minExclusive" in f && f.enumeration[i] <= f.minExclusive) return err3("minExclusive", f.enumeration[i], f.minExclusive, "<=")
+        if ("minInclusive" in f && f.enumeration[i] < f.minInclusive) return err3("minInclusive", f.enumeration[i], f.minInclusive, "<")
         if ("pattern" in f && !new RegExp(f.pattern).test(f.enumeration[i])) return err6(f.enumeration[i])
-        if ("length" in f && f.enumeration[i].length != f.length) return err7("length", f.enumeration[i], f.length, 0)
-        if ("maxLength" in f && f.enumeration[i].length > f.maxLength) return err7("maxLength", f.enumeration[i], f.length, -1)
-        if ("minLength" in f && f.enumeration[i].length < f.minLength) return err7("minLength", f.enumeration[i], f.length, 1)
+        if ("length" in f && f.enumeration[i].length != f.length) return err7("length", f.enumeration[i], f.length, "=")
+        if ("maxLength" in f && f.enumeration[i].length > f.maxLength) return err7("maxLength", f.enumeration[i], f.maxLength, "<=")
+        if ("minLength" in f && f.enumeration[i].length < f.minLength) return err7("minLength", f.enumeration[i], f.minLength, ">=")
       }
     }
     if ("totalDigits" in f) {
-      if ("fractionDigits" in f && f.fractionDigits > f.totalDigits) return err2("fractionDigits", "totalDigits", true, false)
+      if ("fractionDigits" in f && f.fractionDigits > f.totalDigits) return err2("fractionDigits", "totalDigits", "=", false)
       if ("minExclusive" in f && f.minExclusive > 0 && countIntDigits(f.minExclusive) > f.totalDigits) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
       if ("minInclusive" in f && f.minInclusive > 0 && countIntDigits(f.minInclusive) > f.totalDigits) return err4("minInclusive", "totalDigits", f.totalDigits, f.minInclusive)
     }
     if ("maxExclusive" in f) {
-      if ("minInclusive" in f && f.minInclusive > f.maxExclusive) return err2("minInclusive", "maxExclusive", false, false)
+      if ("minInclusive" in f && f.minInclusive >= f.maxExclusive) return err2("minInclusive", "maxExclusive", "=", false)
       if ("minExclusive" in f) {
-        if (isBaseInt(type.type) && f.minExclusive >= f.maxExclusive-1) return err2("minExclusive", "maxExclusive", false, true)
-        else if (f.minExclusive >= f.maxExclusive) return err2("minExclusive", "maxExclusive", false, false)
+        if (isBaseInt(type.type) && f.minExclusive >= f.maxExclusive-1) return err2("minExclusive", "maxExclusive", "", true)
+        else if (f.minExclusive >= f.maxExclusive) return err2("minExclusive", "maxExclusive", "", false)
       }
     }
     if ("maxInclusive" in f) {
-      if ("minExclusive" in f && f.minExclusive >= f.maxInclusive) return err2("minExclusive", "maxInclusive", false, false)
-      if ("minInclusive" in f && f.minInclusive > f.maxInclusive) return err2("minInclusive", "maxInclusive", true, false)
+      if ("minExclusive" in f && f.minExclusive >= f.maxInclusive) return err2("minExclusive", "maxInclusive", "", false)
+      if ("minInclusive" in f && f.minInclusive > f.maxInclusive) return err2("minInclusive", "maxInclusive", "=", false)
     }
     if ("maxLength" in f) {
-      if ("minLength" in f && f.minLength > f.maxLength) return err2("minLength", "maxLength", true, false)
+      if ("minLength" in f && f.minLength > f.maxLength) return err2("minLength", "maxLength", "=", false)
     }
     
-    // se houver enumerações, juntar todos os seus valores numa só faceta
-    if ("enumeration" in f) {
-      content = content.filter(x => x.element != "enumeration")
-      content.push({element: "enumeration", attrs: {value: f.enumeration}, content: []})
-    }
+    // se houver enumerações ou patterns, juntar todos os seus valores numa só faceta
+    content = content.filter(x => x.element != "enumeration" && x.element != "pattern")
+    if ("enumeration" in f) content.push({element: "enumeration", attrs: {value: f.enumeration}, content: []})
+    if ("pattern" in f) content.push({element: "pattern", attrs: {value: f.pattern}, content: []})
 
     return content
   }
@@ -1149,9 +1148,11 @@ any_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs / any_namespace / proc
 simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:simpleType_attrs ws (openEl {type_depth++}) ws content:simpleType_content close_el:close_XSD_el
              &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} {
   if (!--type_depth) current_type = null
-  content = restrict_simpleType(attrs.name, content)
+
+  let st = restrict_simpleType(attrs.name, content)
   if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(content))
-  return {element: el_name, attrs, content: content.facets}
+
+  return {element: el_name, attrs, built_in_base: st.built_in_base, content: st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})}
 }
 
 simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* {return check_localTypeAttrs(el, "simpleType")}
