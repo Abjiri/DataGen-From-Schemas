@@ -87,15 +87,10 @@
     // se não for uma restriction, não há nada a verificar
     if (st_content[0].element != "restriction") return st_content
 
-    let base = getTypeInfo(st_content[0].attrs.base, default_prefix) // tipo base
+    let type = getTypeInfo(st_content[0].attrs.base) // tipo base
     let new_content = st_content[0].content // constraining facets do novo tipo
 
-    // se estiver a restringir um tipo embutido, o tipo embutido base vai ser esse mesmo
-    let built_in_base = base.type
-    // caso contrário, vai ser o tipo embutido base do simpleType em questão
-    if (!built_in_types().includes(built_in_base)) built_in_base = simpleTypes[built_in_base].built_in_base
-
-    return {facets: restrict_simpleType2(name, base, new_content, simpleTypes), built_in_base}
+    return {facets: restrict_simpleType2(name, type, new_content, simpleTypes), built_in_base: type.base}
   }
 
   // name = nome do novo tipo, base = nome do tipo base, new_content = facetas do novo tipo, st = simpleTypes
@@ -108,7 +103,10 @@
       let new_value = new_content[i].attrs.value // valor da faceta em questão no tipo novo
 
       // função para invocar a função auxiliar que verifica uma condição de recursividade
-      let aux = arr => arr.reduce((acc,cur) => restrict_simpleType_aux(name, `${base.prefix}:${base.type}`, cur[0], new_facet, base_els, base_content, new_value, cur[1]) && acc, true)
+      let aux = arr => arr.reduce((acc,cur) => {
+        for (let i = 0; i < (new_facet == "enumeration" ? new_value.length : 1); i++)
+          restrict_simpleType_aux(name, `${base.prefix}:${base.type}`, cur[0], new_facet, base_els, base_content, new_facet == "enumeration" ? new_value[i] : new_value, cur[1]) && acc
+      }, true)
 
       switch (new_facet) {
         case "totalDigits": aux([["totalDigits", "inf_eq"]]); break
@@ -125,8 +123,8 @@
                                  ["maxInclusive", "inf_eq"], ["minExclusive", "sup"], ["minInclusive", "sup_eq"], ["enumeration", "include"],
                                  ["pattern", "match_child"], ["length", "len_eq"], ["maxLength", "len_inf_eq"], ["minLength", "len_sup_eq"]]); break
         case "length": aux([["enumeration", "len_parent_eq"], ["length", "eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
-        case "maxLength":
-        case "minLength": aux([["enumeration", "len_parent_sup_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
+        case "maxLength": aux([["enumeration", "len_parent_sup_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
+        case "minLength": aux([["enumeration", "len_parent_inf_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
         case "whiteSpace": aux([["whiteSpace", "whiteSpace"]]); break
       }
       
@@ -150,7 +148,7 @@
       fixed: facet => `o valor para <${facet}> foi fixado a`,
       compare: (facet, comp) => `deve ser ${comp} ${comp == "=" ? "a" : "que "}o valor de <${facet}> que foi definido como`,
       length: (facet, inf_sup) => `o seu comprimento deve ser ${inf_sup}= ao valor de <${facet}> que foi definido como`,
-      digits: (base_val, frac) => `o número total de dígitos${frac ? " fracionários" : ""} foi limitado a ${base_val}`,
+      digits: (base_val, frac) => `o número total de dígitos${frac ? " fracionários" : ""} foi limitado a`,
       enum: () => `não pertence ao espaço de valores de enumeração do tipo base, '${base}'`,
       parent_enum: () => `nenhum dos valores do espaço de enumeração do tipo base, '${base}', obedece a essa restrição`,
       match_child: (facet) => `não obedece ao formato de <${facet}> que foi definido como`,
@@ -181,7 +179,7 @@
         case "len_eq": if (!(base_value == new_value.length)) err_args = ["length", [base_facet, ""], true]; break
         case "len_inf_eq": if (!(base_value >= new_value.length)) err_args = ["length", [base_facet, "<"], true]; break
         case "len_sup_eq": if (!(base_value <= new_value.length)) err_args = ["length", [base_facet, ">"], true]; break
-        case "frac_enum": if (Math.min(base_value.map(x => countFracDigits(x))) > new_value) err_args = ["parent_enum", [], false]; break
+        case "frac_enum": if (Math.min(...base_value.map(x => countFracDigits(x))) > new_value) err_args = ["parent_enum", [], false]; break
         case "inf_dig": if (base_value < countDigits(new_value)) err_args = ["digits", [base_value, false], true]; break
         case "inf_fracDig": if (base_value < countFracDigits(new_value)) err_args = ["digits", [base_value, true], true]; break
         case "include": if (!base_value.includes(new_value)) err_args = ["enum", [], false]; break
@@ -626,7 +624,7 @@
   function check_derivingType(elem, attr, attrs, content) {
     if (attr in attrs && content.some(x => x.element === "simpleType"))
       return error(`A utilização do elemento filho <simpleType> e do atributo '${attr}' é mutualmente exclusiva no elemento <${elem}>!`)
-    if (!(attr in attrs) && !content.length)
+    if (!(attr in attrs) && !content.filter(x => x.element == "simpleType").length)
       return error(`Um elemento <${elem}> deve ter o atributo '${attr}' ou um elemento filho <simpleType> para indicar o tipo a derivar!`)
     return true
   }
@@ -639,14 +637,14 @@
 
     if ("value" in attrs) {
       if (name == "whiteSpace") {
-        if (!["preserve","replace","collapse"].includes(attrs.value)) return error(`O valor do atributo 'value' do elemento <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
+        if (!["preserve","replace","collapse"].includes(attrs.value)) return error(`O valor da faceta <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
       }
       else if (name == "totalDigits") {
-        if (!/\+?[1-9]\d*/.test(attrs.value)) return error(`O valor do atributo 'totalDigits' deve ser um inteiro positivo!`)
+        if (!/^\+?[1-9]\d*$/.test(attrs.value)) return error(`O valor da faceta 'totalDigits' deve ser um inteiro positivo!`)
         attrs.value = parseInt(attrs.value)
       } 
       else if (["fractionDigits","length","minLength","maxLength"].includes(name)) {
-        if (!/\+?\d+/.test(attrs.value)) return error(`O valor do atributo 'value' do elemento <${name}> deve ser um inteiro não negativo!`)
+        if (!/^\+?\d+$/.test(attrs.value)) return error(`O valor da faceta <${name}> deve ser um inteiro não negativo!`)
         attrs.value = parseInt(attrs.value)
       }
     }
@@ -661,19 +659,25 @@
     return attrs
   }
 
-  // determinar se o tipo é built_in ou não e se é desta schema ou não (a este ponto, já foi validado)
-  function getTypeInfo(type, prefix) {
+  // determinar o nome e prefixo de schema do tipo em questão e o nome da sua base embutida
+  /* operacional apenas para tipos da schema local */
+  function getTypeInfo(type) {
     let builtin_types = built_in_types()
+    let base = null // nome do tipo embutido em questão ou em qual é baseado o tipo atual
+    let prefix = null
 
     if (type.includes(':')) {
       let split = type.split(':')
       type = split[1] // remover o prefixo do nome do tipo
-
-      return {type, built_in: builtin_types.includes(type), local_schema: split[0] == prefix, prefix: split[0]}
+      prefix = split[0]
     }
+    // tipo embutido ou local desta schema
+    else prefix = default_prefix
 
-    // tipo built_in ou local desta schema
-    return {type, built_in: builtin_types.includes(type), local_schema: !builtin_types.includes(type), prefix}
+    // é um tipo da schema local, logo se não for embutido, é possível encontrar a sua base embutida na estrutura simpleTypes
+    if (prefix == default_prefix) base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
+
+    return {type, base, prefix}
   }
 
   // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
@@ -686,10 +690,8 @@
 
     // criar array com o nome dos constraining facets válidos para o tipo em questão
     let facets = []
-    // se não for um simpleType embutido, vai buscar a base embutida dele para saber que facetas se podem usar
-    if (!built_in_types().includes(type.type)) type.type = simpleTypes[type.type].built_in_base
 
-    switch (type.type) {
+    switch (type.base) {
       case "anyURI": case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "language": case "Name": case "NCName": 
       case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
         facets = ["enumeration","length","maxLength","minLength","pattern"]; break
@@ -717,128 +719,126 @@
     // verificar se o atributo "value" pertence ao espaço léxico do tipo base
     for (let i = 0; i < content.length; i++) {
       if (["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) 
-        content[i].attrs.value = check_constrFacetBase_aux(base, type, content[i].attrs.value)
+        content[i].attrs.value = check_constrFacetBase_aux(base, type.base, content[i].attrs.value)
     }
 
     return content
   }
 
   // verificar se o valor pertence ao espaço léxico do tipo em que se baseia (por regex)
-  function check_constrFacetBase_aux(base, type, value) {
-    let error_msg = `'${value}' não é um valor válido para o tipo '${base}'!`
+  // base_name tem o prefixo para printar no erro, base_type não
+  function check_constrFacetBase_aux(base_name, base_type, value) {
+    let error_msg = `'${value}' não é um valor válido para o tipo '${base_name}'!`
 
-    // tipo built_in
-    if (type.built_in) {
-      switch (type.type) {
-        case "boolean":
-          if (value === "true") value = true
-          else if (value === "false") value = false
-          else return error(error_msg); break
-        case "byte":
-        case "int":
-        case "long":
-        case "short":
-        case "unsignedByte":
-        case "unsignedInt":
-        case "unsignedLong":
-        case "unsignedShort":
-          if (!/^(\+|\-)?\d+$/.test(value)) return error(error_msg)
-          value = parseInt(value)
+    switch (base_type) {
+      case "boolean":
+        if (value === "true") value = true
+        else if (value === "false") value = false
+        else return error(error_msg); break
+      case "byte":
+      case "int":
+      case "long":
+      case "short":
+      case "unsignedByte":
+      case "unsignedInt":
+      case "unsignedLong":
+      case "unsignedShort":
+        if (!/^(\+|\-)?\d+$/.test(value)) return error(error_msg)
+        value = parseInt(value)
 
-          let min, max
-          if (type.type == "byte") {min = -128; max = 127}
-          if (type.type == "short") {min = -32768; max = 32767}
-          if (type.type == "int") {min = -2147483648; max = 2147483647}
-          if (type.type == "long") {min = -9223372036854775808; max = 9223372036854775807}
-          if (type.type == "unsignedByte") {min = 0; max = 255}
-          if (type.type == "unsignedShort") {min = 0; max = 65535}
-          if (type.type == "unsignedInt") {min = 0; max = 4294967295}
-          if (type.type == "unsignedLong") {min = 0; max = 18446744073709551615}
+        let min, max
+        if (base_type == "byte") {min = -128; max = 127}
+        if (base_type == "short") {min = -32768; max = 32767}
+        if (base_type == "int") {min = -2147483648; max = 2147483647}
+        if (base_type == "long") {min = -9223372036854775808; max = 9223372036854775807}
+        if (base_type == "unsignedByte") {min = 0; max = 255}
+        if (base_type == "unsignedShort") {min = 0; max = 65535}
+        if (base_type == "unsignedInt") {min = 0; max = 4294967295}
+        if (base_type == "unsignedLong") {min = 0; max = 18446744073709551615}
 
-          if (value === NaN || !(value >= min && value <= max)) return error(error_msg); break
-        case "date":
-          if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-          value = value.match(/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/)[0]
-          break
-        case "dateTime":
-          if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-          value = value.match(/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/)[0]
-          break
-        case "decimal":
-          if (!/^(\+|-)?(\.\d+|\d+(\.\d+)?)$/.test(value)) return error(error_msg)
-          value = parseFloat(value); break
-        case "double":
-        case "float":
-          if (!/^((\+|-)?((\.\d+|\d+(\.\d+)?)([eE](\+|-)?\d+)?)|-?INF|NaN)$/.test(value)) return error(error_msg)
-          value = type.type == "double" ? parseDouble(value) : parseFloat(value); break
-        case "duration":
-          if (!/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/.test(value)) return error(error_msg); break
-        case "ENTITIES":
-        case "IDREFS":
-          if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*([ \t\n\r]+([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*)*$/.test(value)) return error(error_msg)
-          value = value.split(/[ \t\n\r]+/); break
-        case "ENTITY":
-        case "ID":
-        case "IDREF":
-        case "NCName":
-          if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
-        case "gDay":
-          if (!/^\-{3}(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-          value = parseInt(value.substring(3,5)); break
-        case "gMonth":
-          if (!/^\-{2}(0[1-9]|1[0-2])(\-{2})?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-          value = parseInt(value.substring(2,4)); break
-        case "gMonthDay":
-          if (!/^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-          value = {day: parseInt(value.substring(5,7)), month: parseInt(value.substring(2,4))}; break
-        case "gYear":
-          if (!/^\-?\d{4,5}(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-          value = parseInt(value.match(/\-?\d+/)); break
-        case "gYearMonth":
-          if (!/^\-?\d{4,5}\-(0[1-9]|1[0-2])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-          let year = parseInt(value.match(/^\-?\d+/))
-          value = value.replace(/^\-?\d+\-/, "")
-          value = {year, month: parseInt(value.match(/^\d+/))}; break
-        case "integer":
-          if (!/^\-?\d+$/.test(value)) return error(error_msg)
-          value = parseInt(value); break
-        case "language":
-          if (!/^([a-zA-Z]{2}|[iI]\-[a-zA-Z]+|[xX]\-[a-zA-Z]{1,8})(\-[a-zA-Z]{1,8})*$/.test(value)) return error(error_msg); break
-        case "Name":
-          if (!/^([a-zA-Z_:]|[^\x00-\x7F])([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
-        case "negativeInteger":
-          if (!/^-\d+$/.test(value)) return error(error_msg)
-          value = parseInt(value)
-          if (value === NaN || !(value <= -1)) return error(error_msg); break
-        case "NMTOKEN":
-          if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+$/.test(value)) return error(error_msg); break
-        case "NMTOKENS":
-          if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+([ \t\n\r]+([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+)*$/.test(value)) return error(error_msg)
-          value = value.split(/[ \t\n\r]+/); break
-        case "nonNegativeInteger":
-          if (!/^\+?\d+$/.test(value)) return error(error_msg)
-          value = parseInt(value)
-          if (value === NaN || !(value >= 0)) return error(error_msg); break
-        case "nonPositiveInteger":
-          if (!/^0+|\-\d+$/.test(value)) return error(error_msg)
-          value = parseInt(value)
-          if (value === NaN || !(value <= 0)) return error(error_msg); break
-        case "positiveInteger":
-          if (!/^\+?\d+$/.test(value)) return error(error_msg)
-          value = parseInt(value)
-          if (value === NaN || !(value >= 1)) return error(error_msg); break
-        case "normalizedString":
-          value = value.trim().replace(/[\t\n\r]/g," "); break
-        case "NOTATION":
-        case "QName":
-          if (!/^(([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*:)?([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg)
-          let split = value.split(":")
-          if (split.length == 2 && !existsPrefix(split[0])) return error(error_msg); break
-        case "time":
-          if (!/^([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-        case "token":
-          value = value.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," "); break
-      }
+        if (value === NaN || !(value >= min && value <= max)) return error(error_msg); break
+      case "date":
+        if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+        value = value.match(/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/)[0]
+        break
+      case "dateTime":
+        if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+        value = value.match(/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/)[0]
+        break
+      case "decimal":
+        if (!/^(\+|-)?(\.\d+|\d+(\.\d+)?)$/.test(value)) return error(error_msg)
+        value = parseFloat(value); break
+      case "double":
+      case "float":
+        if (!/^((\+|-)?((\.\d+|\d+(\.\d+)?)([eE](\+|-)?\d+)?)|-?INF|NaN)$/.test(value)) return error(error_msg)
+        value = base_type == "double" ? parseDouble(value) : parseFloat(value); break
+      case "duration":
+        if (!/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/.test(value)) return error(error_msg); break
+      case "ENTITIES":
+      case "IDREFS":
+        if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*([ \t\n\r]+([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*)*$/.test(value)) return error(error_msg)
+        value = value.split(/[ \t\n\r]+/); break
+      case "ENTITY":
+      case "ID":
+      case "IDREF":
+      case "NCName":
+        if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
+      case "gDay":
+        if (!/^\-{3}(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+        value = parseInt(value.substring(3,5)); break
+      case "gMonth":
+        if (!/^\-{2}(0[1-9]|1[0-2])(\-{2})?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+        value = parseInt(value.substring(2,4)); break
+      case "gMonthDay":
+        if (!/^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+        value = {day: parseInt(value.substring(5,7)), month: parseInt(value.substring(2,4))}; break
+      case "gYear":
+        if (!/^\-?\d{4,5}(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+        value = parseInt(value.match(/\-?\d+/)); break
+      case "gYearMonth":
+        if (!/^\-?\d{4,5}\-(0[1-9]|1[0-2])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
+        let year = parseInt(value.match(/^\-?\d+/))
+        value = value.replace(/^\-?\d+\-/, "")
+        value = {year, month: parseInt(value.match(/^\d+/))}; break
+      case "integer":
+        if (!/^\-?\d+$/.test(value)) return error(error_msg)
+        value = parseInt(value); break
+      case "language":
+        if (!/^([a-zA-Z]{2}|[iI]\-[a-zA-Z]+|[xX]\-[a-zA-Z]{1,8})(\-[a-zA-Z]{1,8})*$/.test(value)) return error(error_msg); break
+      case "Name":
+        if (!/^([a-zA-Z_:]|[^\x00-\x7F])([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
+      case "negativeInteger":
+        if (!/^-\d+$/.test(value)) return error(error_msg)
+        value = parseInt(value)
+        if (value === NaN || !(value <= -1)) return error(error_msg); break
+      case "NMTOKEN":
+        if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+$/.test(value)) return error(error_msg); break
+      case "NMTOKENS":
+        if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+([ \t\n\r]+([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+)*$/.test(value)) return error(error_msg)
+        value = value.split(/[ \t\n\r]+/); break
+      case "nonNegativeInteger":
+        if (!/^\+?\d+$/.test(value)) return error(error_msg)
+        value = parseInt(value)
+        if (value === NaN || !(value >= 0)) return error(error_msg); break
+      case "nonPositiveInteger":
+        if (!/^0+|\-\d+$/.test(value)) return error(error_msg)
+        value = parseInt(value)
+        if (value === NaN || !(value <= 0)) return error(error_msg); break
+      case "positiveInteger":
+        if (!/^\+?\d+$/.test(value)) return error(error_msg)
+        value = parseInt(value)
+        if (value === NaN || !(value >= 1)) return error(error_msg); break
+      case "normalizedString":
+        value = value.trim().replace(/[\t\n\r]/g," "); break
+      case "NOTATION":
+      case "QName":
+        if (!/^(([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*:)?([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg)
+        let split = value.split(":")
+        if (split.length == 2 && !existsPrefix(split[0])) return error(error_msg); break
+      case "time":
+        if (!/^([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+      case "token":
+        value = value.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," "); break
     }
 
     return value
@@ -854,7 +854,7 @@
 
   // validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
   function check_restrictionST_facets(el_name, base, content) {
-    let type = getTypeInfo(base, default_prefix)
+    let type = getTypeInfo(base)
 
     // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
     content = check_constrFacetBase(base, type, content)
@@ -926,6 +926,12 @@
     }
     if ("maxLength" in f) {
       if ("minLength" in f && f.minLength > f.maxLength) return err2("minLength", "maxLength", true, false)
+    }
+    
+    // se houver enumerações, juntar todos os seus valores numa só faceta
+    if ("enumeration" in f) {
+      content = content.filter(x => x.element != "enumeration")
+      content.push({element: "enumeration", attrs: {value: f.enumeration}, content: []})
     }
 
     return content
