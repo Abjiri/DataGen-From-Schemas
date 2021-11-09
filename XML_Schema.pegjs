@@ -10,8 +10,8 @@
 
   // função para contar o número de dígitos significativos num número
   let countDigits = num => String(num).replace(/\-|\./g, "").length
-  // função para contar o número de dígitos da parte inteira de um número (positivo)
-  let countIntDigits = num => String(num).replace(/\.\d+/, "").length
+  // função para contar o número de dígitos da parte inteira de um número
+  let countIntDigits = num => String(num).replace(/\-|\.\d+/g, "").length
   // função para contar o número de dígitos fracionários de um número
   let countFracDigits = num => num%1 === 0 ? 0 : String(num).replace(/\-?\d*\./, "").length
   // função para verificar se o tipo base é um tipo de números inteiros
@@ -137,6 +137,14 @@
         else base_content[index].attrs.value = new_value
       }
       else base_content.push(new_content[i])
+
+      // função para remover uma faceta mutualmente exclusiva na nova
+      let remove_mutex = (facet, mutex) => {if (new_facet == facet && base_els.includes(mutex)) base_content.splice(base_content.findIndex(x => x.element == mutex), 1) }
+
+      remove_mutex("maxExclusive","maxInclusive")
+      remove_mutex("maxInclusive","maxExclusive")
+      remove_mutex("minExclusive","minInclusive")
+      remove_mutex("minInclusive","minExclusive")
     }
     
     return base_content
@@ -737,6 +745,7 @@
         else return error(error_msg); break
       case "byte":
       case "int":
+      case "integer":
       case "long":
       case "short":
       case "unsignedByte":
@@ -756,15 +765,11 @@
         if (base_type == "unsignedInt") {min = 0; max = 4294967295}
         if (base_type == "unsignedLong") {min = 0; max = 18446744073709551615}
 
-        if (value === NaN || !(value >= min && value <= max)) return error(error_msg); break
+        if (value === NaN || (base_type != "integer" && !(value >= min && value <= max))) return error(error_msg); break
       case "date":
-        if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-        value = value.match(/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/)[0]
-        break
+        if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
       case "dateTime":
-        if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-        value = value.match(/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/)[0]
-        break
+        if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
       case "decimal":
         if (!/^(\+|-)?(\.\d+|\d+(\.\d+)?)$/.test(value)) return error(error_msg)
         value = parseFloat(value); break
@@ -800,9 +805,6 @@
         let year = parseInt(value.match(/^\-?\d+/))
         value = value.replace(/^\-?\d+\-/, "")
         value = {year, month: parseInt(value.match(/^\d+/))}; break
-      case "integer":
-        if (!/^\-?\d+$/.test(value)) return error(error_msg)
-        value = parseInt(value); break
       case "language":
         if (!/^([a-zA-Z]{2}|[iI]\-[a-zA-Z]+|[xX]\-[a-zA-Z]{1,8})(\-[a-zA-Z]{1,8})*$/.test(value)) return error(error_msg); break
       case "Name":
@@ -879,12 +881,12 @@
     else f.pattern = f.pattern.map(x => '^('+x+')$').join("|") // se houver vários patterns no mesmo passo de derivação, são ORed juntos
     
     let err1 = (a1,a2) => error(`As facetas <${a1}> e <${a2}> são mutuamente exclusivas no mesmo passo de derivação!`)
-    let err2 = (a1,a2,eq,int) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor do elemento <${a1}> deve ser <${eq} ao do <${a2}>${int ? " - 1" : ""}!`)
-    let err3 = (el,val,lim,comp) => error(`O valor '${val}' do elemento <enumeration> é ${comp} a ${lim}, o que contradiz o elemento <${el}>!`)
-    let err4 = (a1,a2,dig,val) => error(`O valor '${val}' do elemento <${a1}> só permite valores com mais de ${dig} dígitos, o que contradiz o elemento <${a2}>!`)
-    let err5 = (el,dig,val,frac) => error(`O valor '${val}' do elemento <enumeration> tem mais do que ${dig} dígitos${frac ? " fracionários" : ""}, o que contradiz o elemento <${el}>!`)
-    let err6 = (val) => error(`O valor '${val}' do elemento <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern> no mesmo passo de derivação!`)
-    let err7 = (el,val,len,comp) => error(`O valor '${val}' do elemento <enumeration> não tem comprimento ${comp} ${len}, o que contradiz o elemento <${el}>!`)
+    let err2 = (a1,a2,eq,int) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor da faceta <${a1}> deve ser <${eq} ao do <${a2}>${int ? " - 1" : ""}!`)
+    let err3 = (el,val,lim,comp) => error(`O valor '${val}' da faceta <enumeration> é ${comp} a ${lim}, o que contradiz a faceta <${el}>!`)
+    let err4 = (a1,a2,dig,val) => error(`O valor '${val}' da faceta <${a1}> só permite valores com mais de ${dig} dígitos, o que contradiz a faceta <${a2}>!`)
+    let err5 = (el,dig,val,frac) => error(`O valor '${val}' da faceta <enumeration> tem mais do que ${dig} dígitos${frac ? " fracionários" : ""}, o que contradiz a faceta <${el}>!`)
+    let err6 = (val) => error(`O valor '${val}' da faceta <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern> no mesmo passo de derivação!`)
+    let err7 = (el,val,len,comp) => error(`O valor '${val}' da faceta <enumeration> não tem comprimento ${comp} ${len}, o que contradiz a faceta <${el}>!`)
     let err8 = (el) => error(`É um erro o tipo base não ter a faceta <${el}> se a restrição atual o tem, e a restrição atual ou o tipo base têm a faceta <length>!`)
  
     // atributos mutuamente exclusivos
@@ -910,7 +912,15 @@
     }
     if ("totalDigits" in f) {
       if ("fractionDigits" in f && f.fractionDigits > f.totalDigits) return err2("fractionDigits", "totalDigits", "=", false)
-      if ("minExclusive" in f && f.minExclusive > 0 && countIntDigits(f.minExclusive) > f.totalDigits) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
+      if ("maxExclusive" in f && f.maxExclusive < 0) {
+        if (countIntDigits(f.maxExclusive) > f.totalDigits) return err4("maxExclusive", "totalDigits", f.totalDigits, f.maxExclusive)
+        if (isBaseInt(type.type) && f.maxExclusive == parseInt(`-${'9'.repeat(f.totalDigits)}`)) return err4("maxExclusive", "totalDigits", f.totalDigits, f.maxExclusive)
+      }
+      if ("minExclusive" in f && f.minExclusive > 0) {
+        if (countIntDigits(f.minExclusive) > f.totalDigits) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
+        if (isBaseInt(type.type) && f.minExclusive == parseInt('9'.repeat(f.totalDigits))) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
+      }
+      if ("maxInclusive" in f && f.maxInclusive < 0 && countIntDigits(f.maxInclusive) > f.totalDigits) return err4("maxInclusive", "totalDigits", f.totalDigits, f.maxInclusive)
       if ("minInclusive" in f && f.minInclusive > 0 && countIntDigits(f.minInclusive) > f.totalDigits) return err4("minInclusive", "totalDigits", f.totalDigits, f.minInclusive)
     }
     if ("maxExclusive" in f) {
