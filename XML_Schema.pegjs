@@ -236,7 +236,7 @@
       else if (content[i].element == "element" && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
 
       // repetir recursivamente para os elementos filho
-      content[i].content = complete_refs(content[i].content, global_elems)
+      if (Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems)
     }
     
     return content
@@ -729,7 +729,7 @@
       if (["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) 
         content[i].attrs.value = check_constrFacetBase_aux(base, type.base, content[i].attrs.value)
     }
-
+    
     return content
   }
 
@@ -778,7 +778,7 @@
         if (!/^((\+|-)?((\.\d+|\d+(\.\d+)?)([eE](\+|-)?\d+)?)|-?INF|NaN)$/.test(value)) return error(error_msg)
         value = base_type == "double" ? parseDouble(value) : parseFloat(value); break
       case "duration":
-        if (!/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/.test(value)) return error(error_msg); break
+        if (!/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(((\d+)(\.\d+)?|(\.\d+))S)?)?$/.test(value)) return error(error_msg); break
       case "ENTITIES":
       case "IDREFS":
         if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*([ \t\n\r]+([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*)*$/.test(value)) return error(error_msg)
@@ -789,22 +789,18 @@
       case "NCName":
         if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
       case "gDay":
-        if (!/^\-{3}(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-        value = parseInt(value.substring(3,5)); break
+        if (!/^\-{3}(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
       case "gMonth":
-        if (!/^\-{2}(0[1-9]|1[0-2])(\-{2})?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-        value = parseInt(value.substring(2,4)); break
+        if (!/^\-{2}(0[1-9]|1[0-2])(\-{2})?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
       case "gMonthDay":
-        if (!/^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-        value = {day: parseInt(value.substring(5,7)), month: parseInt(value.substring(2,4))}; break
+        if (!/^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
       case "gYear":
-        if (!/^\-?\d{4,5}(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-        value = parseInt(value.match(/\-?\d+/)); break
+        if (!/^\-?\d{4,5}(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
       case "gYearMonth":
-        if (!/^\-?\d{4,5}\-(0[1-9]|1[0-2])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg)
-        let year = parseInt(value.match(/^\-?\d+/))
+        if (!/^\-?\d{4,5}\-(0[1-9]|1[0-2])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+        /* let year = parseInt(value.match(/^\-?\d+/))
         value = value.replace(/^\-?\d+\-/, "")
-        value = {year, month: parseInt(value.match(/^\d+/))}; break
+        value = {year, month: parseInt(value.match(/^\d+/))} */
       case "language":
         if (!/^([a-zA-Z]{2}|[iI]\-[a-zA-Z]+|[xX]\-[a-zA-Z]{1,8})(\-[a-zA-Z]{1,8})*$/.test(value)) return error(error_msg); break
       case "Name":
@@ -846,12 +842,65 @@
     return value
   }
 
-  // conta o número de casas decimais de um float
+  // contar o número de casas decimais de um float
   function precision(a) {
     if (!isFinite(a)) return 0
     var e = 1, p = 0
     while (Math.round(a*e) / e !== a) { e *= 10; p++ }
     return p
+  }
+
+  // verificar se 2 strings são adjacentes em termos ASCII
+  function adjacentASCII(str1, str2) {
+    let len1 = str1.length, len2 = str2.length
+    
+    for (let i = 0; i < Math.max(len1, len2); i++) {
+      if (i == len1 || i == len2) return false
+    
+      let dif = Math.abs(str1[i].charCodeAt(0) - str2[i].charCodeAt(0))
+      if (dif != 0) {
+        if (dif == 1 && i == len1-1 && i == len2-1) return true
+        return false
+      }
+    }
+  }
+  
+  // calcular o número de milisegundos correspondente a uma duration
+  function durationToMS(d, offset) {
+    let parts = []
+    d = d.substring(1).split("T")
+    if (d.length == 1) d.push("")
+
+    let getParts = (chars, str) => {
+      for (let i = 0; i < chars.length; i++) {
+        if (!str.includes(chars[i])) {
+          parts.push(0)
+          if (chars[i] == "S") parts.push(0)
+        }
+        else {
+          let split = str.split(chars[i])
+          str = split[1]
+
+          if (chars[i] == "S") {
+            let s = split[0].split(".")
+            if (s.length == 1) s.push("0")
+            if (!s[0].length) s[0] = "0"
+            s.map(x => parts.push(parseInt(x)))
+          }
+          else parts.push(parseInt(split[0]))
+        }
+      }
+    }
+    
+    getParts(["Y","M","D"], d[0])
+    getParts(["H","M","S"], d[1])
+
+    let ms = 0, scale = 1, ratio = [12, 30, 24, 60, 60, 1000, 1]
+    for (let i = parts.length-1; i >= 0; i--) {
+      scale *= ratio[i]
+      ms += parts[i] * scale
+    }
+    return ms
   }
 
   // validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
@@ -881,68 +930,109 @@
     else f.pattern = f.pattern.map(x => '^('+x+')$').join("|") // se houver vários patterns no mesmo passo de derivação, são ORed juntos
     
     let err1 = (a1,a2) => error(`As facetas <${a1}> e <${a2}> são mutuamente exclusivas no mesmo passo de derivação!`)
-    let err2 = (a1,a2,eq,int) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor da faceta <${a1}> deve ser <${eq} ao do <${a2}>${int ? " - 1" : ""}!`)
+    let err2 = (a1,a2,eq,int,offset) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor da faceta <${a1}> deve ser <${eq} ao da <${a2}>${offset}!`)
     let err3 = (el,val,lim,comp) => error(`O valor '${val}' da faceta <enumeration> é ${comp} a ${lim}, o que contradiz a faceta <${el}>!`)
     let err4 = (a1,a2,dig,val) => error(`O valor '${val}' da faceta <${a1}> só permite valores com mais de ${dig} dígitos, o que contradiz a faceta <${a2}>!`)
     let err5 = (el,dig,val,frac) => error(`O valor '${val}' da faceta <enumeration> tem mais do que ${dig} dígitos${frac ? " fracionários" : ""}, o que contradiz a faceta <${el}>!`)
     let err6 = (val) => error(`O valor '${val}' da faceta <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern> no mesmo passo de derivação!`)
     let err7 = (el,val,len,comp) => error(`O valor '${val}' da faceta <enumeration> não tem comprimento ${comp} ${len}, o que contradiz a faceta <${el}>!`)
     let err8 = (el) => error(`É um erro o tipo base não ter a faceta <${el}> se a restrição atual o tem, e a restrição atual ou o tipo base têm a faceta <length>!`)
+    let err9 = (el,base,val) => error(`O valor da faceta <${el}> para o tipo base '${base}' deve ser ${val}, senão o espaço de valores válidos é vazio!`)
+
+    let has = facet => facet in f
  
     // atributos mutuamente exclusivos
-    if ("maxInclusive" in f && "maxExclusive" in f) return err1("maxInclusive", "maxExclusive")
-    if ("minInclusive" in f && "minExclusive" in f) return err1("minInclusive", "minExclusive")
-    if ("length" in f && "maxLength" in f) return err8("maxLength")
-    if ("length" in f && "minLength" in f) return err8("minLength")
+    if (has("maxInclusive") && has("maxExclusive")) return err1("maxInclusive", "maxExclusive")
+    if (has("minInclusive") && has("minExclusive")) return err1("minInclusive", "minExclusive")
+    if (has("length") && has("maxLength")) return err8("maxLength")
+    if (has("length") && has("minLength")) return err8("minLength")
 
     // restrições relativas a colisões entre os valores dos constraining facets
-    if ("enumeration" in f) {
+    if (has("enumeration")) {
       for (let i = 0; i < f.enumeration.length; i++) {
-        if ("totalDigits" in f && countDigits(f.enumeration[i]) > f.totalDigits) return err5("totalDigits", f.totalDigits, f.enumeration[i], false)
-        if ("fractionDigits" in f && countFracDigits(f.enumeration[i]) > f.fractionDigits) return err5("fractionDigits", f.fractionDigits, f.enumeration[i], true)
-        if ("maxExclusive" in f && f.enumeration[i] >= f.maxExclusive) return err3("maxExclusive", f.enumeration[i], f.maxExclusive, ">=")
-        if ("maxInclusive" in f && f.enumeration[i] > f.maxInclusive) return err3("maxInclusive", f.enumeration[i], f.maxInclusive, ">")
-        if ("minExclusive" in f && f.enumeration[i] <= f.minExclusive) return err3("minExclusive", f.enumeration[i], f.minExclusive, "<=")
-        if ("minInclusive" in f && f.enumeration[i] < f.minInclusive) return err3("minInclusive", f.enumeration[i], f.minInclusive, "<")
-        if ("pattern" in f && !new RegExp(f.pattern).test(f.enumeration[i])) return err6(f.enumeration[i])
-        if ("length" in f && f.enumeration[i].length != f.length) return err7("length", f.enumeration[i], f.length, "=")
-        if ("maxLength" in f && f.enumeration[i].length > f.maxLength) return err7("maxLength", f.enumeration[i], f.maxLength, "<=")
-        if ("minLength" in f && f.enumeration[i].length < f.minLength) return err7("minLength", f.enumeration[i], f.minLength, ">=")
+        if (has("totalDigits") && countDigits(f.enumeration[i]) > f.totalDigits) return err5("totalDigits", f.totalDigits, f.enumeration[i], false)
+        if (has("fractionDigits") && countFracDigits(f.enumeration[i]) > f.fractionDigits) return err5("fractionDigits", f.fractionDigits, f.enumeration[i], true)
+        if (has("maxExclusive") && f.enumeration[i] >= f.maxExclusive) return err3("maxExclusive", f.enumeration[i], f.maxExclusive, ">=")
+        if (has("maxInclusive") && f.enumeration[i] > f.maxInclusive) return err3("maxInclusive", f.enumeration[i], f.maxInclusive, ">")
+        if (has("minExclusive") && f.enumeration[i] <= f.minExclusive) return err3("minExclusive", f.enumeration[i], f.minExclusive, "<=")
+        if (has("minInclusive") && f.enumeration[i] < f.minInclusive) return err3("minInclusive", f.enumeration[i], f.minInclusive, "<")
+        if (has("pattern") && !new RegExp(f.pattern).test(f.enumeration[i])) return err6(f.enumeration[i])
+        if (has("length") && f.enumeration[i].length != f.length) return err7("length", f.enumeration[i], f.length, "=")
+        if (has("maxLength") && f.enumeration[i].length > f.maxLength) return err7("maxLength", f.enumeration[i], f.maxLength, "<=")
+        if (has("minLength") && f.enumeration[i].length < f.minLength) return err7("minLength", f.enumeration[i], f.minLength, ">=")
       }
     }
-    if ("totalDigits" in f) {
-      if ("fractionDigits" in f && f.fractionDigits > f.totalDigits) return err2("fractionDigits", "totalDigits", "=", false)
-      if ("maxExclusive" in f && f.maxExclusive < 0) {
+    if (has("totalDigits")) {
+      if (has("fractionDigits") && f.fractionDigits > f.totalDigits) return err2("fractionDigits", "totalDigits", "=", false, "")
+      if (has("maxExclusive") && f.maxExclusive < 0) {
         if (countIntDigits(f.maxExclusive) > f.totalDigits) return err4("maxExclusive", "totalDigits", f.totalDigits, f.maxExclusive)
         if (isBaseInt(type.type) && f.maxExclusive == parseInt(`-${'9'.repeat(f.totalDigits)}`)) return err4("maxExclusive", "totalDigits", f.totalDigits, f.maxExclusive)
       }
-      if ("minExclusive" in f && f.minExclusive > 0) {
+      if (has("minExclusive") && f.minExclusive > 0) {
         if (countIntDigits(f.minExclusive) > f.totalDigits) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
         if (isBaseInt(type.type) && f.minExclusive == parseInt('9'.repeat(f.totalDigits))) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
       }
-      if ("maxInclusive" in f && f.maxInclusive < 0 && countIntDigits(f.maxInclusive) > f.totalDigits) return err4("maxInclusive", "totalDigits", f.totalDigits, f.maxInclusive)
-      if ("minInclusive" in f && f.minInclusive > 0 && countIntDigits(f.minInclusive) > f.totalDigits) return err4("minInclusive", "totalDigits", f.totalDigits, f.minInclusive)
+      if (has("maxInclusive") && f.maxInclusive < 0 && countIntDigits(f.maxInclusive) > f.totalDigits) return err4("maxInclusive", "totalDigits", f.totalDigits, f.maxInclusive)
+      if (has("minInclusive") && f.minInclusive > 0 && countIntDigits(f.minInclusive) > f.totalDigits) return err4("minInclusive", "totalDigits", f.totalDigits, f.minInclusive)
     }
-    if ("maxExclusive" in f) {
-      if ("minInclusive" in f && f.minInclusive >= f.maxExclusive) return err2("minInclusive", "maxExclusive", "=", false)
-      if ("minExclusive" in f) {
-        if (isBaseInt(type.type) && f.minExclusive >= f.maxExclusive-1) return err2("minExclusive", "maxExclusive", "", true)
-        else if (f.minExclusive >= f.maxExclusive) return err2("minExclusive", "maxExclusive", "", false)
+    if (has("maxExclusive")) {
+      if (has("minInclusive") && f.minInclusive >= f.maxExclusive) return err2("minInclusive", "maxExclusive", "=", false, "")
+      if (has("minExclusive")) {
+        if (isBaseInt(type.type) && f.minExclusive >= f.maxExclusive-1) return err2("minExclusive", "maxExclusive", "", true, " - 1")
+        else {
+          let regex = null
+
+          if (type.type == "date") regex = /^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/
+          if (type.type == "dateTime") regex = /^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?/
+          if (type.type == "time") regex = /^([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?/
+          if (type.type == "gYear") regex = /^\-?\d+/
+          if (type.type == "gYearMonth") regex = /^\-?\d{4,5}\-(0[1-9]|1[0-2])/
+          if (type.type == "gDay") regex = /^\-{3}(0[1-9]|[12][0-9]|3[01])/
+          if (type.type == "gMonth") regex = /^\-{2}(0[1-9]|1[0-2])/
+          if (type.type == "gMonthDay") regex = /^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])/
+          
+          if (type.type == "duration") {
+            if (durationToMS(f.minExclusive) >= durationToMS(f.maxExclusive)-1) return err2("minExclusive", "maxExclusive", "=", false, " - 1")
+          }
+          else if (f.minExclusive >= f.maxExclusive) {
+            if (regex !== null) return err2("minExclusive", "maxExclusive", "=", false, " - 1")
+            return err2("minExclusive", "maxExclusive", "", false, "")
+          }
+          else if (regex !== null && adjacentASCII(f.minExclusive.match(regex)[0], f.maxExclusive.match(regex)[0])) return err2("minExclusive", "maxExclusive", "=", false, " - 1")
+        }
       }
     }
-    if ("maxInclusive" in f) {
-      if ("minExclusive" in f && f.minExclusive >= f.maxInclusive) return err2("minExclusive", "maxInclusive", "", false)
-      if ("minInclusive" in f && f.minInclusive > f.maxInclusive) return err2("minInclusive", "maxInclusive", "=", false)
+    if (has("maxInclusive")) {
+      if (has("minExclusive") && f.minExclusive >= f.maxInclusive) return err2("minExclusive", "maxInclusive", "", false, "")
+      if (has("minInclusive") && f.minInclusive > f.maxInclusive) return err2("minInclusive", "maxInclusive", "=", false, "")
     }
-    if ("maxLength" in f) {
-      if ("minLength" in f && f.minLength > f.maxLength) return err2("minLength", "maxLength", "=", false)
+    if (has("maxLength")) {
+      if (has("minLength") && f.minLength > f.maxLength) return err2("minLength", "maxLength", "=", false, "")
+    }
+
+    // restrições relativas aos intervalos de valores válidos do tipo base em questão
+    if (type.type == "gDay") {
+      if (has("maxExclusive") && f.maxExclusive.substring(0,5) == "---01") return err9("maxExclusive", "gDay", "> '01'")
+      if (has("minExclusive") && f.minExclusive.substring(0,5) == "---31") return err9("minExclusive", "gDay", "< '31'")
+    }
+    if (type.type == "gMonth") {
+      if (has("maxExclusive") && f.maxExclusive.substring(0,4) == "--01") return err9("maxExclusive", "gMonth", "> '01'")
+      if (has("minExclusive") && f.minExclusive.substring(0,4) == "--12") return err9("minExclusive", "gMonth", "< '12'")
+    }
+    if (type.type == "gMonthDay") {
+      if (has("maxExclusive") && f.maxExclusive.substring(0,7) == "--01-01") return err9("maxExclusive", "gMonthDay", "> '01/01'")
+      if (has("minExclusive") && f.minExclusive.substring(0,7) == "--12-31") return err9("minExclusive", "gMonthDay", "< '12/31'")
+    }
+    if (type.type == "duration" && has("maxExclusive")) {
+      let max = durationToMS(f.maxExclusive)
+      if (!max) return err9("maxExclusive", "duration", "> 0")
     }
     
     // se houver enumerações ou patterns, juntar todos os seus valores numa só faceta
     content = content.filter(x => x.element != "enumeration" && x.element != "pattern")
-    if ("enumeration" in f) content.push({element: "enumeration", attrs: {value: f.enumeration}, content: []})
-    if ("pattern" in f) content.push({element: "pattern", attrs: {value: f.pattern}, content: []})
-
+    if (has("enumeration")) content.push({element: "enumeration", attrs: {value: f.enumeration}, content: []})
+    if (has("pattern")) content.push({element: "pattern", attrs: {value: f.pattern}, content: []})
+    
     return content
   }
 }

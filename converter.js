@@ -1,3 +1,5 @@
+const RandExp = require('randexp');
+
 // nr de elementos que vão ser criados como objetos temporariamente na DSL com uma chave especial 
 // e convertidos posteriormente para a forma original na tradução JSON-XML do DataGen
 let temp_structs = 0
@@ -61,12 +63,42 @@ function parseElementAux(el, prefix, depth) {
    else return parseComplexType(type, prefix, depth)
 }
 
+function parseStringType(c, base, has) {
+   if (has("enumeration")) return `'{{random("${c.enumeration.join('","')}")}}'`
+   if (has("pattern")) return '"' + new RandExp(c.pattern).gen() + '"'
+
+   let length = 0
+   let isList = () => ["ENTITIES","IDREFS","NMTOKENS"].includes(base)
+
+   if (has("length")) length = c.length
+   else {
+      let max = null, min = null
+      let upper_bound = isList() ? 20 : 50
+
+      if (has("maxLength")) max = c.maxLength
+      if (has("minLength")) min = c.minLength
+
+      if (max === null && min == null) {min = 10; max = upper_bound}
+      else if (min == null) min = max > 1 ? 1 : 0
+      else if (max == null) max = min + upper_bound
+
+      length = randomize(min, max)
+   }
+   
+   if (isList()) {
+      let str = "'"
+      for (let i = 0; i < length; i++) str += string(base, 5) + " "
+      return str.slice(0, -1) + "'"
+   }
+   return "'" + (base == "hexBinary" ? hexBinary(length) : string(base, length)) + "'"
+}
+
 function parseNumberType(c, base, has) {
    // verificar se o tipo base é um tipo de números inteiros
    let intBase = () => !["decimal","double","float"].includes(base)
 
    if (has("enumeration")) return `'{{random(${c.enumeration.join(",")})}}'`
-   //if (has("pattern"))
+   if (has("pattern")) return '"' + new RandExp(c.pattern).gen() + '"'
 
    let min = null, max = null
    
@@ -96,8 +128,8 @@ function parseNumberType(c, base, has) {
 }
 
 function parseDateTimeType(c, base, has) {
-   if ("enumeration" in c) return `'{{random("${c.enumeration.join('","')}")}}'`
-   //if (has("pattern")) ...
+   if (has("enumeration")) return `'{{random("${c.enumeration.join('","')}")}}'`
+   if (has("pattern")) return '"' + new RandExp(c.pattern).gen() + '"'
 
    let min = null, max = null
    
@@ -128,8 +160,153 @@ function parseDateTimeType(c, base, has) {
       if (has("maxExclusive")) max = adjustDate(c.maxExclusive, -1)
       if (has("minExclusive")) min = adjustDate(c.minExclusive, 1)
 
-      return `'{{date("${min[0]}", "${max[0]}"${base == "date" ? ', "YYYY-MM-DD"' : ""})}}'`
+      if (max === null && min === null) min = ["01-01-1950", "00:00:00"]
+      else if (min === null) {
+         let maxDate = max[0].split("-")
+         let year = parseInt(maxDate[2])
+         min = [`${maxDate[0]}-${maxDate[1]}-${year > 1000 ? (year-1000).toString().padStart(4,"0") : "0000"}`, "00:00:00"]
+      }
+
+      return `'{{date("${min[0]}"${max !== null ? `, "${max[0]}"` : ""}${base == "date" ? ', "YYYY-MM-DD"' : ""})}}'`
    }
+
+   if (base == "duration") {
+      let durationToMS = (d, offset) => {
+         let parts = []
+         d = d.substring(1).split("T")
+         if (d.length == 1) d.push("")
+
+         let getParts = (chars, str) => {
+            for (let i = 0; i < chars.length; i++) {
+               if (!str.includes(chars[i])) {
+                  parts.push(0)
+                  if (chars[i] == "S") parts.push(0)
+               }
+               else {
+                  let split = str.split(chars[i])
+                  str = split[1]
+
+                  if (chars[i] == "S") {
+                     let s = split[0].split(".")
+                     if (s.length == 1) s.push("0")
+                     if (!s[0].length) s[0] = "0"
+                     s.map(x => parts.push(parseInt(x)))
+                  }
+                  else parts.push(parseInt(split[0]))
+               }
+            }
+         }
+         
+         getParts(["Y","M","D"], d[0])
+         getParts(["H","M","S"], d[1])
+         return parts
+      }
+
+      if (has("maxInclusive")) max = durationToMS(c.maxInclusive, 0)
+      if (has("minInclusive")) min = durationToMS(c.minInclusive, 0)
+      if (has("maxExclusive")) max = durationToMS(c.maxExclusive, -1)
+      if (has("minExclusive")) min = durationToMS(c.minExclusive, 1)
+
+      if (max === null && min == null) {max = [1,0,0,0,0,0,0]; min = [0,0,0,0,0,0,0]}
+      else if (max === null) {max = min; max[0] += 1}
+      else if (min === null) {
+         if (max > yearMS) {min = max; min[0] -= 1}
+         else min = [0,0,0,0,0,0,0]
+      }
+      
+      let str = "P", units = ["Y","M","D","H","M","S"]
+      let maxFinal = [0, 30, 23, 59, 59, 59, 999], minFinal = [0,0,0,0,0,0,0]
+      for (let i = 0; i < max.length; i++) {
+         maxFinal[i] = max[i]; minFinal[i] = min[i]
+         if (max[i] != min[i]) break
+      }
+   }
+
+   if (base == "gDay") {
+      let getDay = x => parseInt(x.substring(3,5))
+
+      if (has("maxInclusive")) max = getDay(c.maxInclusive)
+      if (has("minInclusive")) min = getDay(c.minInclusive)
+      if (has("maxExclusive")) max = getDay(c.maxExclusive) - 1
+      if (has("minExclusive")) min = getDay(c.minExclusive) + 1
+
+      if (max === null) max = 31
+      if (min == null) min = 1
+
+      return `'---{{integer(${min},${max})}}'`
+   }
+
+   if (base == "gMonth") {
+      let getMonth = x => parseInt(x.substring(2,4))
+
+      if (has("maxInclusive")) max = getMonth(c.maxInclusive)
+      if (has("minInclusive")) min = getMonth(c.minInclusive)
+      if (has("maxExclusive")) max = getMonth(c.maxExclusive) - 1
+      if (has("minExclusive")) min = getMonth(c.minExclusive) + 1
+
+      if (max === null) max = 12
+      if (min == null) min = 1
+
+      return `'--{{integer(${min},${max})}}'`
+   }
+
+   if (base == "gYear") {
+      let getYear = x => parseInt(x.match(/\-?\d+/))
+
+      if (has("maxInclusive")) max = getYear(c.maxInclusive)
+      if (has("minInclusive")) min = getYear(c.minInclusive)
+      if (has("maxExclusive")) max = getYear(c.maxExclusive) - 1
+      if (has("minExclusive")) min = getYear(c.minExclusive) + 1
+
+      if (max === null && min === null) {max = 2020; min = 0}
+      else if (max == null) max = min + 1000
+      else if (min == null) min = max - 1000
+
+      return `'{{integer(${min},${max})}}'.string()`
+   }
+
+   /* if (base == "gMonthDay") {
+      let getMonthDay = x => {return {day: parseInt(x.substring(5,7)), month: parseInt(x.substring(2,4))}}
+
+      if (has("maxInclusive")) max = getMonthDay(c.maxInclusive)
+      if (has("minInclusive")) min = getMonthDay(c.minInclusive)
+      if (has("maxExclusive")) max = getMonthDay(c.maxExclusive) - 1
+      if (has("minExclusive")) min = getMonthDay(c.minExclusive) + 1
+
+      if (max === null && min === null) {max = 2020; min = 0}
+      else if (max == null) max = min + 1000
+      else if (min == null) min = max - 1000
+
+      return `{{integer(${min},${max})}}`
+   } */
+}
+
+function parseLanguage(c, has) {
+   let langs = ["af","ar-ae","ar-bh","ar-dz","ar-eg","ar-iq","ar-jo","ar-kw","ar-lb","ar-ly","ar-ma","ar-om","ar-qa","ar-sa","ar-sy","ar-tn","ar-ye","ar","as","az","be","bg","bn","ca","cs","da","de-at","de-ch","de-li","de-lu","de","div","el","en-au","en-bz","en-ca","en-gb","en-ie","en-jm","en-nz","en-ph","en-tt","en-us","en-za","en-zw","en","es-ar","es-bo","es-cl","es-co","es-cr","es-do","es-ec","es-gt","es-hn","es-mx","es-ni","es-pa","es-pe","es-pr","es-py","es-sv","es-us","es-uy","es-ve","es","et","eu","fa","fi","fo","fr-be","fr-ca","fr-ch","fr-lu","fr-mc","fr","gd","gl","gu","he","hi","hr","hu","hy","id","is","it-ch","it","ja","ka","kk","kn","ko","kok","kz","lt","lv","mk","ml","mn","mr","ms","mt","nb-no","ne","nl-be","nl","nn-no","no","or","pa","pl","pt-br","pt","rm","ro-md","ro","ru-md","ru","sa","sb","sk","sl","sq","sr","sv-fi","sv","sw","sx","syr","ta","te","th","tn","tr","ts","tt","uk","ur","uz","vi","xh","yi","zh-cn","zh-hk","zh-mo","zh-sg","zh-tw","zh","zu"]
+   if ("enumeration" in c) langs = c.enumeration
+   if ("pattern" in c) return '"' + new RandExp(c.pattern).gen() + '"'
+
+   let max = null, min = null
+
+   if (has("length")) {
+      if (c.length == 2) langs = langs.filter(x => x.length == 2)
+      if (c.length == 5) langs = langs.filter(x => x.length == 5)
+   }
+   if (has("maxLength")) max = c.maxLength
+   if (has("minLength")) max = c.minLength
+
+   if (max !== null && min !== null) {
+      if (max >= 2 && min <= 2 && max < 5) langs = langs.filter(x => x.length == 2)
+      if (max >= 5 && min <= 5 && min > 2) langs = langs.filter(x => x.length == 5)
+   }
+   else if (max === null) {
+      if (min <= 5 && min > 2) langs = langs.filter(x => x.length == 5)
+   }
+   else if (min === null) {
+      if (max >= 2 && max < 5) langs = langs.filter(x => x.length == 2)
+   }
+
+   return `'{{random("${langs.join('","')}")}}'`
 }
 
 function parseSimpleType(st, prefix) {
@@ -152,15 +329,22 @@ function parseSimpleType(st, prefix) {
    let has = facet => facet in st.content
    
    switch (st.built_in_base) {
-      case "anyURI": case "base64Binary": case "ENTITY": case "ENTITIES": case "hexBinary": case "ID": case "IDREFS": case "IDREF": case "language": 
-      case "Name": case "NCName": case "NMTOKEN": case "NMTOKENS": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
-         facets = ["enumeration","length","maxLength","minLength","pattern"]; 
-
+      case "anyURI":
          if ("enumeration" in st.content) return `'{{random("${st.content.enumeration.join('","')}")}}'`
-         // ("pattern" in st.content) ...
-         break
+         if ("pattern" in st.content) return '"' + new RandExp(st.content.pattern).gen() + '"'
+         return '"http://www.w3.org/2001/XMLSchema"'
 
-      case "boolean": facets = ["pattern"]; break
+      case "boolean":
+         if ("pattern" in st.content) return '"' + new RandExp(st.content.pattern).gen() + '"'
+         return '"' + (Math.random() < 0.5) + '"'
+
+      case "language":
+         return parseLanguage(st.content, has)
+
+      case "ENTITIES": case "IDREFS": case "NMTOKENS":
+      case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "Name": case "NCName": 
+      case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
+         return parseStringType(st.content, st.built_in_base, has)
 
       case "byte": case "decimal": case "double": case "float": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger":
       case "nonPositiveInteger": case "positiveInteger": case "short": case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
@@ -458,19 +642,37 @@ function randomString(alphabet, length) {
    return result
 }
 
+function string(base, length) {
+   //[".",":","-","_"]
+   let alphabet = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","z","y","z","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
+   let alphanumerical = [...alphabet,"0","1","2","3","4","5","6","7","8","9"]
+
+   let space = ["normalizedString","string","token"].includes(base) ? '," "' : ""
+   if (base == "base64Binary") alphanumerical = alphanumerical.concat(["+","/"])
+
+   let str = ""
+   for (let i = 0; i < length; i++) {
+      let arr = (["Name","NCName","ENTITY","ENTITIES","ID","IDREF","IDREFS","NOTATION","QName"].includes(base) && !i) ? alphabet : alphanumerical
+      str += `{{random("${arr.join('","')}"${(base == "token" && (!i || i == length-1)) ? "" : space})}}`
+   }
+   return str
+}
+
 function normalizedString(length) {
    let options = [{moustache: "letter", args: []}, " ", {moustache: "integerOfSize", args: ["1"]}]
    return randomString(options, length)
 }
 
+function range(size, startAt) {
+   return [...Array(size).keys()].map(i => i + startAt);
+}
+
 function hexBinary(length) {
-   let fstDigit = {moustache: "integer", args: ["2", "7"]}
+   let hexChars = range(60, 20)
+   hexChars = hexChars.concat(["2","3","4","5","6","7"].map(x => ["A","B","C","D","E","F"].map(y => x+y)).flat())
+   hexChars.pop()
 
-   let hexChars = [[fstDigit, {moustache: "integerOfSize", args: ["1"]}]] // 20-79
-   hexChars = hexChars.concat(["a","b","c","d","e"].map(c => [fstDigit, c])) // [2-7][a-f]
-   hexChars.push([{moustache: "integer", args: ["2", "6"]}, "f"]) // [2-6]f
-
-   return randomString(hexChars, length).flat()
+   return `{{random("${hexChars.join('","')}")}}`.repeat(length)
 }
 
 const btoa = str => Buffer.from(str, 'binary').toString('base64')
