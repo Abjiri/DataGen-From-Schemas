@@ -743,15 +743,8 @@
         if (value === "true") value = true
         else if (value === "false") value = false
         else return error(error_msg); break
-      case "byte":
-      case "int":
-      case "integer":
-      case "long":
-      case "short":
-      case "unsignedByte":
-      case "unsignedInt":
-      case "unsignedLong":
-      case "unsignedShort":
+      case "byte": case "int": case "integer": case "long": case "short":
+      case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
         if (!/^(\+|\-)?\d+$/.test(value)) return error(error_msg)
         value = parseInt(value)
 
@@ -779,14 +772,9 @@
         value = base_type == "double" ? parseDouble(value) : parseFloat(value); break
       case "duration":
         if (!/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(((\d+)(\.\d+)?|(\.\d+))S)?)?$/.test(value)) return error(error_msg); break
-      case "ENTITIES":
-      case "IDREFS":
-        if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*([ \t\n\r]+([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*)*$/.test(value)) return error(error_msg)
-        value = value.split(/[ \t\n\r]+/); break
-      case "ENTITY":
-      case "ID":
-      case "IDREF":
-      case "NCName":
+      case "ENTITIES": case "IDREFS":
+        if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*([ \t\n\r]+([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*)*$/.test(value)) return error(error_msg); break
+      case "ENTITY": case "ID": case "IDREF": case "NCName":
         if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
       case "gDay":
         if (!/^\-{3}(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
@@ -798,9 +786,6 @@
         if (!/^\-?\d{4,5}(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
       case "gYearMonth":
         if (!/^\-?\d{4,5}\-(0[1-9]|1[0-2])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-        /* let year = parseInt(value.match(/^\-?\d+/))
-        value = value.replace(/^\-?\d+\-/, "")
-        value = {year, month: parseInt(value.match(/^\d+/))} */
       case "language":
         if (!/^([a-zA-Z]{2}|[iI]\-[a-zA-Z]+|[xX]\-[a-zA-Z]{1,8})(\-[a-zA-Z]{1,8})*$/.test(value)) return error(error_msg); break
       case "Name":
@@ -812,8 +797,7 @@
       case "NMTOKEN":
         if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+$/.test(value)) return error(error_msg); break
       case "NMTOKENS":
-        if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+([ \t\n\r]+([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+)*$/.test(value)) return error(error_msg)
-        value = value.split(/[ \t\n\r]+/); break
+        if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+([ \t\n\r]+([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+)*$/.test(value)) return error(error_msg); break
       case "nonNegativeInteger":
         if (!/^\+?\d+$/.test(value)) return error(error_msg)
         value = parseInt(value)
@@ -906,7 +890,7 @@
   // validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
   function check_restrictionST_facets(el_name, base, content) {
     let type = getTypeInfo(base)
-
+    
     // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
     content = check_constrFacetBase(base, type, content)
 
@@ -1037,7 +1021,7 @@
   }
 }
 
-DSL_text = ws comment? XML_declaration ws comment? xsd:schema { return xsd }
+DSL_text = ws comment? XML_declaration ws comment? xsd:schema { return {xsd, simpleTypes} }
 
 
 // ----- Declaração XML -----
@@ -1250,7 +1234,7 @@ simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:
   if (!--type_depth) current_type = null
 
   let st = restrict_simpleType(attrs.name, content)
-  if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(content))
+  if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(st))
 
   return {element: el_name, attrs, built_in_base: st.built_in_base, content: st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})}
 }
