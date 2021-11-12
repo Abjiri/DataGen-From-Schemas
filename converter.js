@@ -59,7 +59,7 @@ function parseElementAux(el, prefix, depth) {
 
    // parsing do conteúdo -----
    let type = el.content.shift()
-   if (type.element == "simpleType") return `${parseSimpleType(type, prefix, depth+1)}` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
+   if (type.element == "simpleType") return `${parseSimpleType(type)}` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
    else return parseComplexType(type, prefix, depth)
 }
 
@@ -241,6 +241,9 @@ function parseDateTimeType(c, base, has) {
 
    let aux = {
       date: (str, offset) => {
+         let neg = str[0] == "-"
+         if (neg) str = str.substring(1)
+
          let date = new Date(str)
          
          if (offset != 0) {
@@ -254,9 +257,9 @@ function parseDateTimeType(c, base, has) {
          date[1] = date[1].slice(0,-5)
 
          date[0] = date[0].split("-")
-         date[0] = `${date[0][2]}-${date[0][1]}-${date[0][0]}`
+         date[0] = `${date[0][2]}/${date[0][1]}/${date[0][0]}`
 
-         return date
+         return {date, neg}
       },
       time: (t,offset) => {
          t = t.match(/^([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])(\.\d+)?/)
@@ -323,25 +326,28 @@ function parseDateTimeType(c, base, has) {
    if (has("minExclusive")) min = aux[base](c.minExclusive, 1)
    
    if (["date","dateTime"].includes(base)) {
-      if (max === null && min === null) min = ["01-01-1950", "00:00:00"]
+      if (max === null && min === null) min = {date: ["01/01/1950", "00:00:00"], neg: false}
       else if (min === null) {
-         let maxDate = max[0].split("-")
+         let maxDate = max[0].split("/")
          let year = parseInt(maxDate[2])
-         min = [`${maxDate[0]}-${maxDate[1]}-${year > 1000 ? (year-1000).toString().padStart(4,"0") : "0000"}`, "00:00:00"]
+         min = {date: [`${maxDate[0]}/${maxDate[1]}/${year > 1000 ? (year-1000).toString().padStart(4,"0") : "0000"}`, "00:00:00"], neg: false}
       }
 
-      if (base == "date") return `'{{date("${min[0]}"${max !== null ? `, "${max[0]}"` : ""}, "YYYY-MM-DD")}}'`
       return `gen => {
-         let max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
-   
-         let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
-         let time, date = max !== null ? gen.date(min[0], max[0], "YYYY-MM-DD") : gen.date(min[0], "YYYY-MM-DD")
+         let base = "${base}", max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
          
-         if (date == max[0]) time = gen.time("hh:mm:ss", 24, false, max[1], "23:59:59")
-         else if (date == min[0]) time = gen.time("hh:mm:ss", 24, false, "00:00:00", min[1])
-         else time = gen.time("hh:mm:ss", 24, false)
-             
-         return date + "T" + time
+         let time, date = max.date !== null ? gen.date(min.date[0], max.date[0], "YYYY-MM-DD") : gen.date(min.date[0], "YYYY-MM-DD")
+         
+         if (base == "dateTime") {
+            let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
+            
+            if (date == max.date[0]) time = gen.time("hh:mm:ss", 24, false, max.date[1], "23:59:59")
+            else if (date == min.date[0]) time = gen.time("hh:mm:ss", 24, false, "00:00:00", min.date[1])
+            else time = gen.time("hh:mm:ss", 24, false)
+         }
+
+         if (date > max.date[0] || date < min.date[0]) date = "-" + date
+         return date + (base == "dateTime" ? ("T" + time) : "")
       }`
    }
 
@@ -422,9 +428,9 @@ function parseLanguage(c, has) {
    return `'{{random("${langs.join('","')}")}}'`
 }
 
-function parseSimpleType(st, prefix) {
+function parseSimpleType(st) {
    /* if (child.element == "list") {
-      let value = "itemType" in child.attrs ? typeToString(parseType(child.attrs.itemType, prefix)) : parseSimpleType(child.content[0].content[0], prefix)
+      let value = "itemType" in child.attrs ? typeToString(parseType(child.attrs.itemType, prefix)) : parseSimpleType(child.content[0].content[0])
       
       let list_len = randomize(3,10)
       return `${value} `.repeat(list_len).slice(0,-1)
@@ -433,7 +439,7 @@ function parseSimpleType(st, prefix) {
    if (child.element == "union") {
       let values = []
       if ("memberTypes" in child.attrs) values = child.attrs.memberTypes.map(x => typeToString(parseType(x, prefix)))
-      child.content.forEach(x => values.push(parseSimpleType(x.content[0], prefix)))
+      child.content.forEach(x => values.push(parseSimpleType(x.content[0])))
       
       return values[randomize(0,values.length-1)]
    } */
@@ -812,11 +818,11 @@ let content = [
          {
             "element": "simpleType",
             "attrs": {},
-            "built_in_base": "dateTime",
+            "built_in_base": "date",
             "content": {
                "whiteSpace": "collapse",
-               "maxExclusive": "1999-01-01T12:12:12",
-               "minExclusive": "1111-01-01T23:59:59"
+               "maxExclusive": "0050-01-01",
+               "minExclusive": "-0050-01-01"
             }
          }
       ]
