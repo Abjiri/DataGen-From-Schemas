@@ -446,6 +446,7 @@ function parseSimpleType(st) {
 
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in st.content
+   st.content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
    
    switch (st.built_in_base) {
       case "anyURI":

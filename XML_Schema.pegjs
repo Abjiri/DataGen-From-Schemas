@@ -76,7 +76,9 @@
     ]
     
     derivedTypes.map(x => {
-      obj[x[0]] = {content: restrict_simpleType2(x[0], {type: x[1], prefix: default_prefix}, x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}, content: []}}), obj)}
+      let new_content =  x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}, content: []}})
+      let base_content = JSON.parse(JSON.stringify(obj[x[1]].content)) // constraining facets do tipo base
+      obj[x[0]] = {content: restrict_simpleType2(x[0], {type: x[1], prefix: default_prefix}, base_content, new_content)}
     })
     
     return obj
@@ -84,18 +86,32 @@
 
   // name = nome do novo tipo, st_content = conteúdo do novo simpleType
   function restrict_simpleType(name, st_content) {
-    // se não for uma restriction, não há nada a verificar
-    if (st_content[0].element != "restriction") return st_content
+    /* if (st_content[0].element == "list") {
+      let new_content = st_content.filter((x,i) => i>0)
+      return {built_in_base: st_content[0].built_in_base, content: st_content[0].content, list: restrict_simpleType2("list", "list", new_content, simpleTypes)}
+    } */
 
-    let type = getTypeInfo(st_content[0].attrs.base) // tipo base
-    let new_content = st_content[0].content // constraining facets do novo tipo
+    let base, base_content, new_content, fst_content = st_content[0]
 
-    return {built_in_base: type.base, content: restrict_simpleType2(name, type, new_content, simpleTypes)}
+    if (fst_content.element == "restriction") {
+      if (fst_content.content[0].element == "simpleType") {
+        base = fst_content.content[0].built_in_base
+        base_content = fst_content.content[0].content
+        new_content = fst_content.content.filter((x,i) => i>0)
+      }
+      else {
+        base = fst_content.attrs.base
+        base_content = JSON.parse(JSON.stringify(simpleTypes[getTypeInfo(base).type].content)) // constraining facets do tipo base
+        new_content = fst_content.content // constraining facets do novo tipo
+      }
+    }
+    
+    let type = getTypeInfo(base) // tipo base
+    return {built_in_base: type.base, content: restrict_simpleType2(name, type, base_content, new_content)}
   }
 
   // name = nome do novo tipo, base = nome do tipo base, new_content = facetas do novo tipo, st = simpleTypes
-  function restrict_simpleType2(name, base, new_content, st) {
-    let base_content = JSON.parse(JSON.stringify(st[base.type].content)) // constraining facets do tipo base
+  function restrict_simpleType2(name, base, base_content, new_content) {
     let base_els = base_content.map(x => x.element) // nomes das constraining facets do tipo base
 
     for (let i = 0; i < new_content.length; i++) {
@@ -1235,8 +1251,8 @@ simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:
 
   let st = restrict_simpleType(attrs.name, content)
   if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(st))
-
-  return {element: el_name, attrs, built_in_base: st.built_in_base, content: st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})}
+  
+  return {element: el_name, attrs, built_in_base: st.built_in_base, content: st.content}
 }
 
 simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* {return check_localTypeAttrs(el, "simpleType")}
@@ -1317,8 +1333,11 @@ union_content = c:(annotation? simpleType*) {return cleanContent(c.flat())}
 
 list = prefix:open_XSD_el el_name:"list" attrs:list_attrs ws 
        close:(merged_close / openEl content:list_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-       &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "itemType", attrs, close.content)}
-       {return {element: el_name, attrs, content: close.content}}
+       &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "itemType", attrs, close.content)} {
+  let simpleType = "itemType" in attrs ? simpleTypes[attrs.itemType] : close.content[0]
+  simpleType.element = el_name
+  return simpleType
+}
 
 list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return getAttrs(attrs)}
 
@@ -1331,8 +1350,10 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-                &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)}
-                {return {element: el_name, attrs, content: check_restrictionST_facets(el_name, attrs.base, close.content)}}
+                &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)} {
+  let base = close.content[0].element == "simpleType" ? close.content[0].built_in_base : attrs.base
+  return {element: el_name, attrs, content: check_restrictionST_facets(el_name, base, close.content)}
+}
 
 base_attrs = attrs:(base elem_id? / elem_id base?)? {return getAttrs(attrs)}
 
