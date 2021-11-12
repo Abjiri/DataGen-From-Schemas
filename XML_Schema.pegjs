@@ -67,12 +67,12 @@
       ["normalizedString", "string", [["whiteSpace", "replace", false]]],
       ["token", "normalizedString", [["whiteSpace", "collapse", false]]],
       ["language", "token", [["pattern", "([a-zA-Z]{2}|[iI]-[a-zA-Z]+|[xX]-[a-zA-Z]{1,8})(-[a-zA-Z]{1,8})*", false]]],
-      ["Name", "token", [["pattern", "\i\c*", false]]],
-      ["NCName", "Name", [["pattern", "[\i-[:]][\c-[:]]*", false]]],
+      ["Name", "token", [["pattern", "[a-zA-Z:_][-_:\.a-zA-Z0-9]*", false]]],
+      ["NCName", "Name", [["pattern", "[a-zA-Z_][-_\.a-zA-Z0-9]*", false]]],
       ["ID", "NCName", []],
       ["IDREF", "NCName", []],
       ["ENTITY", "NCName", []],
-      ["NMTOKEN", "token", [["pattern", "\c+", false]]]
+      ["NMTOKEN", "token", [["pattern", "[-_:\.a-zA-Z0-9]+", false]]]
     ]
     
     derivedTypes.map(x => {
