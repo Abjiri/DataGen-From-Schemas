@@ -149,7 +149,7 @@
         let index = base_content.findIndex(x => x.element == new_facet)
 
         // patterns em passos de derivação diferentes são ANDed
-        if (new_facet == "pattern") base_content[index].attrs.value = `^(?=${base_content[index].attrs.value})(?=${new_value}).*$`
+        if (new_facet == "pattern") base_content[index].attrs.value = `^(?=${base_content[index].attrs.value})(?=${new_value})${new_value}$`
         else base_content[index].attrs.value = new_value
       }
       else base_content.push(new_content[i])

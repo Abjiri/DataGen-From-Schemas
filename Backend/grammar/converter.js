@@ -57,7 +57,7 @@ function parseElementAux(el, depth) {
    /* if ("abstract" in attrs) */
    if ("nillable" in attrs) {
       // se "nillable" for true, dar uma probabilidade de 30% de o conteúdo do elemento no XML ser nil
-      if (attrs.nillable && Math.random() < 0.3) return "{ nil: true }"
+      if (attrs.nillable && Math.random() < 0.3) return "{ DFS_ATTR__nil: true }"
    }
    if ("fixed" in attrs) return attrs.fixed
    if ("default" in attrs) return attrs.default
@@ -215,7 +215,7 @@ function parseComplexGType(c, base, has) {
    else if (min == null) min = base == "gMonthDay" ? {month: 1, day: 1} : {year: max.year - 100, month: 1}
 
    return `gen => {
-      let base = ${base}, max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
+      let base = "${base}", max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
 
       let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
       let left = base == "gMonthDay" ? "month" : "year"
@@ -342,17 +342,17 @@ function parseDateTimeType(c, base, has) {
       return `gen => {
          let base = "${base}", max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
          
-         let time, date = max.date !== null ? gen.date(min.date[0], max.date[0], "YYYY-MM-DD") : gen.date(min.date[0], "YYYY-MM-DD")
+         let time, date = max !== null ? gen.date(min.date[0], max.date[0], "YYYY-MM-DD") : gen.date(min.date[0], "YYYY-MM-DD")
          
          if (base == "dateTime") {
             let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
             
-            if (date == max.date[0]) time = gen.time("hh:mm:ss", 24, false, max.date[1], "23:59:59")
+            if (max !== null && date == max.date[0]) time = gen.time("hh:mm:ss", 24, false, max.date[1], "23:59:59")
             else if (date == min.date[0]) time = gen.time("hh:mm:ss", 24, false, "00:00:00", min.date[1])
             else time = gen.time("hh:mm:ss", 24, false)
          }
 
-         if (date > max.date[0] || date < min.date[0]) date = "-" + date
+         if ((max !== null && date > max.date[0]) || date < min.date[0]) date = "-" + date
          return date + (base == "dateTime" ? ("T" + time) : "")
       }`
    }
@@ -390,13 +390,20 @@ function parseDateTimeType(c, base, has) {
                else {
                   fstEq = true
                   rand = {new: randomize(max[i], min[i]), inf: min[i], sup: max[i]}
+
+                  let sum = arr => arr.reduce((c,a) => c+a, 0)
+                  if (max[0] == 1 && !min[0] && !sum(max.slice(1)) && !sum(min.slice(1))) rand.new = 0
                   if (rand.new != 0) str += rand.new + units[i]
                }
             }
             else {
-               if (rand.new == rand.inf) str += randomize(maxPossible[i], min[i]) + units[i]
-               else if (rand.new == rand.sup) str += randomize(max[i], 0) + units[i]
-               else str += randomize(maxPossible[i], 0) + units[i]
+               let next_part
+
+               if (rand.new == rand.inf) next_part = randomize(maxPossible[i], min[i])
+               else if (rand.new == rand.sup) next_part = randomize(max[i], 0)
+               else next_part = randomize(maxPossible[i], 0)
+
+               if (next_part > 0) str += next_part + units[i]
             }
             if (i == 2) str += "T"
          }
@@ -409,7 +416,7 @@ function parseDateTimeType(c, base, has) {
 function parseLanguage(c, has) {
    let langs = ["af","ar-ae","ar-bh","ar-dz","ar-eg","ar-iq","ar-jo","ar-kw","ar-lb","ar-ly","ar-ma","ar-om","ar-qa","ar-sa","ar-sy","ar-tn","ar-ye","ar","as","az","be","bg","bn","ca","cs","da","de-at","de-ch","de-li","de-lu","de","div","el","en-au","en-bz","en-ca","en-gb","en-ie","en-jm","en-nz","en-ph","en-tt","en-us","en-za","en-zw","en","es-ar","es-bo","es-cl","es-co","es-cr","es-do","es-ec","es-gt","es-hn","es-mx","es-ni","es-pa","es-pe","es-pr","es-py","es-sv","es-us","es-uy","es-ve","es","et","eu","fa","fi","fo","fr-be","fr-ca","fr-ch","fr-lu","fr-mc","fr","gd","gl","gu","he","hi","hr","hu","hy","id","is","it-ch","it","ja","ka","kk","kn","ko","kok","kz","lt","lv","mk","ml","mn","mr","ms","mt","nb-no","ne","nl-be","nl","nn-no","no","or","pa","pl","pt-br","pt","rm","ro-md","ro","ru-md","ru","sa","sb","sk","sl","sq","sr","sv-fi","sv","sw","sx","syr","ta","te","th","tn","tr","ts","tt","uk","ur","uz","vi","xh","yi","zh-cn","zh-hk","zh-mo","zh-sg","zh-tw","zh","zu"]
    if ("enumeration" in c) langs = c.enumeration
-   if ("pattern" in c) return '"' + new RandExp(c.pattern).gen() + '"'
+   if ("pattern" in c && c.pattern != "([a-zA-Z]{2}|[iI]-[a-zA-Z]+|[xX]-[a-zA-Z]{1,8})(-[a-zA-Z]{1,8})*") return '"' + new RandExp(c.pattern).gen() + '"'
 
    let max = null, min = null
 
@@ -451,8 +458,8 @@ function parseSimpleType(st) {
    } */
 
    // verificar se a faceta em questão existe no conteúdo
-   let has = facet => facet in st.content
    let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
+   let has = facet => facet in content
    
    switch (st.built_in_base) {
       case "anyURI":
@@ -513,6 +520,7 @@ function parseType(type) {
    let st = simpleTypes[type.type]
 
    if (!("built_in_base" in st)) st.built_in_base = type.base
+   console.log(parseSimpleType(st))
    return parseSimpleType(st)
 }
 
