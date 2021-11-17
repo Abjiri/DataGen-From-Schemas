@@ -3,7 +3,7 @@ var router = express.Router();
 var axios = require('axios');
 
 const parser = require('../grammar/parser')
-const converter = require('../grammar/converter/converter')
+const converter = require('../converter/converter')
 
 // POST para gerar um dataset a partir de um XML schema
 router.post('/xml_schema', (req, res) => {
