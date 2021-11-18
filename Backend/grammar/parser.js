@@ -404,7 +404,7 @@ module.exports = /*
         peg$c228 = peg$literalExpectation("restriction", false),
         peg$c229 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)},
         peg$c230 = function(prefix, el_name, attrs, close) {
-          let base = close.content[0].element == "simpleType" ? close.content[0].built_in_base : attrs.base
+          let base = "base" in attrs ? attrs.base : close.content[0].built_in_base
           return {element: el_name, attrs, content: checkError(restrictionsAPI.check_restrictionST_facets(el_name, base, close.content, default_prefix, simpleTypes))}
         },
         peg$c231 = "base",

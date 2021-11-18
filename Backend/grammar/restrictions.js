@@ -164,7 +164,7 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
   let base, base_content, new_content, fst_content = st_content[0]
 
   if (fst_content.element == "restriction") {
-    if (fst_content.content[0].element == "simpleType") {
+    if (fst_content.content.length > 0 && fst_content.content[0].element == "simpleType") {
       base = fst_content.content[0].built_in_base
       base_content = fst_content.content[0].content
       new_content = fst_content.content.filter((x,i) => i>0)
