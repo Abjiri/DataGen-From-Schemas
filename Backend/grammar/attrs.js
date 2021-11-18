@@ -13,8 +13,9 @@ const check_repeatedAttrs = (arr, attrs, el_name) => (Object.keys(attrs).length 
 
 // adicionar os valores default dos atributos "max/minOccurs"
 function defaultOccurs(attrs, curr) {
-  // os elementos dentro de um group não podem possuir estes atributos, logo não colocar por default
-  if (!curr.group) {
+  // os filhos de um group (all/choice/sequence) não podem possuir estes atributos, logo não colocar por default
+  // mas os <element> dentro dos filhos podem
+  if (!curr.group || curr.element) {
     if (!("maxOccurs" in attrs)) attrs.maxOccurs = ("minOccurs" in attrs && attrs.minOccurs > 0) ? attrs.minOccurs : 1
     else if (attrs.maxOccurs == "unbounded") attrs.maxOccurs = ("minOccurs" in attrs ? attrs.minOccurs : 0) + 10 // se o maxOccurs for unbounded, assume-se um teto de minOccurs+10
 

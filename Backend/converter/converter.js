@@ -46,21 +46,22 @@ function getTypeInfo(type) {
 function convertXSD(xsd, st) {
    let str = "<!LANGUAGE pt>\n{\n"
    let depth = 1
-
+   
    // variáveis globais
    default_prefix = xsd.prefix
    simpleTypes = st
 
-   let elements = xsd.content.filter(x => x.element == "element")
-   for (let i = 0; i < elements.length; i++) {
-      let {elem_str, _} = parseElement(elements[i], depth, null)
+   for (let i = 0; i < xsd.content.length; i++) {
+      let {elem_str, _} = parseElement(xsd.content[i], depth, null)
 
       if (elem_str.length > 0) {
          str += indent(depth) + elem_str
-         if (i < elements.length-1) str += ","
+         if (i < xsd.content.length-1) str += ","
          str += "\n"
       }
    }
+
+   if (!xsd.content.length) str += indent(depth) + "DFS_EMPTY_XML: true\n"
 
    str += "}"
    return str
@@ -72,7 +73,7 @@ function parseElement(el, depth, keys) {
    // se for aninhado, numerar as suas ocorrências para não dar overwrite na geração do DataGen
    let name = () => `${schemaElem ? "" : `DFS_${keys[el.attrs.name]++}__`}${el.attrs.name}: ` 
    let occurs = schemaElem ? 1 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
-
+   
    for (let i = 0; i < occurs; i++) {
       // converte o valor do elemento para string DSL
       let parsed = parseElementAux(el, depth)
@@ -195,7 +196,7 @@ function parseGroup(el, depth, keys) {
       if (parsed.str.length > 0) str += parsed.str + "\n"
       keys = parsed.keys
    }
-
+   
    return {str, keys}
 }
 
@@ -266,7 +267,7 @@ function parseChoice(el, depth, keys) {
 function parseCT_child_content(parent, str, content, depth, keys) {
    // a var choice é para indicar se o último elemento filtrado foi uma choice
    let choice
-
+   
    content.forEach(x => {
       let parsed
       choice = false

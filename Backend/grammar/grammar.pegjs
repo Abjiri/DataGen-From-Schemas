@@ -21,8 +21,11 @@
   
   // Variáveis relacionadas com tipos ------------------------------
 
+  // verificar se o resultado de uma função invocada de uma API vem com erro ou não 
+  const checkError = obj => ("error" in obj) ? error(obj.error) : obj.data
+
   // array dos tipos embutidos da XML Schema em formato da DSL ({element, attrs, content})
-  let simpleTypes = checkError(restrictionsAPI.create_simpleTypes(default_prefix))
+  let simpleTypes = restrictionsAPI.create_simpleTypes(default_prefix)
   // número de simple/complexTypes aninhados correntemente
   let type_depth = 0
   // nome do simple/complexType a ser processado neste momento
@@ -35,8 +38,6 @@
   
   // Funções auxiliares gerais ------------------------------
 
-  // verificar se o resultado de uma função invocada de uma API vem com erro ou não 
-  const checkError = obj => ("error" in obj) ? error(obj.error) : obj.data
   // verificar se o elemento pai é o <schema>
   const atRoot = () => !schema_depth
   // verificar se não foi definido um prefixo para a schema
@@ -128,7 +129,13 @@
 
     if (content.some(x => "maxOccurs" in x.attrs || "minOccurs" in x.attrs))
       return error(`O elemento filho de um <group> não podem possuir os atributos 'maxOccurs' ou 'minOccurs'! Só o elemento <group> em si.`)
-    return true
+      
+    if (content.length > 0) {
+      content[0].attrs.maxOccurs = 1
+      content[0].attrs.minOccurs = 1
+    }
+
+    return content
   }
 
 
@@ -344,8 +351,11 @@ element = prefix:open_XSD_el el_name:$("element" {any_type = "BSC"; curr.element
 
 element_attrs = el:(elem_abstract / elem_block / elem_default / elem_substitutionGroup /
                 elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
-                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)*
-                {curr.element = false; return checkError(attrsAPI.check_elemAttrs(el, schema_depth, curr))}
+                elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)* {
+  let attrs = checkError(attrsAPI.check_elemAttrs(el, schema_depth, curr))
+  curr.element = false
+  return attrs
+}
 
 elem_abstract = ws2 attr:"abstract" ws "=" q1:QMo val:boolean q2:QMc                                        {return checkQM(q1,q2,attr,val)}
 elem_block = ws2 attr:"block" ws "=" q1:QMo val:block_values q2:QMc                                         {return checkQM(q1,q2,attr,val)}
@@ -441,7 +451,7 @@ attributeGroup = prefix:open_XSD_el el_name:"attributeGroup" attrs:attributeGrou
                  &{return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)} 
                  {return {element: el_name, attrs, content: close.content}}
 
-attributeGroup_attrs = el:(elem_id / attrGroup_name / attrGroup_ref)* {return checkError(attrsAPI.check_attributeElAttrs(el,"attributeGroup"))}
+attributeGroup_attrs = el:(elem_id / attrGroup_name / attrGroup_ref)* {return checkError(attrsAPI.check_attributeElAttrs(el, "attributeGroup", schema_depth))}
 
 attrGroup_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc           &{return validateName(val,"attributeGroup")} {return checkQM(q1,q2,attr,val)}
 attrGroup_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc {queue.push({attr: "ref", args: [val, "attributeGroup"]}); return checkQM(q1,q2,attr,val)}
@@ -709,8 +719,8 @@ choiceOrSeq_content = c:(annotation? (element / choiceOrSequence / group / any)*
 
 group = prefix:open_XSD_el el_name:"group" attrs:group_attrs ws 
         close:(merged_close / openEl content:group_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-        &{return check_elTags(el_name, prefix, close) && check_groupContent(close.content)}
-        {curr.group = false; return {element: el_name, attrs, content: close.content}}
+        &{return check_elTags(el_name, prefix, close)}
+        {curr.group = false; return {element: el_name, attrs, content: check_groupContent(close.content)}}
 
 group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)*
               {let attrs = checkError(attrsAPI.check_groupAttrs(el, schema_depth, curr)); curr.group = true; return attrs}
