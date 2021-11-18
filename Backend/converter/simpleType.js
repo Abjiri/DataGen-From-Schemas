@@ -310,7 +310,7 @@ function parseDateTimeType(c, base, has) {
           
           let time, date = max !== null ? gen.date(min.date[0], max.date[0], "YYYY-MM-DD") : gen.date(min.date[0], "YYYY-MM-DD")
           
-          max.date[0] = max.date[0].split("/").reverse().join("-")
+          if (max !== null) max.date[0] = max.date[0].split("/").reverse().join("-")
           min.date[0] = min.date[0].split("/").reverse().join("-")
           
           if (base == "dateTime") {

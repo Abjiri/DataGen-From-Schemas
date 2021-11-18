@@ -1,3 +1,4 @@
+const attrsAPI = require("./attrs")
 const restrictionsAPI = require("./restrictions")
 
 module.exports = /*
@@ -204,7 +205,7 @@ module.exports = /*
           if (prefix !== default_prefix) return error ("Precisa de prefixar o elemento de fecho da schema com o prefixo predefinido do seu namespace!")
           return true
         },
-        peg$c53 = function(attrs) {return check_schemaAttrs(attrs)},
+        peg$c53 = function(attrs) {return checkError(attrsAPI.check_schemaAttrs(attrs, default_prefix))},
         peg$c54 = function(attrs) {return attrs},
         peg$c55 = "attribute",
         peg$c56 = peg$literalExpectation("attribute", false),
@@ -251,7 +252,7 @@ module.exports = /*
           if ((close.merged || !close.content.length) && !validateLocalEl(attrs)) return error("Um elemento local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
           return check_elTags(el_name, prefix, close) && check_elemMutex(attrs, close.content)
         },
-        peg$c97 = function(el) {curr.element = false; return check_elemAttrs(el)},
+        peg$c97 = function(el) {curr.element = false; return checkError(attrsAPI.check_elemAttrs(el, schema_depth, curr))},
         peg$c98 = "abstract",
         peg$c99 = peg$literalExpectation("abstract", false),
         peg$c100 = "block",
@@ -308,7 +309,7 @@ module.exports = /*
         peg$c151 = "keyref",
         peg$c152 = peg$literalExpectation("keyref", false),
         peg$c153 = function(prefix, el_name, a) {return validateName(a.name, el_name)},
-        peg$c154 = function(attrs) {return check_keyrefAttrs(attrs)},
+        peg$c154 = function(attrs) {return checkError(attrsAPI.check_keyrefAttrs(attrs))},
         peg$c155 = "refer",
         peg$c156 = peg$literalExpectation("refer", false),
         peg$c157 = function(prefix) {any_type = "BS"},
@@ -316,7 +317,7 @@ module.exports = /*
           if ((close.merged || !close.content.length) && !validateLocalEl(attrs)) return error("Um atributo local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
           return check_elTags(el_name, prefix, close) && check_attrMutex(attrs, close.content)
         },
-        peg$c159 = function(el) {any_type = "BSC"; return check_attributeElAttrs(el,"attribute")},
+        peg$c159 = function(el) {any_type = "BSC"; return checkError(attrsAPI.check_attributeElAttrs(el, "attribute", schema_depth))},
         peg$c160 = function(attr, q1, val, q2) {return validateName(val,"attribute")},
         peg$c161 = function(attr, q1, val, q2) {queue.push({attr: "ref", args: [val, "attribute"]}); return checkQM(q1,q2,attr,val)},
         peg$c162 = "use",
@@ -324,7 +325,7 @@ module.exports = /*
         peg$c164 = "attributeGroup",
         peg$c165 = peg$literalExpectation("attributeGroup", false),
         peg$c166 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)},
-        peg$c167 = function(el) {return check_attributeElAttrs(el,"attributeGroup")},
+        peg$c167 = function(el) {return checkError(attrsAPI.check_attributeElAttrs(el,"attributeGroup"))},
         peg$c168 = function(attr, q1, val, q2) {return validateName(val,"attributeGroup")},
         peg$c169 = function(attr, q1, val, q2) {queue.push({attr: "ref", args: [val, "attributeGroup"]}); return checkQM(q1,q2,attr,val)},
         peg$c170 = "anyAttribute",
@@ -347,7 +348,7 @@ module.exports = /*
           
           return {element: el_name, attrs, built_in_base: st.built_in_base, content: st.content}
         },
-        peg$c183 = function(el) {return check_localTypeAttrs(el, "simpleType")},
+        peg$c183 = function(el) {return checkError(attrsAPI.check_localTypeAttrs(el, "simpleType", schema_depth, curr))},
         peg$c184 = function(attr, q1, val, q2) {return newLocalType(val,"simpleType")},
         peg$c185 = function(c) {any_type = "BSC"; return cleanContent(c)},
         peg$c186 = "annotation",
@@ -420,7 +421,7 @@ module.exports = /*
         peg$c243 = peg$literalExpectation("complexType", false),
         peg$c244 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)},
         peg$c245 = function(prefix, el_name, attrs, close) {if (!--type_depth) current_type = null; return {element: el_name, attrs, content: close.content}},
-        peg$c246 = function(el) {return check_localTypeAttrs(el, "complexType")},
+        peg$c246 = function(el) {return attrsAPI.check_localTypeAttrs(el, "complexType", schema_depth, curr)},
         peg$c247 = "mixed",
         peg$c248 = peg$literalExpectation("mixed", false),
         peg$c249 = function(attr, q1, val, q2) {return newLocalType(val,"complexType")},
@@ -451,12 +452,12 @@ module.exports = /*
         peg$c274 = peg$literalExpectation("group", false),
         peg$c275 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_groupContent(close.content)},
         peg$c276 = function(prefix, el_name, attrs, close) {curr.group = false; return {element: el_name, attrs, content: close.content}},
-        peg$c277 = function(el) {let attrs = check_groupAttrs(el); curr.group = true; return attrs},
+        peg$c277 = function(el) {let attrs = checkError(attrsAPI.check_groupAttrs(el, schema_depth, curr)); curr.group = true; return attrs},
         peg$c278 = function(attr, q1, val, q2) {return validateName(val,"group")},
         peg$c279 = function(attr, q1, val, q2) {queue.push({attr: "ref", args: [val, "group"]}); return checkQM(q1,q2,attr,val)},
         peg$c280 = "notation",
         peg$c281 = peg$literalExpectation("notation", false),
-        peg$c282 = function(el) {return check_notationAttrs(el)},
+        peg$c282 = function(el) {return checkError(attrsAPI.check_notationAttrs(el))},
         peg$c283 = function(attr, q1, val, q2) {return validateName(val,"notation")},
         peg$c284 = "public",
         peg$c285 = peg$literalExpectation("public", false),
@@ -13386,15 +13387,42 @@ module.exports = /*
     }
 
 
-      // Geral ------------------------------
+      // Variáveis gerais ------------------------------
 
       // queue para invocações de funções de validação de referências na schema (refs e types) - para os elementos referenciados não terem de aparecer antes das referências
       let queue = []
       // prefixo definido na declaração da schema
       let default_prefix = null
+      // prefixos de namespaces declarados na schema
+    	let prefixes = []
+      // número de elementos aninhados dentro do <schema> correntemente
+      let schema_depth = 0
+      // nomes (únicos) dos elementos globais com esse atributo
+      let names = {attribute: [], attributeGroup: [], element: [], elem_constraint: [], group: [], notation: []}
+      // atributos "id" de elementos da schema - têm de ser únicos
+      let ids = []
+      // boleanos para saber se está a ser processado um <element> (para a função validationQueue.type), um <group> ou um <redefine>
+      let curr = {element: false, group: false, redefine: false}
+      
+      
+      // Variáveis relacionadas com tipos ------------------------------
+
       // array dos tipos embutidos da XML Schema em formato da DSL ({element, attrs, content})
       let simpleTypes = restrictionsAPI.create_simpleTypes(default_prefix)
+      // número de simple/complexTypes aninhados correntemente
+      let type_depth = 0
+      // nome do simple/complexType a ser processado neste momento
+      let current_type = null
+      // nomes dos novos tipos definidos na schema - têm de ser únicos
+      let local_types = {simpleType: [], complexType: [], simpleContent: []}
+      // boleano para indicar se um tipo referenciado tem de corresponder a um tipo built-in ou simpleType apenas (false), ou pode ser um complexType também (true) 
+      let any_type = "BSC"
 
+      
+      // Funções auxiliares gerais ------------------------------
+
+      // verificar se o resultado de uma função invocada de uma API vem com erro ou não 
+      const checkError = obj => ("error" in obj) ? error(obj.error) : obj.data
       // verificar se o elemento pai é o <schema>
       const atRoot = () => !schema_depth
       // verificar se não foi definido um prefixo para a schema
@@ -13403,35 +13431,10 @@ module.exports = /*
       const existsPrefix = p => prefixes.includes(p) ? true : error("Este prefixo não foi declarado no início da schema!")
       // verificar se as aspas/apóstrofes são fechados consistentemente - se sim, retorna o objeto {attr,val} em que foram usadas (ou apenas true, para as invocações da declaração XML)
       const checkQM = (q1,q2,attr,val) => q1 === q2 ? (attr===null ? true : {attr,val}) : error("Deve encapsular o valor em aspas ou em apóstrofes. Não pode usar um de cada!")
-      // juntar todos os atributos do elemento num só objeto
-      const getAttrs = objArr => objArr === null ? {} : cleanContent(objArr).reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
-      // verificar se o array de atributos tem algum atributo repetido
-      const check_repeatedAttrs = (arr, attrs, el_name) => (Object.keys(attrs).length == arr.length) ? attrs : error(`O elemento <${el_name}> não pode possuir atributos repetidos!`)
       // executar todas as invocações guardadas na queue para ver se são válidas
       const checkQueue = () => queue.reduce((accum, curr) => accum && queueFuncs[curr.attr](...curr.args), true)
-
-      // copiar os atributos de um elemento referenciado para o elemento que o referencia
-      function complete_refs(content, global_elems) {
-        for (let i = 0; i < content.length; i++) {
-          // verificar se é um <element> com "ref"
-          if ("ref" in content[i].attrs) {
-            // identificar o elemento global que referenceia
-            let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
-            // copiar os seus atributos e o conteúdo
-            content[i].attrs = {...elem.attrs, ...content[i].attrs}
-            content[i].content = elem.content
-            // apagar o atributo "ref", que já não é relevante
-            delete content[i].attrs.ref
-          }
-          // se for um elemento básico (sem "ref" nem filhos) e não tiver "type", assume-se que é string
-          else if (content[i].element == "element" && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
-
-          // repetir recursivamente para os elementos filho
-          if (Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems)
-        }
-        
-        return content
-      }
+      // se for null, converte para array vazio; senão, remove os nulls do array
+      const cleanContent = content => content === null ? [] : content.filter(e => e !== null)
 
       // funções invocadas pela queue
       const queueFuncs = {
@@ -13456,97 +13459,28 @@ module.exports = /*
           return true
         }
       }
-
-      // Schema ------------------------------
-
-      // prefixos de namespaces declarados na schema
-    	let prefixes = []
-      // atributos da schema
-      let schema_attrs = {}
-      // número de elementos aninhados dentro do <schema> correntemente
-      let schema_depth = 0
-
-      // validar os atributos do elemento <schema>
-      function check_schemaAttrs(arr) {
-        // obrigatoriamente tem atributos (no mínimo a definição do namespace)
-        if (arr.length < 1) return error("O elemento <schema> requer, no mínimo, a definição do namespace!")
-
-        let keys = [], // array com os nomes dos atributos
-            attrs = {namespaces: {}}, // objeto com os valores dos atributos
-            null_namespace = "" // para guardar o URI do namespace predefinido, caso não tenha prefixo
-            
-        for (let i = 0; i < arr.length; i++) {
-          // verificar que não há atributos repetidos (pode haver várias definições de namespaces)
-          if (keys.includes(arr[i].attr) && arr[i].attr != "namespace") return error("O elemento <schema> não pode possuir atributos repetidos!")
-          else {
-            // guardar a chave "namespace" apenas 1x
-            if (!keys.includes(arr[i].attr)) keys.push(arr[i].attr)
-            // guardar o valor no objeto attrs
-            if (arr[i].attr == "namespace") {
-              if (arr[i].prefix === null) {
-                // verificar que só há, no máximo, 1 namespace sem prefixo
-                if (null_namespace.length > 0) return error("Não pode haver vários namespaces sem prefixo associado!")
-                else null_namespace = arr[i].val
-              }
-              else {
-                // verificar que não há prefixos de namespaces repetidos
-                if (arr[i].prefix in attrs.namespaces) return error("Todos os prefixos de namespaces devem ser únicos!")
-                else attrs.namespaces[arr[i].prefix] = arr[i].val
-              }
-            }
-            else attrs[arr[i].attr] = arr[i].val
-          }
-        }
-
-        // a definição do namespace é obrigatória
-        if (!Object.keys(attrs.namespaces).length && !null_namespace.length) return error("O elemento <schema> requer a definição do namespace!")
-        // verificar que a definição de um namespace e, opcionalmente, prefixo predefinidos está correta e coerente
-        if (default_prefix === null && !null_namespace.length) return error("Precisa de prefixar o elemento <schema> com o prefixo do namespace predefinido!")
-        if (default_prefix !== null && null_namespace.length > 0) {
-          if (!(default_prefix in attrs.namespaces)) return error("Precisa de associar o prefixo do elemento <schema> a um namespace!")
-        }
-
-        // atributos com valores predefinidos
-        if (!keys.includes("attributeFormDefault")) attrs.attributeFormDefault = "unqualified"
-        if (!keys.includes("elementFormDefault")) attrs.elementFormDefault = "unqualified"
-
-        schema_attrs = attrs
-        return attrs
-      }
       
+      // copiar os atributos de um elemento referenciado para o elemento que o referencia
+      function complete_refs(content, global_elems) {
+        for (let i = 0; i < content.length; i++) {
+          // verificar se é um <element> com "ref"
+          if ("ref" in content[i].attrs) {
+            // identificar o elemento global que referenceia
+            let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
+            // copiar os seus atributos e o conteúdo
+            content[i].attrs = {...elem.attrs, ...content[i].attrs}
+            content[i].content = elem.content
+            // apagar o atributo "ref", que já não é relevante
+            delete content[i].attrs.ref
+          }
+          // se for um elemento básico (sem "ref" nem filhos) e não tiver "type", assume-se que é string
+          else if (content[i].element == "element" && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
 
-      // <element> ------------------------------
-
-      // nomes (únicos) dos elementos globais com esse atributo
-      let names = {attribute: [], attributeGroup: [], element: [], elem_constraint: [], group: [], notation: []}
-      // atributos "id" de elementos da schema - têm de ser únicos
-      let ids = []
-      // boleanos para saber se está a ser processado um <element> (para a função validationQueue.type), um <group> ou um <redefine>
-      let curr = {element: false, group: false, redefine: false}
-
-      // validar um elemento <element/attribute> básico - verificar que tem os atributos essenciais
-      const validateLocalEl = attrs => "ref" in attrs || "name" in attrs
-      // validar os atributos de um elemento <any/all/choice/sequence>
-      const check_occursAttrs = (arr, el_name) => defaultOccurs(check_repeatedAttrs(arr, getAttrs(arr), el_name))
-      // verificar se o novo id é único na schema
-      const validateID = id => !ids.includes(id) ? true : error(`O valor do atributo 'id' deve ser único na schema! Existe mais do que um elemento na schema com o id '${id}'!`)
-      // verificar se o atributo em questão está presente
-      const check_requiredAttr = (attrs, el_name, attr_name) => attr_name in attrs ? attrs : error(`Um elemento <${el_name}> requer o atributo '${attr_name}'!`)
-      // se for null, converte para array vazio; senão, remove os nulls do array
-      const cleanContent = content => content === null ? [] : content.filter(e => e !== null)
-
-      // validar o nome de um <element/attribute/notation> - deve ser único
-      function validateName(name, el_name) {
-        // verificar que são elementos globais
-        if (atRoot()) {
-          if (!names[el_name].includes(name)) {names[el_name].push(name); return true}
-          return error(`Todos os elementos <${el_name}> ${el_name != "notation" ? "definidos globalmente " : ""}devem ter nomes únicos!`)
+          // repetir recursivamente para os elementos filho
+          if (Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems)
         }
-        if (["key","keyref","unique"].includes(el_name)) {
-          if (!names.elem_constraint.includes(name)) {names.elem_constraint.push(name); return true}
-          return error(`Todos os elementos <key>, <keyref> e <unique> devem ter nomes únicos!`)
-        }
-        return true
+        
+        return content
       }
       
       // validar as tags de abertura e fecho de um elemento - prefixos e nomes de elementos coesos
@@ -13561,6 +13495,73 @@ module.exports = /*
         if (prefix === null && !noSchemaPrefix()) return error("Precisa de prefixar o elemento com o prefixo do respetivo namespace!")
 
         return true
+      }
+
+      // verificar que um elemento não tem <element/attribute> locais com o mesmo nome
+      function check_repeatedNames(parent, el_name, content) {
+        // filtrar apenas os elementos <element/attribute> do conteúdo e ir buscar os respetivos atributos "name" (remover os atributos que não têm nome, mas sim ref)
+        let names = content.filter(x => x.element == el_name).map(x => x.attrs.name).filter(x => x != undefined)
+
+        // verificar se há nomes repetidos no array
+        let duplicates = names.filter((item, index) => names.indexOf(item) !== index)
+        if (duplicates.length > 0) return error(`Os elementos <${el_name}> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <${el_name}> com o nome '${duplicates[0]}'.`)
+        return true
+      }
+
+      // verificar que o filho de um <group> não tem os atributos 'max/minOccurs'
+      function check_groupContent(content) {
+        if (!atRoot() && content.length > 0) return error("Os elementos <group> devem ser definidos globalmente e referenciados dentro de outros elementos!")
+
+        if (content.some(x => "maxOccurs" in x.attrs || "minOccurs" in x.attrs))
+          return error(`O elemento filho de um <group> não podem possuir os atributos 'maxOccurs' ou 'minOccurs'! Só o elemento <group> em si.`)
+        return true
+      }
+
+
+      // Funções auxiliares relacionadas com atributos ------------------------------
+
+      // juntar todos os atributos do elemento num só objeto
+      const getAttrs = objArr => objArr === null ? {} : cleanContent(objArr).reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
+      // verificar se o array de atributos tem algum atributo repetido
+      const check_repeatedAttrs = (arr, attrs, el_name) => (Object.keys(attrs).length == arr.length) ? attrs : error(`O elemento <${el_name}> não pode possuir atributos repetidos!`)
+      // validar os atributos de um elemento <any/all/choice/sequence>
+      const check_occursAttrs = (arr, el_name) => attrsAPI.defaultOccurs(check_repeatedAttrs(arr, getAttrs(arr), el_name), curr)
+      // verificar se o atributo em questão está presente
+      const check_requiredAttr = (attrs, el_name, attr_name) => attr_name in attrs ? attrs : error(`Um elemento <${el_name}> requer o atributo '${attr_name}'!`)
+      // validar um elemento <element/attribute> básico - verificar que tem os atributos essenciais
+      const validateLocalEl = attrs => "ref" in attrs || "name" in attrs
+      // verificar se o novo id é único na schema
+      const validateID = id => !ids.includes(id) ? true : error(`O valor do atributo 'id' deve ser único na schema! Existe mais do que um elemento na schema com o id '${id}'!`)
+
+      // validar o nome de um <element/attribute/notation> - deve ser único
+      function validateName(name, el_name) {
+        // verificar que são elementos globais
+        if (atRoot()) {
+          if (!names[el_name].includes(name)) {names[el_name].push(name); return true}
+          return error(`Todos os elementos <${el_name}> ${el_name != "notation" ? "definidos globalmente " : ""}devem ter nomes únicos!`)
+        }
+        if (["key","keyref","unique"].includes(el_name)) {
+          if (!names.elem_constraint.includes(name)) {names.elem_constraint.push(name); return true}
+          return error(`Todos os elementos <key>, <keyref> e <unique> devem ter nomes únicos!`)
+        }
+        return true
+      }
+
+      // validar o valor de atributos que sejam listas
+      function validate_listOfValues(l, error_msg) {
+        let arr = l.split(/[ \t\n\r]+/)
+        return (new Set(arr)).size === arr.length ? true : error(error_msg)
+      }
+
+      // validar o valor do atributo "namespace" de um elemento <any/anyAttribute>, se não for ##any nem ##other
+      function check_namespace(l) {
+        let arr = l.split(/[ \t\n\r]+/)
+        let error_msg = "O valor do atributo 'namespace' deve corresponder a ((##any | ##other) | Lista de (referência_URI | (##targetNamespace | ##local)))!"
+
+        // verificar que não tem mais do que 1 URI
+        if (arr.filter(x => x != "##local" && x != "##targetNamespace").length > 1) return error(error_msg)
+        // verificar que não tem nenhum valor repetido
+        return (new Set(arr)).size === arr.length ? true : error(error_msg)
       }
 
       // validar as tags e verificar se o atributo "base" está presente
@@ -13597,207 +13598,6 @@ module.exports = /*
         return true
       }
 
-      // verificar que um elemento não tem <element/attribute> locais com o mesmo nome
-      function check_repeatedNames(parent, el_name, content) {
-        // filtrar apenas os elementos <element/attribute> do conteúdo e ir buscar os respetivos atributos "name" (remover os atributos que não têm nome, mas sim ref)
-        let names = content.filter(x => x.element == el_name).map(x => x.attrs.name).filter(x => x != undefined)
-
-        // verificar se há nomes repetidos no array
-        let duplicates = names.filter((item, index) => names.indexOf(item) !== index)
-        if (duplicates.length > 0) return error(`Os elementos <${el_name}> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <${el_name}> com o nome '${duplicates[0]}'.`)
-        return true
-      }
-
-      // adicionar os valores default dos atributos "max/minOccurs"
-      function defaultOccurs(attrs) {
-        // os elementos dentro de um group não podem possuir estes atributos, logo não colocar por default
-        if (!curr.group) {
-          if (!("maxOccurs" in attrs)) attrs.maxOccurs = ("minOccurs" in attrs && attrs.minOccurs > 0) ? attrs.minOccurs : 1
-          else if (attrs.maxOccurs == "unbounded") attrs.maxOccurs = ("minOccurs" in attrs ? attrs.minOccurs : 0) + 10 // se o maxOccurs for unbounded, assume-se um teto de minOccurs+10
-
-          if (!("minOccurs" in attrs)) attrs.minOccurs = !attrs.maxOccurs ? 0 : 1
-        }
-        return attrs
-      }
-
-      // validar os atributos de um elemento <element>
-      function check_elemAttrs(arr) {
-        let attrs = check_repeatedAttrs(arr, getAttrs(arr), "element")
-
-        // restrições relativas à profundidade dos elementos
-        if (atRoot()) { // elementos da schema
-          if ("ref" in attrs) return error("O atributo 'ref' é proibido num elemento <element> de schema!")
-          if ("maxOccurs" in attrs) return error("O atributo 'maxOccurs' é proibido num elemento <element> de schema!")
-          if ("minOccurs" in attrs) return error("O atributo 'minOccurs' é proibido num elemento <element> de schema!")
-          if (!("name" in attrs)) return error("O atributo 'name' é requirido num elemento <element> de schema!")
-        }
-        // elementos aninhados
-        else if ("final" in attrs) return error("O atributo 'final' é proibido num elemento <element> local!")
-
-        // mensagem de erro de atributos mutuamente exclusivos
-        let mutexc_error = (a1,a2) => error(`Em elementos <element>, os atributos '${a1}' e '${a2}' são mutuamente exclusivos!`)
-        // atributos mutuamente exclusivos
-        if ("default" in attrs && "fixed" in attrs) return mutexc_error("default","fixed")
-        if ("ref" in attrs && "block" in attrs) return mutexc_error("ref","block")
-        if ("ref" in attrs && "default" in attrs) return mutexc_error("ref","default")
-        if ("ref" in attrs && "fixed" in attrs) return mutexc_error("ref","fixed")
-        if ("ref" in attrs && "form" in attrs) return mutexc_error("ref","form")
-        if ("ref" in attrs && "name" in attrs) return mutexc_error("ref","name")
-        if ("ref" in attrs && "nillable" in attrs) return mutexc_error("ref","nillable")
-        if ("ref" in attrs && "type" in attrs) return mutexc_error("ref","type")
-
-        // maxOccurs não pode ser inferior a minOccurs
-        if ("maxOccurs" in attrs && "minOccurs" in attrs && attrs.maxOccurs < attrs.minOccurs)
-          return error("A propriedade 'maxOccurs' do elemento não pode ser inferior à 'minOccurs'!")
-
-        // atributos com valores predefinidos
-        if (!atRoot()) attrs = defaultOccurs(attrs)
-        if (!("abstract" in attrs)) attrs.abstract = false
-        //if (!("form" in attrs)) attrs.form = //valor do atributo elementFormDefault do elemento da schema
-        if (!("nillable" in attrs)) attrs.nillable = false
-
-        return attrs
-      }
-
-      // validar os atributos de um elemento <keyref>
-      function check_keyrefAttrs(arr) {
-        let attrs = check_repeatedAttrs(arr, getAttrs(arr), "keyref")
-
-        // atributos requiridos
-        if (!("name" in attrs)) return error(`No elemento <keyref> é requirido o atributo 'name'!`)
-        if (!("refer" in attrs) && !("system" in attrs)) return error(`No elemento <keyref> é requirido o atributo 'refer'!`)
-
-        return attrs
-      }
-
-      // validar os atributos de um elemento <attribute/attributeGroup>
-      function check_attributeElAttrs(arr, el_name) {
-        let attrs = check_repeatedAttrs(arr, getAttrs(arr), el_name)
-
-        // restrições relativas à profundidade dos elementos
-        if (atRoot()) { // elementos da schema
-          if ("ref" in attrs) return error(`O atributo 'ref' é proibido num elemento <${el_name}> de schema!`)
-          if (!("name" in attrs)) return error(`O atributo 'name' é requirido num elemento <${el_name}> de schema!`)
-        }
-        else {
-          if (el_name == "attributeGroup") {
-            if (!("ref" in attrs)) return error(`O atributo 'ref' é requirido num elemento <${el_name}> local!`)
-            if ("name" in attrs) return error(`O atributo 'name' é proibido num elemento <${el_name}> local!`)
-          }
-        }
-
-        // mensagem de erro de atributos mutuamente exclusivos
-        let mutexc_error = (a1,a2) => error(`Em elementos <${el_name}>, os atributos '${a1}' e '${a2}' são mutuamente exclusivos!`)
-        // atributos mutuamente exclusivos
-        if ("name" in attrs && "ref" in attrs) return mutexc_error("name","ref")
-
-        if (el_name == "attribute") {
-          if ("default" in attrs && "fixed" in attrs) return mutexc_error("default","fixed")
-          if ("ref" in attrs && "form" in attrs) return mutexc_error("ref","form")
-          if ("ref" in attrs && "type" in attrs) return mutexc_error("ref","type")
-
-          // atributos com valores predefinidos
-          if (!("use" in attrs)) attrs.use = "optional"
-        }
-
-        return attrs
-      }
-
-      // validar os atributos de um elemento <group>
-      function check_groupAttrs(arr) {
-        let attrs = check_repeatedAttrs(arr, getAttrs(arr), "group")
-
-        // restrições relativas à profundidade dos elementos
-        if (atRoot()) { // elementos da schema
-          if ("ref" in attrs) return error("O atributo 'ref' é proibido num elemento <group> de schema!")
-          if (!("name" in attrs)) return error("O atributo 'name' é requirido num elemento <group> de schema!")
-        }
-        else {
-          if (!("ref" in attrs)) return error("O atributo 'ref' é requirido num elemento <group> local!")
-          if ("name" in attrs) return error("O atributo 'name' é proibido num elemento <group> local!")
-        }
-
-        // atributos com valores predefinidos
-        return defaultOccurs(attrs)
-      }
-
-      // validar os atributos de um elemento <notation>
-      function check_notationAttrs(arr) {
-        let attrs = check_repeatedAttrs(arr, getAttrs(arr), "notation")
-
-        // atributos requiridos
-        if (!("name" in attrs)) return error(`No elemento <notation> é requirido o atributo 'name'!`)
-        if (!("public" in attrs) && !("system" in attrs)) return error(`No elemento <notation> é requirido pelo menos um dos atributos 'public' e 'system'!`)
-
-        return attrs
-      }
-
-      // validar o valor de atributos que sejam listas
-      function validate_listOfValues(l, error_msg) {
-        let arr = l.split(/[ \t\n\r]+/)
-        return (new Set(arr)).size === arr.length ? true : error(error_msg)
-      }
-
-      // validar o valor do atributo "namespace" de um elemento <any/anyAttribute>, se não for ##any nem ##other
-      function check_namespace(l) {
-        let arr = l.split(/[ \t\n\r]+/)
-        let error_msg = "O valor do atributo 'namespace' deve corresponder a ((##any | ##other) | Lista de (referência_URI | (##targetNamespace | ##local)))!"
-
-        // verificar que não tem mais do que 1 URI
-        if (arr.filter(x => x != "##local" && x != "##targetNamespace").length > 1) return error(error_msg)
-        // verificar que não tem nenhum valor repetido
-        return (new Set(arr)).size === arr.length ? true : error(error_msg)
-      }
-
-
-      // <simpleType> e <complexType> ------------------------------
-      
-      // número de simple/complexTypes aninhados correntemente
-      let type_depth = 0
-      // nome do simple/complexType a ser processado neste momento
-      let current_type = null
-      // nomes dos novos tipos definidos na schema - têm de ser únicos
-      let local_types = {simpleType: [], complexType: [], simpleContent: []}
-      // boleano para indicar se um tipo referenciado tem de corresponder a um tipo built-in ou simpleType apenas (false), ou pode ser um complexType também (true) 
-      let any_type = "BSC"
-
-      // verificar se já existe algum tipo local com este nome
-      const existsLocalType = type => (any_type == "BSC" && Object.values(local_types).flat().includes(type)) || 
-                                      (any_type == "BS" && local_types.simpleType.includes(type)) || 
-                                      (any_type == "C" && local_types.complexType.includes(type))
-      // validar um elemento <union> - verificar que referencia algum tipo
-      const validateUnion = (attrs,content) => ("memberTypes" in attrs ? attrs.memberTypes.length : 0) + content.filter(e => e.element === "simpleType").length > 0 ? true : 
-                                               error(`Um elemento <union> deve ter o atributo 'memberTypes' não vazio e/ou pelo menos um elemento filho <simpleType>!`)
-      // validar o atributo base de um elemento <restriction> (simpleContent)
-      const validateBaseSC = base => (!local_types.complexType.includes(base) || local_types.simpleContent.includes(base)) ? true :
-                                      error("Num elemento <restriction> (simpleContent), para o atributo 'base' poder referenciar um <complexType>, o tipo desse elemento deve ser um tipo embutido, <simpleType> ou <simpleContent>!")
-
-
-      // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes respetiva caso seja único
-      function newLocalType(name, kind) {
-        if (Object.values(local_types).flat().includes(name)) return error("Já existe um simpleType/complexType com este nome nesta schema!")
-        local_types[kind].push(name)
-        current_type = name
-        return true
-      }
-      
-      // validar os atributos de um elemento <simpleType/complexType>
-      function check_localTypeAttrs(arr, el_name) {
-        let attrs = check_repeatedAttrs(arr, getAttrs(arr), el_name)
-        
-        // restrições relativas à profundidade dos elementos
-        if (atRoot() && !("name" in attrs)) return error(`O atributo 'name' é requirido se o pai do elemento <${el_name}> for o <schema>!`)
-        if (!atRoot() && !curr.redefine && "name" in attrs) return error(`O atributo 'name' é proibido se o pai do elemento <${el_name}> não for o <schema>!`)
-
-        if (el_name == "complexType") {
-          // atributos com valores predefinidos
-          if (!("abstract" in attrs)) attrs.abstract = false
-          if (!("mixed" in attrs)) attrs.mixed = false
-        }
-
-        return attrs
-      }
-
       // verificar que um elemento <complexType> não tem o atributo "mixed" e um elemento filho simpleContent
       function check_complexTypeMutex(attrs, content) {
         if (attrs.mixed && content.some(x => x.element == "simpleContent"))
@@ -13810,12 +13610,25 @@ module.exports = /*
         return true
       }
 
-      // verificar que o filho de um <group> não tem os atributos 'max/minOccurs'
-      function check_groupContent(content) {
-        if (!atRoot() && content.length > 0) return error("Os elementos <group> devem ser definidos globalmente e referenciados dentro de outros elementos!")
 
-        if (content.some(x => "maxOccurs" in x.attrs || "minOccurs" in x.attrs))
-          return error(`O elemento filho de um <group> não podem possuir os atributos 'maxOccurs' ou 'minOccurs'! Só o elemento <group> em si.`)
+      // Funções auxiliares relacionadas com tipos ------------------------------
+      
+      // verificar se já existe algum tipo local com este nome
+      const existsLocalType = type => (any_type == "BSC" && Object.values(local_types).flat().includes(type)) || 
+                                      (any_type == "BS" && local_types.simpleType.includes(type)) || 
+                                      (any_type == "C" && local_types.complexType.includes(type))
+      // validar um elemento <union> - verificar que referencia algum tipo
+      const validateUnion = (attrs,content) => ("memberTypes" in attrs ? attrs.memberTypes.length : 0) + content.filter(e => e.element === "simpleType").length > 0 ? true : 
+                                               error(`Um elemento <union> deve ter o atributo 'memberTypes' não vazio e/ou pelo menos um elemento filho <simpleType>!`)
+      // validar o atributo base de um elemento <restriction> (simpleContent)
+      const validateBaseSC = base => (!local_types.complexType.includes(base) || local_types.simpleContent.includes(base)) ? true :
+                                      error("Num elemento <restriction> (simpleContent), para o atributo 'base' poder referenciar um <complexType>, o tipo desse elemento deve ser um tipo embutido, <simpleType> ou <simpleContent>!")
+
+      // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes respetiva caso seja único
+      function newLocalType(name, kind) {
+        if (Object.values(local_types).flat().includes(name)) return error("Já existe um simpleType/complexType com este nome nesta schema!")
+        local_types[kind].push(name)
+        current_type = name
         return true
       }
 
