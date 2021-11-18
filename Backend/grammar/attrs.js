@@ -70,7 +70,6 @@ function check_schemaAttrs(arr, default_prefix) {
     if (!keys.includes("attributeFormDefault")) attrs.attributeFormDefault = "unqualified"
     if (!keys.includes("elementFormDefault")) attrs.elementFormDefault = "unqualified"
 
-    schema_attrs = attrs
     return data(attrs)
 }
 
@@ -209,6 +208,37 @@ function check_localTypeAttrs(arr, el_name, schema_depth, curr) {
   return data(attrs)
 }
 
+// verificar que o nome do elemento de derivação, os atributos e o valor batem todos certo
+// nesta função, só se verifica o espaço léxico do atributo "value" dos elementos <totalDigits>, <fractionDigits>, <length>, <minLength>, <maxLength>, <whiteSpace> e <pattern>
+// para verificar os restantes elementos, é preciso o tipo base, faz-se mais à frente
+function check_constrFacetAttrs(name, arr) {
+    let attrs = check_repeatedAttrs(arr, getAttrs(arr), name)
+    if ("error" in attrs) return attrs
+
+    if ("value" in attrs) {
+      if (name == "whiteSpace") {
+        if (!["preserve","replace","collapse"].includes(attrs.value)) return error(`O valor da faceta <whiteSpace> deve ser um dos seguintes: {preserve, replace, collapse}!`)
+      }
+      else if (name == "totalDigits") {
+        if (!/^\+?[1-9]\d*$/.test(attrs.value)) return error(`O valor da faceta 'totalDigits' deve ser um inteiro positivo!`)
+        attrs.value = parseInt(attrs.value)
+      } 
+      else if (["fractionDigits","length","minLength","maxLength"].includes(name)) {
+        if (!/^\+?\d+$/.test(attrs.value)) return error(`O valor da faceta <${name}> deve ser um inteiro não negativo!`)
+        attrs.value = parseInt(attrs.value)
+      }
+    }
+
+    // restrições relativas à existência dos atributos
+    if (!("value" in attrs)) return error(`No elemento <${name}> é requirido o atributo 'value'!`)
+    if (name == "pattern" || name == "enumeration") {
+      if ("fixed" in attrs) return error(`O elemento <${name}> não aceita o atributo 'fixed'!`)
+    }
+    else if (!("fixed" in attrs)) attrs.fixed = false
+    
+    return data(attrs)
+}
+
 module.exports = {
   defaultOccurs,
   check_schemaAttrs,
@@ -217,5 +247,6 @@ module.exports = {
   check_attributeElAttrs,
   check_groupAttrs,
   check_notationAttrs,
-  check_localTypeAttrs
+  check_localTypeAttrs,
+  check_constrFacetAttrs
 }

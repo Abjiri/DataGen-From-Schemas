@@ -343,7 +343,7 @@ module.exports = /*
         peg$c182 = function(prefix, el_name, attrs, content, close_el) {
           if (!--type_depth) current_type = null
 
-          let st = restrictionsAPI.restrict_simpleType(attrs.name, content, default_prefix, simpleTypes)
+          let st = checkError(restrictionsAPI.restrict_simpleType(attrs.name, content, default_prefix, simpleTypes))
           if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(st))
           
           return {element: el_name, attrs, built_in_base: st.built_in_base, content: st.content}
@@ -401,7 +401,7 @@ module.exports = /*
         peg$c229 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)},
         peg$c230 = function(prefix, el_name, attrs, close) {
           let base = close.content[0].element == "simpleType" ? close.content[0].built_in_base : attrs.base
-          return {element: el_name, attrs, content: restrictionsAPI.check_restrictionST_facets(el_name, base, close.content, default_prefix, simpleTypes)}
+          return {element: el_name, attrs, content: checkError(restrictionsAPI.check_restrictionST_facets(el_name, base, close.content, default_prefix, simpleTypes))}
         },
         peg$c231 = "base",
         peg$c232 = peg$literalExpectation("base", false),
@@ -410,10 +410,7 @@ module.exports = /*
         peg$c235 = function(prefix, el_name, attrs, close) {return check_requiredBase(el_name, "complexContent", prefix, attrs, close)},
         peg$c236 = "extension",
         peg$c237 = peg$literalExpectation("extension", false),
-        peg$c238 = function(prefix, el_name, a) {
-                        let attrs = restrictionsAPI.check_constrFacetAttrs(el_name, a)
-                        return ("error" in attrs) ? error(attrs.error) : attrs
-                      },
+        peg$c238 = function(prefix, el_name, a) {return checkError(attrsAPI.check_constrFacetAttrs(el_name, a))},
         peg$c239 = function(el) {return el},
         peg$c240 = "value",
         peg$c241 = peg$literalExpectation("value", false),

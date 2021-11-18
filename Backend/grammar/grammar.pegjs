@@ -22,7 +22,7 @@
   // Variáveis relacionadas com tipos ------------------------------
 
   // array dos tipos embutidos da XML Schema em formato da DSL ({element, attrs, content})
-  let simpleTypes = restrictionsAPI.create_simpleTypes(default_prefix)
+  let simpleTypes = checkError(restrictionsAPI.create_simpleTypes(default_prefix))
   // número de simple/complexTypes aninhados correntemente
   let type_depth = 0
   // nome do simple/complexType a ser processado neste momento
@@ -476,7 +476,7 @@ simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:
              &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} {
   if (!--type_depth) current_type = null
 
-  let st = restrictionsAPI.restrict_simpleType(attrs.name, content, default_prefix, simpleTypes)
+  let st = checkError(restrictionsAPI.restrict_simpleType(attrs.name, content, default_prefix, simpleTypes))
   if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(st))
   
   return {element: el_name, attrs, built_in_base: st.built_in_base, content: st.content}
@@ -579,7 +579,7 @@ restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)} {
   let base = close.content[0].element == "simpleType" ? close.content[0].built_in_base : attrs.base
-  return {element: el_name, attrs, content: restrictionsAPI.check_restrictionST_facets(el_name, base, close.content, default_prefix, simpleTypes)}
+  return {element: el_name, attrs, content: checkError(restrictionsAPI.check_restrictionST_facets(el_name, base, close.content, default_prefix, simpleTypes))}
 }
 
 base_attrs = attrs:(base elem_id? / elem_id base?)? {return getAttrs(attrs)}
@@ -630,10 +630,7 @@ extensionCC = prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws
 // ----- <minExclusive> <minInclusive> <maxExclusive> <maxInclusive> <totalDigits <fractionDigits> <length> <minLength> <maxLength> <enumeration> <whiteSpace> <pattern> -----
 
 constrFacet = prefix:open_XSD_el el_name:constrFacet_values 
-              attrs:(a:constrFacet_attrs ws {
-                let attrs = restrictionsAPI.check_constrFacetAttrs(el_name, a)
-                return ("error" in attrs) ? error(attrs.error) : attrs
-              })
+              attrs:(a:constrFacet_attrs ws {return checkError(attrsAPI.check_constrFacetAttrs(el_name, a))})
               close:(merged_close / ann_content)
               &{return check_elTags(el_name, prefix, close)}
               {return {element: el_name, attrs, content: close.content}}
