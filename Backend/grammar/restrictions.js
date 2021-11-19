@@ -4,14 +4,16 @@
 const error = msg => {return {error: msg}}
 // retorna dados encapsulados, se não houver nenhum erro
 const data = x => {return {data: x}}
-// função para contar o número de dígitos significativos num número
+// contar o número de dígitos significativos num número
 let countDigits = num => String(num).replace(/\-|\./g, "").length
-// função para contar o número de dígitos da parte inteira de um número
+// contar o número de dígitos da parte inteira de um número
 let countIntDigits = num => String(num).replace(/\-|\.\d+/g, "").length
-// função para contar o número de dígitos fracionários de um número
+// contar o número de dígitos fracionários de um número
 let countFracDigits = num => num%1 === 0 ? 0 : String(num).replace(/\-?\d*\./, "").length
-// função para verificar se o tipo base é um tipo de números inteiros
+// verificar se o tipo base é um tipo de números inteiros
 let isBaseInt = base => ["byte","int","integer","long","short","negativeInteger","nonNegativeInteger","nonPositiveInteger","positiveInteger"].includes(base) || base.startsWith("unsigned")
+// verificar se é um objeto
+let isObject = x => typeof x === 'object' && !Array.isArray(x) && x !== null
 
 // criar array com os nomes do tipos embutidos da XML Schema
 const built_in_types = simpleTypes => {
@@ -76,8 +78,8 @@ function durationToMS(d) {
 // determinar o nome e prefixo de schema do tipo em questão e o nome da sua base embutida
 /* operacional apenas para tipos da schema local */
 function getTypeInfo(type, default_prefix, simpleTypes) {
-  if (type == "list") return {type: "list", base: "list", prefix: default_prefix}
-
+  if (isObject(type) && type.list) return {type: "list", base: "list", prefix: default_prefix}
+  
   let builtin_types = built_in_types(simpleTypes)
   let base = null // nome do tipo embutido em questão ou em qual é baseado o tipo atual
   let prefix = null

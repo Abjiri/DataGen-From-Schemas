@@ -590,7 +590,7 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)} {
-  let base = "base" in attrs ? attrs.base : ("list" in close.content[0] ? "list" : close.content[0].built_in_base)
+  let base = "base" in attrs ? attrs.base : ("list" in close.content[0] ? {list: true} : close.content[0].built_in_base)
   return {element: el_name, attrs, content: checkError(restrictionsAPI.check_restrictionST_facets(el_name, base, close.content, default_prefix, simpleTypes))}
 }
 
