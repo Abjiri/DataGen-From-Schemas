@@ -76,6 +76,8 @@ function durationToMS(d) {
 // determinar o nome e prefixo de schema do tipo em questão e o nome da sua base embutida
 /* operacional apenas para tipos da schema local */
 function getTypeInfo(type, default_prefix, simpleTypes) {
+  if (type == "list") return {type: "list", base: "list", prefix: default_prefix}
+
   let builtin_types = built_in_types(simpleTypes)
   let base = null // nome do tipo embutido em questão ou em qual é baseado o tipo atual
   let prefix = null
@@ -112,8 +114,7 @@ function create_simpleTypes(default_prefix) {
         attrs: {
           value: x == "string" ? "preserve" : "collapse",
           fixed: true
-        },
-        content: []
+        }
       }]}
 
       if (x == "string") obj[x].content[0].attrs.fixed = false
@@ -146,7 +147,7 @@ function create_simpleTypes(default_prefix) {
     ]
 
     derivedTypes.map(x => {
-      let new_content =  x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}, content: []}})
+      let new_content =  x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}}})
       let base_content = JSON.parse(JSON.stringify(obj[x[1]].content)) // constraining facets do tipo base
       obj[x[0]] = {content: restrict_simpleType2(x[0], {type: x[1], prefix: default_prefix}, base_content, new_content).data}
     })
@@ -156,18 +157,29 @@ function create_simpleTypes(default_prefix) {
 
 // name = nome do novo tipo, st_content = conteúdo do novo simpleType
 function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
-  /* if (st_content[0].element == "list") {
-    let new_content = st_content.filter((x,i) => i>0)
-    return {built_in_base: st_content[0].built_in_base, content: st_content[0].content, list: restrict_simpleType2("list", "list", new_content, simpleTypes)}
-  } */
-
   let base, base_content, new_content, fst_content = st_content[0]
+  
+  if (st_content[0].element == "list") {
+    return data({built_in_base: fst_content.content[0].built_in_base, list: [], content: fst_content.content[0].content})
+  }
 
   if (fst_content.element == "restriction") {
     if (fst_content.content.length > 0 && fst_content.content[0].element == "simpleType") {
-      base = fst_content.content[0].built_in_base
-      base_content = fst_content.content[0].content
       new_content = fst_content.content.filter((x,i) => i>0)
+
+      // se estiver a restringir um tipo derivado por lista, as novas restrições são relativas à lista e não ao tipo base
+      if ("list" in fst_content.content[0]) {
+        base = "list"
+        base_content = fst_content.content[0].list
+
+        // se não houver restrições prévias, é uma lista básica
+        if (!base_content.length)
+          return data({built_in_base: fst_content.content[0].built_in_base, list: new_content, content: fst_content.content[0].content})
+      }
+      else {
+        base = fst_content.content[0].built_in_base
+        base_content = fst_content.content[0].content
+      }
     }
     else {
       base = fst_content.attrs.base
@@ -306,7 +318,7 @@ function check_constrFacetBase(base, type, content) {
     // criar um array com os nomes de todos os constraining facets do tipo base
     let content_els = content.map(x => x.element)
     if (content_els[0] == "simpleType") content_els.shift()
-
+    
     // criar array com o nome dos constraining facets válidos para o tipo em questão
     let facets = []
 
@@ -324,7 +336,7 @@ function check_constrFacetBase(base, type, content) {
       case "date": case "dateTime": case "double": case "duration": case "float": case "gDay": case "gMonth": case "gMonthDay": case "gYear": case "gYearMonth": case "time":
       facets = ["enumeration","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern"]; break
 
-      case "ENTITIES": case "IDREFS": case "NMTOKENS": 
+      case "list": case "ENTITIES": case "IDREFS": case "NMTOKENS": 
         facets = ["enumeration","length","maxLength","minLength"]; break
     }
 
@@ -571,14 +583,15 @@ function check_restrictionST_facets(el_name, base, content, default_prefix, simp
   
   // se houver enumerações ou patterns, juntar todos os seus valores numa só faceta
   content = content.filter(x => x.element != "enumeration" && x.element != "pattern")
-  if (has("enumeration")) content.push({element: "enumeration", attrs: {value: f.enumeration}, content: []})
-  if (has("pattern")) content.push({element: "pattern", attrs: {value: f.pattern}, content: []})
+  if (has("enumeration")) content.push({element: "enumeration", attrs: {value: f.enumeration}})
+  if (has("pattern")) content.push({element: "pattern", attrs: {value: f.pattern}})
   
   return data(content)
 }
 
 module.exports = {
   built_in_types,
+  getTypeInfo,
   create_simpleTypes,
   restrict_simpleType,
   check_restrictionST_facets

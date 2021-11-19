@@ -489,7 +489,7 @@ simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:
   let st = checkError(restrictionsAPI.restrict_simpleType(attrs.name, content, default_prefix, simpleTypes))
   if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(st))
   
-  return {element: el_name, attrs, built_in_base: st.built_in_base, content: st.content}
+  return {element: el_name, attrs, ...st}
 }
 
 simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* {return checkError(attrsAPI.check_localTypeAttrs(el, "simpleType", schema_depth, curr))}
@@ -571,9 +571,11 @@ union_content = c:(annotation? simpleType*) {return cleanContent(c.flat())}
 list = prefix:open_XSD_el el_name:"list" attrs:list_attrs ws 
        close:(merged_close / openEl content:list_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
        &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "itemType", attrs, close.content)} {
-  let simpleType = "itemType" in attrs ? simpleTypes[attrs.itemType] : close.content[0]
-  simpleType.element = el_name
-  return simpleType
+  if ("itemType" in attrs) {
+    let type = restrictionsAPI.getTypeInfo(attrs.itemType, default_prefix, simpleTypes)
+    close.content.push({element: "simpleType", attrs: {}, built_in_base: type.base, content: simpleTypes[type.type].content})
+  }
+  return {element: el_name, content: close.content}
 }
 
 list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return getAttrs(attrs)}
@@ -588,7 +590,7 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)} {
-  let base = "base" in attrs ? attrs.base : close.content[0].built_in_base
+  let base = "base" in attrs ? attrs.base : ("list" in close.content[0] ? "list" : close.content[0].built_in_base)
   return {element: el_name, attrs, content: checkError(restrictionsAPI.check_restrictionST_facets(el_name, base, close.content, default_prefix, simpleTypes))}
 }
 
@@ -643,7 +645,7 @@ constrFacet = prefix:open_XSD_el el_name:constrFacet_values
               attrs:(a:constrFacet_attrs ws {return checkError(attrsAPI.check_constrFacetAttrs(el_name, a))})
               close:(merged_close / ann_content)
               &{return check_elTags(el_name, prefix, close)}
-              {return {element: el_name, attrs, content: close.content}}
+              {return {element: el_name, attrs}}
 
 constrFacet_attrs = el:(elem_id / constrFacet_fixed / constrFacet_value)* {return el}
 
