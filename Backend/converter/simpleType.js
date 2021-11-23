@@ -14,7 +14,7 @@ function string(base, length) {
 
    let str = ""
    for (let i = 0; i < length; i++) {
-      let arr = (["Name","NCName","ENTITY","ENTITIES","ID","IDREF","IDREFS","NOTATION","QName"].includes(base) && !i) ? alphabet : alphanumerical
+      let arr = (["Name","NCName","ENTITY","ID","IDREF","NOTATION","QName"].includes(base) && !i) ? alphabet : alphanumerical
       str += `{{random("${arr.join('","')}"${(base == "token" && (!i || i == length-1)) ? "" : space})}}`
    }
    return str
@@ -36,30 +36,23 @@ function hexBinary(length) {
 // Funções de tradução de tipos embutidos ----------
 
 function parseStringType(c, base, has) { 
-    let length = 0
-    let isList = () => ["ENTITIES","IDREFS","NMTOKENS"].includes(base)
- 
-    if (has("length")) length = c.length
-    else {
-       let max = null, min = null
-       let upper_bound = isList() ? 20 : 50
- 
-       if (has("maxLength")) max = c.maxLength
-       if (has("minLength")) min = c.minLength
- 
-       if (max === null && min == null) {min = 10; max = upper_bound}
-       else if (min == null) min = max > 1 ? 1 : 0
-       else if (max == null) max = min + upper_bound
- 
-       length = randomize(min, max)
-    }
-    
-    if (isList()) {
-       let str = ""
-       for (let i = 0; i < length; i++) str += string(base, 5) + " "
-       return str.slice(0, -1)
-    }
-    return (base == "hexBinary" ? hexBinary(length) : string(base, length))
+   let length = 0
+
+   if (has("length")) length = c.length
+   else {
+      let max = null, min = null
+
+      if (has("maxLength")) max = c.maxLength
+      if (has("minLength")) min = c.minLength
+
+      if (max === null && min == null) {min = 10; max = 50}
+      else if (min == null) min = max > 1 ? 1 : 0
+      else if (max == null) max = min + 50
+
+      length = randomize(min, max)
+   }
+   
+   return (base == "hexBinary" ? hexBinary(length) : string(base, length))
 }
  
 function parseNumberType(c, base, has) {
@@ -431,7 +424,6 @@ function parseRestriction(content, base, list, has) {
       case "language":
          return parseLanguage(content, has)
 
-      case "ENTITIES": case "IDREFS": case "NMTOKENS":
       case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "Name": case "NCName": 
       case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
          return parseStringType(content, base, has)
@@ -458,9 +450,9 @@ function parseList(st, content, isGenType, has) {
    let str = ""
    let max = null, min = null
 
-   if ("length" in list) {max = list.length; min = max}
    if ("minLength" in list) min = list.minLength
    if ("maxLength" in list) max = list.maxLength
+   if ("length" in list) {max = list.length; min = max}
 
    if (max === null && min === null) {max = 5; min = 2}
    else if (max === null) max = min + 5

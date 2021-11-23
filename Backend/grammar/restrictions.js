@@ -97,10 +97,7 @@ function getTypeInfo(type, default_prefix, simpleTypes) {
   else prefix = default_prefix
   
   // é um tipo da schema local, logo se não for embutido, é possível encontrar a sua base embutida na estrutura simpleTypes
-  if (prefix == default_prefix) {
-    if (["ENTITIES","IDREFS","NMTOKENS"].includes(type)) base = "list"
-    else base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
-  }
+  if (prefix == default_prefix) base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
 
   return {type, base, prefix}
 }
@@ -110,91 +107,111 @@ function getTypeInfo(type, default_prefix, simpleTypes) {
 
 // criar um objeto com todos os tipos embutidos da XML Schema, com a estrutura da DSL {element, attrs, content}
 function create_simpleTypes(default_prefix) {
-    let obj = {}
-    
-    let primitive_types = ["string","boolean","decimal","float","double","duration","dateTime","time","date","gYearMonth","gYear","gMonthDay","gDay","gMonth","hexBinary","base64Binary","anyURI","QName","NOTATION"]
-    
-    // colocar os tipos primitivos no objeto
-    for (let i = 0; i < primitive_types.length; i++) {
-      let x = primitive_types[i]
+  let obj = {}
+  
+  let primitive_types = ["string","boolean","decimal","float","double","duration","dateTime","time","date","gYearMonth","gYear","gMonthDay","gDay","gMonth","hexBinary","base64Binary","anyURI","QName","NOTATION"]
+  
+  // colocar os tipos primitivos no objeto
+  for (let i = 0; i < primitive_types.length; i++) {
+    let x = primitive_types[i]
 
-      obj[x] = {content: [{
-        element: "whiteSpace",
-        attrs: {
-          value: x == "string" ? "preserve" : "collapse",
-          fixed: true
-        }
-      }]}
+    obj[x] = {content: [{
+      element: "whiteSpace",
+      attrs: {
+        value: x == "string" ? "preserve" : "collapse",
+        fixed: true
+      }
+    }]}
 
-      if (x == "string") obj[x].content[0].attrs.fixed = false
-    }
+    if (x == "string") obj[x].content[0].attrs.fixed = false
+  }
 
-    // colocar os tipo derivados no objeto
-    let derivedTypes = [
-      ["integer", "decimal", [["fractionDigits", 0, true]]],
-      ["nonPositiveInteger", "integer", [["maxInclusive", 0, false]]],
-      ["negativeInteger", "nonPositiveInteger", [["maxInclusive", -1, false]]],
-      ["long", "integer", [["minInclusive", -9223372036854775808, false], ["maxInclusive", 9223372036854775807, false]]],
-      ["int", "long", [["minInclusive", -2147483648, false], ["maxInclusive", 2147483647, false]]],
-      ["short", "int", [["minInclusive", -32768, false], ["maxInclusive", 32767, false]]],
-      ["byte", "short", [["minInclusive", -128, false], ["maxInclusive", 127, false]]],
-      ["nonNegativeInteger", "integer", [["minInclusive", 0, false]]],
-      ["positiveInteger", "nonNegativeInteger", [["minInclusive", 1, false]]],
-      ["unsignedLong", "nonNegativeInteger", [["maxInclusive", 18446744073709551615, false]]],
-      ["unsignedInt", "unsignedLong", [["maxInclusive", 4294967295, false]]],
-      ["unsignedShort", "unsignedInt", [["maxInclusive", 65535, false]]],
-      ["unsignedByte", "unsignedShort", [["maxInclusive", 255, false]]],
-      ["normalizedString", "string", [["whiteSpace", "replace", false]]],
-      ["token", "normalizedString", [["whiteSpace", "collapse", false]]],
-      ["language", "token", [["pattern", "([a-zA-Z]{2}|[iI]-[a-zA-Z]+|[xX]-[a-zA-Z]{1,8})(-[a-zA-Z]{1,8})*", false]]],
-      ["Name", "token", [["pattern", "[a-zA-Z:_][-_:\.a-zA-Z0-9]*", false]]],
-      ["NCName", "Name", [["pattern", "[a-zA-Z_][-_\.a-zA-Z0-9]*", false]]],
-      ["ID", "NCName", []],
-      ["IDREF", "NCName", []],
-      ["ENTITY", "NCName", []],
-      ["NMTOKEN", "token", [["pattern", "[-_:\.a-zA-Z0-9]+", false]]]
-    ]
+  // colocar os tipos derivados por restrição no objeto
+  let derivedTypes = [
+    ["integer", "decimal", [["fractionDigits", 0, true]]],
+    ["nonPositiveInteger", "integer", [["maxInclusive", 0, false]]],
+    ["negativeInteger", "nonPositiveInteger", [["maxInclusive", -1, false]]],
+    ["long", "integer", [["minInclusive", -9223372036854775808, false], ["maxInclusive", 9223372036854775807, false]]],
+    ["int", "long", [["minInclusive", -2147483648, false], ["maxInclusive", 2147483647, false]]],
+    ["short", "int", [["minInclusive", -32768, false], ["maxInclusive", 32767, false]]],
+    ["byte", "short", [["minInclusive", -128, false], ["maxInclusive", 127, false]]],
+    ["nonNegativeInteger", "integer", [["minInclusive", 0, false]]],
+    ["positiveInteger", "nonNegativeInteger", [["minInclusive", 1, false]]],
+    ["unsignedLong", "nonNegativeInteger", [["maxInclusive", 18446744073709551615, false]]],
+    ["unsignedInt", "unsignedLong", [["maxInclusive", 4294967295, false]]],
+    ["unsignedShort", "unsignedInt", [["maxInclusive", 65535, false]]],
+    ["unsignedByte", "unsignedShort", [["maxInclusive", 255, false]]],
+    ["normalizedString", "string", [["whiteSpace", "replace", false]]],
+    ["token", "normalizedString", [["whiteSpace", "collapse", false]]],
+    ["language", "token", [["pattern", "([a-zA-Z]{2}|[iI]-[a-zA-Z]+|[xX]-[a-zA-Z]{1,8})(-[a-zA-Z]{1,8})*", false]]],
+    ["Name", "token", [["pattern", "[a-zA-Z:_][-_:\.a-zA-Z0-9]*", false]]],
+    ["NCName", "Name", [["pattern", "[a-zA-Z_][-_\.a-zA-Z0-9]*", false]]],
+    ["ID", "NCName", []],
+    ["IDREF", "NCName", []],
+    ["ENTITY", "NCName", []],
+    ["NMTOKEN", "token", [["pattern", "[-_:\.a-zA-Z0-9]+", false]]],
+    ["ENTITIES", "ENTITY", []],
+    ["IDREFS", "IDREF", []],
+    ["NMTOKENS", "NMTOKEN", []]
+  ]
 
-    derivedTypes.map(x => {
-      let new_content =  x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}}})
-      let base_content = JSON.parse(JSON.stringify(obj[x[1]].content)) // constraining facets do tipo base
-      obj[x[0]] = {content: restrict_simpleType2(x[0], {type: x[1], prefix: default_prefix}, base_content, new_content).data}
-    })
-    
-    return obj
+  derivedTypes.map(x => {
+    let new_content =  x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}}})
+    let base_content = JSON.parse(JSON.stringify(obj[x[1]].content)) // constraining facets do tipo base
+    obj[x[0]] = {content: restrict_simpleType2(x[0], {type: x[1], prefix: default_prefix}, base_content, new_content).data}
+  })
+  
+  // colocar os tipos derivados por lista no objeto
+  let list_types = ["ENTITIES","IDREFS","NMTOKENS"]
+  list_types.forEach(x => obj[x].list = [{ element: "minLength", attrs: {value: 1} }])
+  
+  return obj
+}
+
+function restrict_list(name, elem_base, elem_content, list_base_content, list_new_content, default_prefix, simpleTypes) {
+  // se for um dos tipos de listas embutidos, considerar a base dos seus elementos
+  if (elem_base == "ENTITIES") elem_base = "ENTITY"
+  else if (elem_base == "IDREFS") elem_base = "IDREF"
+  else if (elem_base == "NMTOKENS") elem_base = "NMTOKEN"
+
+  // verificar se só tem facetas válidas relativas a listas
+  let type = getTypeInfo({list: true}, default_prefix, simpleTypes)
+  list_new_content = check_constrFacetBase("list", type, list_new_content)
+
+  if ("error" in list_new_content) return list_new_content
+  list_new_content = list_new_content.data
+
+  // se tiver uma enumeration da lista, temos de validar semanticamente cada elemento da lista, de acordo com o seu tipo base
+  let enum_facet = list_new_content.filter(x => x.element == "enumeration")
+  if (enum_facet.length > 0) {
+    let check = check_listEnumeration(elem_base, enum_facet[0].attrs.value)
+    if ("error" in check) return check
+  }
+
+  // verificar a recursividade das facetas
+  list_new_content = restrict_simpleType2(name, type, list_base_content, list_new_content)
+  if ("error" in list_new_content) return list_new_content
+  
+  return data({built_in_base: elem_base, list: list_new_content.data, content: elem_content})
 }
 
 // name = nome do novo tipo, st_content = conteúdo do novo simpleType
 function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
+  console.log("----------")
   let base, base_content, new_content, fst_content = st_content[0]
   
-  if (st_content[0].element == "list") {
-    return data({built_in_base: fst_content.content[0].built_in_base, list: [], content: fst_content.content[0].content})
-  }
+  // está a derivar um simpleType por lista
+  if (fst_content.element == "list")
+    return restrict_list(name, fst_content.content[0].built_in_base, fst_content.content[0].content, [], [], default_prefix, simpleTypes)
 
+  // está a derivar um simpleType por restrição
   if (fst_content.element == "restriction") {
     if (fst_content.content.length > 0 && fst_content.content[0].element == "simpleType") {
       new_content = fst_content.content.filter((x,i) => i>0)
 
       // se estiver a restringir um tipo derivado por lista, as novas restrições são relativas à lista e não ao tipo base
       if ("list" in fst_content.content[0]) {
-        base = "list"
-        base_content = fst_content.content[0].list
-        
-        // verificar se só tem facetas válidas relativas a listas
-        let type = getTypeInfo({list: true}, default_prefix, simpleTypes)
-        new_content = check_constrFacetBase(base, type, new_content).data
-
-        // se tiver uma enumeration da lista, temos de validar semanticamente cada elemento da lista, de acordo com o seu tipo base
-        let enum_facet = new_content.filter(x => x.element == "enumeration")
-        if (enum_facet.length > 0) {
-          let check = check_listEnumeration(fst_content.content[0].built_in_base, enum_facet[0].attrs.value)
-          if ("error" in check) return check
-        }
-
-        // se não houver restrições prévias, é uma lista básica
-        if (!base_content.length)
-          return data({built_in_base: fst_content.content[0].built_in_base, list: new_content, content: fst_content.content[0].content})
+        return restrict_list(name, fst_content.content[0].built_in_base, fst_content.content[0].content, fst_content.content[0].list, new_content, default_prefix, simpleTypes)
       }
       else {
         base = fst_content.content[0].built_in_base
@@ -202,14 +219,19 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
       }
     }
     else {
-      base = fst_content.attrs.base
-      base_content = JSON.parse(JSON.stringify(simpleTypes[getTypeInfo(base, default_prefix, simpleTypes).type].content)) // constraining facets do tipo base
       new_content = fst_content.content // constraining facets do novo tipo
+      base = fst_content.attrs.base
+      let type = getTypeInfo(base, default_prefix, simpleTypes)
+
+      base_content = JSON.parse(JSON.stringify(simpleTypes[type.type]))
+
+      // se for um tipo lista, os constraining facets base são relativos à lista, senão ao tipo base
+      if (!("list" in base_content)) base_content = base_content.content
+      else return restrict_list(name, type.base, base_content.content, base_content.list, fst_content.content, default_prefix, simpleTypes)
     }
   }
   
   let type = getTypeInfo(base, default_prefix, simpleTypes) // tipo base
-
   let content = restrict_simpleType2(name, type, base_content, new_content)
   if ("error" in content) return content
 
@@ -225,34 +247,39 @@ function restrict_simpleType2(name, base, base_content, new_content) {
     let new_value = new_content[i].attrs.value // valor da faceta em questão no tipo novo
 
     // função para invocar a função auxiliar que verifica uma condição de recursividade
-    let aux = arr => arr.reduce((acc,cur) => {
-      for (let i = 0; i < (new_facet == "enumeration" ? new_value.length : 1); i++) {
-        let res = restrict_simpleType_aux(name, `${base.prefix}:${base.type}`, cur[0], new_facet, base_els, base_content, new_facet == "enumeration" ? new_value[i] : new_value, cur[1])
-        if ("error" in res) return res
-        acc = res.data && acc
-      }
-      return acc
-    }, true)
+    let aux = arr => {
+      let results = []
 
+      arr.map(x => {
+        for (let i = 0; i < (new_facet == "enumeration" ? new_value.length : 1); i++)
+          results.push(restrict_simpleType_aux(name, `${base.prefix}:${base.type}`, x[0], new_facet, base_els, base_content, new_facet == "enumeration" ? new_value[i] : new_value, x[1]))
+      })
+
+      let errors = results.filter(x => "error" in x)
+      return errors.length > 0 ? errors[0] : data(true)
+    }
+
+    let aux_result
     switch (new_facet) {
-      case "totalDigits": aux([["totalDigits", "inf_eq"]]); break
-      case "fractionDigits": aux([["totalDigits", "inf_eq"], ["fractionDigits", "inf_eq"], ["enumeration", "frac_enum"]]); break
-      case "maxExclusive": aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf_eq"], 
+      case "totalDigits": aux_result = aux([["totalDigits", "inf_eq"]]); break
+      case "fractionDigits": aux_result = aux([["totalDigits", "inf_eq"], ["fractionDigits", "inf_eq"], ["enumeration", "frac_enum"]]); break
+      case "maxExclusive": aux_result = aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf_eq"], 
                                 ["maxInclusive", "inf_eq"], ["minExclusive", "sup"], ["minInclusive", "sup"], ["enumeration", "include"]]); break
       case "maxInclusive":
-      case "minInclusive": aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf"], 
+      case "minInclusive": aux_result = aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf"], 
                                 ["maxInclusive", "inf_eq"], ["minExclusive", "sup"], ["minInclusive", "sup_eq"], ["enumeration", "include"]]); break
-      case "minExclusive": aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf"], 
+      case "minExclusive": aux_result = aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf"], 
                                 ["maxInclusive", "inf"], ["minExclusive", "sup_eq"], ["minInclusive", "sup_eq"], ["enumeration", "include"]]); break
-      case "pattern": aux([["enumeration", "match_parent"]]); break
-      case "enumeration": aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf"], 
+      case "pattern": aux_result = aux([["enumeration", "match_parent"]]); break
+      case "enumeration": aux_result = aux([["totalDigits", "inf_dig"], ["fractionDigits", "inf_fracDig"], ["maxExclusive", "inf"], 
                                 ["maxInclusive", "inf_eq"], ["minExclusive", "sup"], ["minInclusive", "sup_eq"], ["enumeration", "include"],
                                 ["pattern", "match_child"], ["length", "len_eq"], ["maxLength", "len_inf_eq"], ["minLength", "len_sup_eq"]]); break
-      case "length": aux([["enumeration", "len_parent_eq"], ["length", "eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
-      case "maxLength": aux([["enumeration", "len_parent_sup_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
-      case "minLength": aux([["enumeration", "len_parent_inf_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
-      case "whiteSpace": aux([["whiteSpace", "whiteSpace"]]); break
+      case "length": aux_result = aux([["enumeration", "len_parent_eq"], ["length", "eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
+      case "maxLength": aux_result = aux([["enumeration", "len_parent_sup_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
+      case "minLength": aux_result = aux([["enumeration", "len_parent_inf_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
+      case "whiteSpace": aux_result = aux([["whiteSpace", "whiteSpace"]]); break
     }
+    if ("error" in aux_result) return aux_result
     
     // atualizar o valor de uma faceta, depois de verificar todas as condições de recursividade
     if (base_els.includes(new_facet)) {
@@ -324,7 +351,7 @@ function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, ba
       case "len_parent_sup_eq": if (!base_value.some(x => x.length <= new_value)) err_args = ["parent_enum", [], false]; break
       case "whiteSpace": if ((base_value == "collapse" && base_value != new_value) || (base_value == "replace" && new_value == "preserve")) err_args = ["ws", [], true]; break
     }
-
+    
     if (err_args.length > 0) return err(new_facet, base_value, new_value, ...err_args)
   }
   
@@ -349,6 +376,7 @@ function check_listEnumeration(base, enumerations) {
 // esta função só verifica o espaço léxico do atributo "value" dos elementos <minExclusive>, <minInclusive>, <maxExclusive>, <maxInclusive> e <enumeration>
 // os restantes não dependem do tipo base e já foram verificados antes
 function check_constrFacetBase(base, type, content) {
+  console.log(type)
     // criar um array com os nomes de todos os constraining facets do tipo base
     let content_els = content.map(x => x.element)
     
@@ -378,11 +406,12 @@ function check_constrFacetBase(base, type, content) {
 
     // verificar se facets possui todos os elementos de content_els para ver se há algum constraining facet inválido no tipo em questão
     if (!content_els.every(v => facets.includes(v)))
-      return error(`O tipo '${type.type}' só permite os elementos de restrição <${facets.join(">, <")}>!`)
+      return error(`${type.type == "list" ? "Um tipo derivado por lista" : `O tipo '${type.type}'`} só permite os elementos de restrição <${facets.join(">, <")}>!`)
 
     // verificar se o atributo "value" pertence ao espaço léxico do tipo base
+    // no caso de listas, só seria preciso verificar os <enumeration> aqui e isso é feito na check_listEnumeration
     for (let i = 0; i < content.length; i++) {
-      if (type.base != "list" && ["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) {
+      if (!isListType(type.base) && ["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) {
         let value = check_constrFacetBase_aux(base, type.base, content[i].attrs.value)
 
         if ("error" in value) return value
@@ -432,8 +461,6 @@ function check_constrFacetBase_aux(base_name, base_type, value) {
       value = base_type == "double" ? parseDouble(value) : parseFloat(value); break
     case "duration":
       if (!/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(((\d+)(\.\d+)?|(\.\d+))S)?)?$/.test(value)) return error(error_msg); break
-    case "ENTITIES": case "IDREFS":
-      if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*([ \t\n\r]+([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*)*$/.test(value)) return error(error_msg); break
     case "ENTITY": case "ID": case "IDREF": case "NCName":
       if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
     case "gDay":
@@ -456,8 +483,6 @@ function check_constrFacetBase_aux(base_name, base_type, value) {
       if (value === NaN || !(value <= -1)) return error(error_msg); break
     case "NMTOKEN":
       if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+$/.test(value)) return error(error_msg); break
-    case "NMTOKENS":
-      if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+([ \t\n\r]+([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+)*$/.test(value)) return error(error_msg); break
     case "nonNegativeInteger":
       if (!/^\+?\d+$/.test(value)) return error(error_msg)
       value = parseInt(value)
