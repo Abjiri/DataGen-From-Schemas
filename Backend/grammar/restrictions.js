@@ -12,6 +12,10 @@ let countIntDigits = num => String(num).replace(/\-|\.\d+/g, "").length
 let countFracDigits = num => num%1 === 0 ? 0 : String(num).replace(/\-?\d*\./, "").length
 // verificar se o tipo base é um tipo de números inteiros
 let isBaseInt = base => ["byte","int","integer","long","short","negativeInteger","nonNegativeInteger","nonPositiveInteger","positiveInteger"].includes(base) || base.startsWith("unsigned")
+// verifica se o tipo base é um tipo lista
+let isListType = base => ["list","ENTITIES","IDREFS","NMTOKENS"].includes(base)
+// retorna o comprimento de uma enumeração, conforme seja uma string ou uma lista
+let enumLength = (e, base) => isListType(base) ? e.split(/[ \t\n\r]+/g).length : e.length
 // verificar se é um objeto
 let isObject = x => typeof x === 'object' && !Array.isArray(x) && x !== null
 
@@ -93,7 +97,10 @@ function getTypeInfo(type, default_prefix, simpleTypes) {
   else prefix = default_prefix
   
   // é um tipo da schema local, logo se não for embutido, é possível encontrar a sua base embutida na estrutura simpleTypes
-  if (prefix == default_prefix) base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
+  if (prefix == default_prefix) {
+    if (["ENTITIES","IDREFS","NMTOKENS"].includes(type)) base = "list"
+    else base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
+  }
 
   return {type, base, prefix}
 }
@@ -173,6 +180,17 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
       if ("list" in fst_content.content[0]) {
         base = "list"
         base_content = fst_content.content[0].list
+        
+        // verificar se só tem facetas válidas relativas a listas
+        let type = getTypeInfo({list: true}, default_prefix, simpleTypes)
+        new_content = check_constrFacetBase(base, type, new_content).data
+
+        // se tiver uma enumeration da lista, temos de validar semanticamente cada elemento da lista, de acordo com o seu tipo base
+        let enum_facet = new_content.filter(x => x.element == "enumeration")
+        if (enum_facet.length > 0) {
+          let check = check_listEnumeration(fst_content.content[0].built_in_base, enum_facet[0].attrs.value)
+          if ("error" in check) return check
+        }
 
         // se não houver restrições prévias, é uma lista básica
         if (!base_content.length)
@@ -313,13 +331,26 @@ function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, ba
   return data(true)
 }
 
+// validar os elementos de enumerações de listas individualmente conforme o seu tipo base
+function check_listEnumeration(base, enumerations) {
+  for (let i = 0; i < enumerations.length; i++) {
+    let values = enumerations[i].split(/[ \t\n\r]+/g)
+
+    for (let j = 0; j < values.length; j++) {
+      let check = check_constrFacetBase_aux(base, base, values[j])
+      if ("error" in check) return check
+    }
+  }
+
+  return data(true)
+}
+
 // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
 // esta função só verifica o espaço léxico do atributo "value" dos elementos <minExclusive>, <minInclusive>, <maxExclusive>, <maxInclusive> e <enumeration>
 // os restantes não dependem do tipo base e já foram verificados antes
 function check_constrFacetBase(base, type, content) {
     // criar um array com os nomes de todos os constraining facets do tipo base
     let content_els = content.map(x => x.element)
-    if (content_els[0] == "simpleType") content_els.shift()
     
     // criar array com o nome dos constraining facets válidos para o tipo em questão
     let facets = []
@@ -351,7 +382,7 @@ function check_constrFacetBase(base, type, content) {
 
     // verificar se o atributo "value" pertence ao espaço léxico do tipo base
     for (let i = 0; i < content.length; i++) {
-      if (["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) {
+      if (type.base != "list" && ["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) {
         let value = check_constrFacetBase_aux(base, type.base, content[i].attrs.value)
 
         if ("error" in value) return value
@@ -457,11 +488,14 @@ function check_constrFacetBase_aux(base_name, base_type, value) {
 
 // validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
 function check_restrictionST_facets(el_name, base, content, default_prefix, simpleTypes) {
+  // simpleType não é uma faceta, remover temporariamente do conteúdo se tiver um
+  let st = null
+  if (content.length > 0 && content[0].element == "simpleType") st = content.shift()
+
   let type = getTypeInfo(base, default_prefix, simpleTypes)
   
   // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
   content = check_constrFacetBase(base, type, content)
-  
   if ("error" in content) return content
   content = content.data
 
@@ -501,7 +535,7 @@ function check_restrictionST_facets(el_name, base, content, default_prefix, simp
   if (has("minInclusive") && has("minExclusive")) return err1("minInclusive", "minExclusive")
   if (has("length") && has("maxLength")) return err8("maxLength")
   if (has("length") && has("minLength")) return err8("minLength")
-
+  
   // restrições relativas a colisões entre os valores dos constraining facets
   if (has("enumeration")) {
     for (let i = 0; i < f.enumeration.length; i++) {
@@ -512,9 +546,9 @@ function check_restrictionST_facets(el_name, base, content, default_prefix, simp
       if (has("minExclusive") && f.enumeration[i] <= f.minExclusive) return err3("minExclusive", f.enumeration[i], f.minExclusive, "<=")
       if (has("minInclusive") && f.enumeration[i] < f.minInclusive) return err3("minInclusive", f.enumeration[i], f.minInclusive, "<")
       if (has("pattern") && !new RegExp(f.pattern).test(f.enumeration[i])) return err6(f.enumeration[i])
-      if (has("length") && f.enumeration[i].length != f.length) return err7("length", f.enumeration[i], f.length, "=")
-      if (has("maxLength") && f.enumeration[i].length > f.maxLength) return err7("maxLength", f.enumeration[i], f.maxLength, "<=")
-      if (has("minLength") && f.enumeration[i].length < f.minLength) return err7("minLength", f.enumeration[i], f.minLength, ">=")
+      if (has("length") && enumLength(f.enumeration[i], type.base) != f.length) return err7("length", f.enumeration[i], f.length, "=")
+      if (has("maxLength") && enumLength(f.enumeration[i], type.base) > f.maxLength) return err7("maxLength", f.enumeration[i], f.maxLength, "<=")
+      if (has("minLength") && enumLength(f.enumeration[i], type.base) < f.minLength) return err7("minLength", f.enumeration[i], f.minLength, ">=")
     }
   }
   if (has("totalDigits")) {
@@ -588,6 +622,8 @@ function check_restrictionST_facets(el_name, base, content, default_prefix, simp
   if (has("enumeration")) content.push({element: "enumeration", attrs: {value: f.enumeration}})
   if (has("pattern")) content.push({element: "pattern", attrs: {value: f.pattern}})
   
+  // adicionar de novo o simpleType ao conteúdo, caso o tenha removido no início da função
+  if (st !== null) content.unshift(st)
   return data(content)
 }
 
