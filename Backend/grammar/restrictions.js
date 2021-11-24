@@ -197,7 +197,6 @@ function restrict_list(name, elem_base, elem_content, list_base_content, list_ne
 
 // name = nome do novo tipo, st_content = conteúdo do novo simpleType
 function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
-  console.log("----------")
   let base, base_content, new_content, fst_content = st_content[0]
   
   // está a derivar um simpleType por lista
@@ -251,14 +250,15 @@ function restrict_simpleType2(name, base, base_content, new_content) {
       let results = []
 
       arr.map(x => {
-        for (let i = 0; i < (new_facet == "enumeration" ? new_value.length : 1); i++)
-          results.push(restrict_simpleType_aux(name, `${base.prefix}:${base.type}`, x[0], new_facet, base_els, base_content, new_facet == "enumeration" ? new_value[i] : new_value, x[1]))
+        for (let i = 0; i < (new_facet == "enumeration" ? new_value.length : 1); i++) {
+          results.push(restrict_simpleType_aux(name, base, x[0], new_facet, base_els, base_content, new_facet == "enumeration" ? new_value[i] : new_value, x[1]))
+        }
       })
 
       let errors = results.filter(x => "error" in x)
       return errors.length > 0 ? errors[0] : data(true)
     }
-
+    
     let aux_result
     switch (new_facet) {
       case "totalDigits": aux_result = aux([["totalDigits", "inf_eq"]]); break
@@ -275,8 +275,8 @@ function restrict_simpleType2(name, base, base_content, new_content) {
                                 ["maxInclusive", "inf_eq"], ["minExclusive", "sup"], ["minInclusive", "sup_eq"], ["enumeration", "include"],
                                 ["pattern", "match_child"], ["length", "len_eq"], ["maxLength", "len_inf_eq"], ["minLength", "len_sup_eq"]]); break
       case "length": aux_result = aux([["enumeration", "len_parent_eq"], ["length", "eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
-      case "maxLength": aux_result = aux([["enumeration", "len_parent_sup_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
-      case "minLength": aux_result = aux([["enumeration", "len_parent_inf_eq"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
+      case "maxLength": aux_result = aux([["enumeration", "len_parent_sup_eq"], ["length", "mutex"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
+      case "minLength": aux_result = aux([["enumeration", "len_parent_inf_eq"], ["length", "mutex"], ["maxLength", "inf_eq"], ["minLength", "sup_eq"]]); break
       case "whiteSpace": aux_result = aux([["whiteSpace", "whiteSpace"]]); break
     }
     if ("error" in aux_result) return aux_result
@@ -304,14 +304,21 @@ function restrict_simpleType2(name, base, base_content, new_content) {
 }
 
 function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, base_content, new_value, cond) {
+  // tipo base para usar nas condições (enumLength)
+  let base_type = base.type
+  // na mensagem de erro, imprimir o nome do tipo com prefixo, se tiver um
+  base = base.prefix === null ? base.type : (base.prefix + ":" + base.type)
+
+  if (cond == "mutex") return error(`É um erro o tipo base não ter a faceta <${new_facet}> se a restrição atual o tem, e a restrição atual ou o tipo base têm a faceta <length>!`)
+
   // tipos de mensagens de erro
   let err_str = {
     fixed: facet => `o valor para <${facet}> foi fixado a`,
     compare: (facet, comp) => `deve ser ${comp} ${comp == "=" ? "a" : "que "}o valor de <${facet}> que foi definido como`,
     length: (facet, inf_sup) => `o seu comprimento deve ser ${inf_sup}= ao valor de <${facet}> que foi definido como`,
     digits: (frac) => `o número total de dígitos${frac ? " fracionários" : ""} foi limitado a`,
-    enum: () => `não pertence ao espaço de valores de enumeração do tipo base, '${base}'`,
-    parent_enum: () => `nenhum dos valores do espaço de enumeração do tipo base, '${base}', obedece a essa restrição`,
+    enum: () => `não pertence ao espaço de valores de enumeração do tipo base${base != "xs:list" ? `, '${base}'` : ""}`,
+    parent_enum: () => `nenhum dos valores do espaço de enumeração do tipo base${base != "xs:list" ? `, '${base}'` : ""}, obedece a essa restrição`,
     match_child: (facet) => `não obedece ao formato de <${facet}> que foi definido como`,
     ws: () => `o valor de <whiteSpace> foi definido como`
   }
@@ -337,18 +344,18 @@ function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, ba
       case "inf_eq": if (!(base_value >= new_value)) err_args = ["compare", [base_facet, "<="], true]; break
       case "sup": if (!(base_value < new_value)) err_args = ["compare", [base_facet, ">"], true]; break
       case "sup_eq": if (!(base_value <= new_value)) err_args = ["compare", [base_facet, ">="], true]; break
-      case "len_eq": if (!(base_value == new_value.length)) err_args = ["length", [base_facet, ""], true]; break
-      case "len_inf_eq": if (!(base_value >= new_value.length)) err_args = ["length", [base_facet, "<"], true]; break
-      case "len_sup_eq": if (!(base_value <= new_value.length)) err_args = ["length", [base_facet, ">"], true]; break
+      case "len_eq": if (!(base_value == enumLength(new_value, base_type))) err_args = ["length", [base_facet, ""], true]; break
+      case "len_inf_eq": if (!(base_value >= enumLength(new_value, base_type))) err_args = ["length", [base_facet, "<"], true]; break
+      case "len_sup_eq": if (!(base_value <= enumLength(new_value, base_type))) err_args = ["length", [base_facet, ">"], true]; break
       case "frac_enum": if (Math.min(...base_value.map(x => countFracDigits(x))) > new_value) err_args = ["parent_enum", [], false]; break
       case "inf_dig": if (base_value < countDigits(new_value)) err_args = ["digits", [false], true]; break
       case "inf_fracDig": if (base_value < countFracDigits(new_value)) err_args = ["digits", [true], true]; break
       case "include": if (!base_value.includes(new_value)) err_args = ["enum", [], false]; break
       case "match_parent": if (!base_value.some(x => new RegExp(new_value).test(x))) err_args = ["parent_enum", [], false]; break
       case "match_child": if (!new RegExp(base_value).test(new_value)) err_args = ["match_child", [base_facet], true]; break
-      case "len_parent_eq": if (!base_value.some(x => x.length == new_value)) err_args = ["parent_enum", [], false]; break
-      case "len_parent_inf_eq": if (!base_value.some(x => x.length >= new_value)) err_args = ["parent_enum", [], false]; break
-      case "len_parent_sup_eq": if (!base_value.some(x => x.length <= new_value)) err_args = ["parent_enum", [], false]; break
+      case "len_parent_eq": if (!base_value.some(x => enumLength(x, base_type) == new_value)) err_args = ["parent_enum", [], false]; break
+      case "len_parent_inf_eq": if (!base_value.some(x => enumLength(x, base_type) >= new_value)) err_args = ["parent_enum", [], false]; break
+      case "len_parent_sup_eq": if (!base_value.some(x => enumLength(x, base_type) <= new_value)) err_args = ["parent_enum", [], false]; break
       case "whiteSpace": if ((base_value == "collapse" && base_value != new_value) || (base_value == "replace" && new_value == "preserve")) err_args = ["ws", [], true]; break
     }
     
@@ -368,7 +375,7 @@ function check_listEnumeration(base, enumerations) {
       if ("error" in check) return check
     }
   }
-
+  
   return data(true)
 }
 
@@ -376,7 +383,6 @@ function check_listEnumeration(base, enumerations) {
 // esta função só verifica o espaço léxico do atributo "value" dos elementos <minExclusive>, <minInclusive>, <maxExclusive>, <maxInclusive> e <enumeration>
 // os restantes não dependem do tipo base e já foram verificados antes
 function check_constrFacetBase(base, type, content) {
-  console.log(type)
     // criar um array com os nomes de todos os constraining facets do tipo base
     let content_els = content.map(x => x.element)
     
@@ -517,7 +523,12 @@ function check_restrictionST_facets(el_name, base, content, default_prefix, simp
   let st = null
   if (content.length > 0 && content[0].element == "simpleType") st = content.shift()
 
+  // se for um tipo lista, a base devolvida pela getTypeInfo é dos elementos da lista
   let type = getTypeInfo(base, default_prefix, simpleTypes)
+  if (type.prefix == default_prefix) {
+    // se for um tipo lista, neste função interessa saber isso e não a base dos elementos da lista
+    if ("list" in simpleTypes[type.type]) type = getTypeInfo({list: true}, default_prefix, simpleTypes)
+  }
   
   // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
   content = check_constrFacetBase(base, type, content)
