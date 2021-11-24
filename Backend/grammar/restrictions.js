@@ -309,7 +309,8 @@ function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, ba
   // na mensagem de erro, imprimir o nome do tipo com prefixo, se tiver um
   base = base.prefix === null ? base.type : (base.prefix + ":" + base.type)
 
-  if (cond == "mutex") return error(`É um erro o tipo base não ter a faceta <${new_facet}> se a restrição atual o tem, e a restrição atual ou o tipo base têm a faceta <length>!`)
+  if (cond == "mutex" && base_els.includes(base_facet))
+    return error(`É um erro o tipo base não ter a faceta <${new_facet}> se a restrição atual o tem, e a restrição atual ou o tipo base têm a faceta <length>!`)
 
   // tipos de mensagens de erro
   let err_str = {
@@ -383,49 +384,49 @@ function check_listEnumeration(base, enumerations) {
 // esta função só verifica o espaço léxico do atributo "value" dos elementos <minExclusive>, <minInclusive>, <maxExclusive>, <maxInclusive> e <enumeration>
 // os restantes não dependem do tipo base e já foram verificados antes
 function check_constrFacetBase(base, type, content) {
-    // criar um array com os nomes de todos os constraining facets do tipo base
-    let content_els = content.map(x => x.element)
-    
-    // criar array com o nome dos constraining facets válidos para o tipo em questão
-    let facets = []
+  // criar um array com os nomes de todos os constraining facets do tipo base
+  let content_els = content.map(x => x.element)
+  
+  // criar array com o nome dos constraining facets válidos para o tipo em questão
+  let facets = []
 
-    switch (type.base) {
-      case "anyURI": case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "language": case "Name": case "NCName": 
-      case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
-        facets = ["enumeration","length","maxLength","minLength","pattern"]; break
+  switch (type.base) {
+    case "anyURI": case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "language": case "Name": case "NCName": 
+    case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
+      facets = ["enumeration","length","maxLength","minLength","pattern"]; break
 
-      case "boolean": facets = ["pattern"]; break
+    case "boolean": facets = ["pattern"]; break
 
-      case "byte": case "decimal": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger": case "nonPositiveInteger":
-      case "positiveInteger": case "short": case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
-        facets = ["enumeration","fractionDigits","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern","totalDigits"]; break
+    case "byte": case "decimal": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger": case "nonPositiveInteger":
+    case "positiveInteger": case "short": case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
+      facets = ["enumeration","fractionDigits","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern","totalDigits"]; break
 
-      case "date": case "dateTime": case "double": case "duration": case "float": case "gDay": case "gMonth": case "gMonthDay": case "gYear": case "gYearMonth": case "time":
-      facets = ["enumeration","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern"]; break
+    case "date": case "dateTime": case "double": case "duration": case "float": case "gDay": case "gMonth": case "gMonthDay": case "gYear": case "gYearMonth": case "time":
+    facets = ["enumeration","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern"]; break
 
-      case "list": case "ENTITIES": case "IDREFS": case "NMTOKENS": 
-        facets = ["enumeration","length","maxLength","minLength"]; break
+    case "list": case "ENTITIES": case "IDREFS": case "NMTOKENS": 
+      facets = ["enumeration","length","maxLength","minLength"]; break
+  }
+
+  // o elemento <whiteSpace> pode aparecer em qualquer tipo base
+  facets.push("whiteSpace")
+
+  // verificar se facets possui todos os elementos de content_els para ver se há algum constraining facet inválido no tipo em questão
+  if (!content_els.every(v => facets.includes(v)))
+    return error(`${type.type == "list" ? "Um tipo derivado por lista" : `O tipo '${type.type}'`} só permite os elementos de restrição <${facets.join(">, <")}>!`)
+
+  // verificar se o atributo "value" pertence ao espaço léxico do tipo base
+  // no caso de listas, só seria preciso verificar os <enumeration> aqui e isso é feito na check_listEnumeration
+  for (let i = 0; i < content.length; i++) {
+    if (!isListType(type.base) && ["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) {
+      let value = check_constrFacetBase_aux(base, type.base, content[i].attrs.value)
+
+      if ("error" in value) return value
+      content[i].attrs.value = value.data
     }
-
-    // o elemento <whiteSpace> pode aparecer em qualquer tipo base
-    facets.push("whiteSpace")
-
-    // verificar se facets possui todos os elementos de content_els para ver se há algum constraining facet inválido no tipo em questão
-    if (!content_els.every(v => facets.includes(v)))
-      return error(`${type.type == "list" ? "Um tipo derivado por lista" : `O tipo '${type.type}'`} só permite os elementos de restrição <${facets.join(">, <")}>!`)
-
-    // verificar se o atributo "value" pertence ao espaço léxico do tipo base
-    // no caso de listas, só seria preciso verificar os <enumeration> aqui e isso é feito na check_listEnumeration
-    for (let i = 0; i < content.length; i++) {
-      if (!isListType(type.base) && ["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) {
-        let value = check_constrFacetBase_aux(base, type.base, content[i].attrs.value)
-
-        if ("error" in value) return value
-        content[i].attrs.value = value.data
-      }
-    }
-    
-    return data(content)
+  }
+  
+  return data(content)
 }
 
 // verificar se o valor pertence ao espaço léxico do tipo em que se baseia (por regex)
@@ -525,7 +526,7 @@ function check_restrictionST_facets(el_name, base, content, default_prefix, simp
 
   // se for um tipo lista, a base devolvida pela getTypeInfo é dos elementos da lista
   let type = getTypeInfo(base, default_prefix, simpleTypes)
-  if (type.prefix == default_prefix) {
+  if (type.type != "list" && type.prefix == default_prefix) {
     // se for um tipo lista, neste função interessa saber isso e não a base dos elementos da lista
     if ("list" in simpleTypes[type.type]) type = getTypeInfo({list: true}, default_prefix, simpleTypes)
   }
