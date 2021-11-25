@@ -463,6 +463,12 @@ function get_baseST(st_content, default_prefix, simpleTypes) {
   let fst_content = st_content[0]
   let base
 
+  if (fst_content.element == "union") {
+    if ("memberTypes" in fst_content.attrs) base = fst_content.attrs.memberTypes.map(x => getTypeInfo(x, default_prefix, simpleTypes).type)
+    base = base.concat(fst_content.content.map(x => getTypeInfo(x.attrs.name, default_prefix, simpleTypes).type))
+    return base
+  }
+
   if (fst_content.element == "list")
     base = "itemType" in fst_content.attrs ? fst_content.attrs.itemType : fst_content.content[0].attrs.name
 
@@ -471,7 +477,7 @@ function get_baseST(st_content, default_prefix, simpleTypes) {
     else base = fst_content.content[0].attrs.name
   }
   
-  return getTypeInfo(base, default_prefix, simpleTypes).type
+  return [getTypeInfo(base, default_prefix, simpleTypes).type]
 }
 
 // name = nome do novo tipo, st_content = conteúdo do novo simpleType

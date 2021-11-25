@@ -13455,31 +13455,40 @@ module.exports = /*
 
       // verificar todas as definições e restrições de simpleTypes colocadas na st_queue
       const check_stQueue = () => {
+        console.log("----------")
+        console.log(st_queue.simpleTypes.map(x => x.info))
+        console.log(st_queue.restrictions.map(x => x.base))
         let parsed_types = restrictionsAPI.built_in_types(simpleTypes)
-
+    
+        let filter_aux = arr => arr.reduce((a,c) => a && parsed_types.includes(c), true)
+    
         while (st_queue.restrictions.length > 0 || st_queue.simpleTypes.length > 0) {
           let r = st_queue.restrictions.filter(x => parsed_types.includes(x.base))
           st_queue.restrictions = st_queue.restrictions.filter(x => !parsed_types.includes(x.base))
 
-          let st = st_queue.simpleTypes.filter(x => parsed_types.includes(x.info.base))
-          st_queue.simpleTypes = st_queue.simpleTypes.filter(x => !parsed_types.includes(x.info.base))
-
+          let st = st_queue.simpleTypes.filter(x => filter_aux(x.info.base))
+          st_queue.simpleTypes = st_queue.simpleTypes.filter(x => !filter_aux(x.info.base))
+    
+          console.log("-------")
+          console.log(r)
+          console.log(st)
+    
           r.map(x => {
             let arg_base = x.args[0], content = x.args[1]
             let base = arg_base !== undefined ? arg_base : ("list" in content[0] ? {list: true} : content[0].built_in_base)
             x.ref.content = checkError(restrictionsAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
           })
-
+    
           st.map(x => {
             let name = x.args[0], content = x.args[1]
             let parsed = checkError(restrictionsAPI.restrict_simpleType(name, content, default_prefix, simpleTypes))
-            /* if ("name" in attrs) */ simpleTypes[name] = JSON.parse(JSON.stringify(parsed))
+            if (name !== undefined) simpleTypes[name] = JSON.parse(JSON.stringify(parsed))
             Object.assign(x.ref, parsed)
           })
           
           parsed_types = parsed_types.concat(st.map(x => x.info.name))
         }
-
+    
         return true
       }
 
