@@ -67,11 +67,20 @@
 
       let st = st_queue.simpleTypes.filter(x => filter_aux(x.info.base))
       st_queue.simpleTypes = st_queue.simpleTypes.filter(x => !filter_aux(x.info.base))
-    
+
       r.map(x => {
         let arg_base = x.args[0], content = x.args[1]
-        let base = arg_base !== undefined ? arg_base : ("list" in content[0] ? {list: true} : content[0].built_in_base)
-        x.ref.content = checkError(restrictionsAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
+        let base, union = false
+
+        if (arg_base !== undefined) base = arg_base
+        else {
+          if ("union" in content[0]) union = true
+          else base = "list" in content[0] ? {list: true} : content[0].built_in_base
+        }
+        
+        // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
+        if (union) x.ref.content = content
+        else x.ref.content = checkError(restrictionsAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
       })
 
       st.map(x => {
