@@ -458,7 +458,7 @@ function check_constrFacetBase_aux(base_name, base_type, value) {
   return data(value)
 }
 
-
+// retorna os tipos base de um simpleType (pode ter vários caso involva unions)
 function get_baseST(st_content, default_prefix, simpleTypes) {
   let fst_content = st_content[0]
   let base
@@ -483,6 +483,9 @@ function get_baseST(st_content, default_prefix, simpleTypes) {
 // name = nome do novo tipo, st_content = conteúdo do novo simpleType
 function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
   let base, base_content, new_content, fst_content = st_content[0]
+
+  // está a derivar um simpleType por união
+  if (fst_content.element == "union") return restrict_union(fst_content, default_prefix, simpleTypes)
   
   // está a derivar um simpleType por lista
   if (fst_content.element == "list") {
@@ -658,6 +661,21 @@ function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, ba
 }
 
 
+
+function restrict_union(union, default_prefix, simpleTypes) {
+  let types = union.content
+  let memberTypes = "memberTypes" in union.attrs ? union.attrs.memberTypes : []
+
+  types = types.concat(memberTypes.map(x => {
+    let type = getTypeInfo(x, default_prefix, simpleTypes)
+    let st = JSON.parse(JSON.stringify(simpleTypes[type.type]))
+    
+    if (!("built_in_base" in st)) st.built_in_base = type.base
+    return st
+  }))
+
+  return data({union: types})
+}
 
 function restrict_list(name, elem_base, elem_content, list_base_content, list_new_content, default_prefix, simpleTypes) {
   // se for um dos tipos de listas embutidos, considerar a base dos seus elementos

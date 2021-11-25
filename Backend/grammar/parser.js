@@ -13503,7 +13503,7 @@ module.exports = /*
             BS: "tipo embutido ou simpleType",
             C: "complexType"
           }
-            
+          
           if (curr_any_type != "C" && restrictionsAPI.built_in_types(simpleTypes).includes(type)) {
             return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
                                                             ${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)

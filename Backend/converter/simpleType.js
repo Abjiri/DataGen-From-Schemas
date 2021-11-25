@@ -470,13 +470,11 @@ function parseList(st, content, isGenType, has) {
 }
  
 function parseSimpleType(st) {
-    /*if (child.element == "union") {
-       let values = []
-       if ("memberTypes" in child.attrs) values = child.attrs.memberTypes.map(x => typeToString(parseType(x, prefix)))
-       child.content.forEach(x => values.push(parseSimpleType(x.content[0])))
-       
-       return values[randomize(0,values.length-1)]
-    } */
+   // derivação por união
+   if ("union" in st) {
+      st.union = st.union.map(x => parseSimpleType(x))
+      return st.union[randomize(0, st.union.length-1)]
+   }
     
    let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
 
