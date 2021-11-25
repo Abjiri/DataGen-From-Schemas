@@ -168,40 +168,307 @@ function create_simpleTypes(default_prefix) {
   return obj
 }
 
-function restrict_list(name, elem_base, elem_content, list_base_content, list_new_content, default_prefix, simpleTypes) {
-  // se for um dos tipos de listas embutidos, considerar a base dos seus elementos
-  if (elem_base == "ENTITIES") elem_base = "ENTITY"
-  else if (elem_base == "IDREFS") elem_base = "IDREF"
-  else if (elem_base == "NMTOKENS") elem_base = "NMTOKEN"
 
-  // verificar se só tem facetas válidas relativas a listas
-  let type = getTypeInfo({list: true}, default_prefix, simpleTypes)
-  list_new_content = check_constrFacetBase("list", type, list_new_content)
 
-  if ("error" in list_new_content) return list_new_content
-  list_new_content = list_new_content.data
+// validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
+function check_restrictionST_facets(el_name, base, content, default_prefix, simpleTypes) {
+  // simpleType não é uma faceta, remover temporariamente do conteúdo se tiver um
+  let st = null
+  if (content.length > 0 && content[0].element == "simpleType") st = content.shift()
 
-  // se tiver uma enumeration da lista, temos de validar semanticamente cada elemento da lista, de acordo com o seu tipo base
-  let enum_facet = list_new_content.filter(x => x.element == "enumeration")
-  if (enum_facet.length > 0) {
-    let check = check_listEnumeration(elem_base, enum_facet[0].attrs.value)
-    if ("error" in check) return check
+  // se for um tipo lista, a base devolvida pela getTypeInfo é dos elementos da lista
+  let type = getTypeInfo(base, default_prefix, simpleTypes)
+  if (type.type != "list" && type.prefix == default_prefix) {
+    // se for um tipo lista, neste função interessa saber isso e não a base dos elementos da lista
+    if ("list" in simpleTypes[type.type]) type = getTypeInfo({list: true}, default_prefix, simpleTypes)
+  }
+  
+  // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
+  content = check_constrFacetBase(base, type, content)
+  if ("error" in content) return content
+  content = content.data
+
+  let f = {pattern: [], enumeration: []} // objeto com os pares chave-valor
+      
+  for (let i = 0; i < content.length; i++) {
+    let key = content[i].element,
+        value = content[i].attrs.value
+    
+    // só os atributos "pattern" e "enumeration" é que podem aparecer várias vezes
+    if (key == "pattern" || key == "enumeration") f[key].push(value)
+    else {
+      if (key in f) return error(`O elemento '${key}' só pode ser definido uma vez em cada elemento <${el_name}>!`)
+      else f[key] = value
+    }
   }
 
-  // verificar a recursividade das facetas
-  list_new_content = restrict_simpleType2(name, type, list_base_content, list_new_content)
-  if ("error" in list_new_content) return list_new_content
+  // se não houver elementos "pattern" ou "enumeration", apagar essas chaves do objeto
+  if (!f.enumeration.length) delete f.enumeration
+  if (!f.pattern.length) delete f.pattern
+  else f.pattern = f.pattern.map(x => '^('+x+')$').join("|") // se houver vários patterns no mesmo passo de derivação, são ORed juntos
   
-  return data({built_in_base: elem_base, list: list_new_content.data, content: elem_content})
+  let err1 = (a1,a2) => error(`As facetas <${a1}> e <${a2}> são mutuamente exclusivas no mesmo passo de derivação!`)
+  let err2 = (a1,a2,eq,int,offset) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor da faceta <${a1}> deve ser <${eq} ao da <${a2}>${offset}!`)
+  let err3 = (el,val,lim,comp) => error(`O valor '${val}' da faceta <enumeration> é ${comp} a ${lim}, o que contradiz a faceta <${el}>!`)
+  let err4 = (a1,a2,dig,val) => error(`O valor '${val}' da faceta <${a1}> só permite valores com mais de ${dig} dígitos, o que contradiz a faceta <${a2}>!`)
+  let err5 = (el,dig,val,frac) => error(`O valor '${val}' da faceta <enumeration> tem mais do que ${dig} dígitos${frac ? " fracionários" : ""}, o que contradiz a faceta <${el}>!`)
+  let err6 = (val) => error(`O valor '${val}' da faceta <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern> no mesmo passo de derivação!`)
+  let err7 = (el,val,len,comp) => error(`O valor '${val}' da faceta <enumeration> não tem comprimento ${comp} ${len}, o que contradiz a faceta <${el}>!`)
+  let err8 = (el) => error(`É um erro o tipo base não ter a faceta <${el}> se a restrição atual o tem, e a restrição atual ou o tipo base têm a faceta <length>!`)
+  let err9 = (el,base,val) => error(`O valor da faceta <${el}> para o tipo base '${base}' deve ser ${val}, senão o espaço de valores válidos é vazio!`)
+
+  let has = facet => facet in f
+
+  // atributos mutuamente exclusivos
+  if (has("maxInclusive") && has("maxExclusive")) return err1("maxInclusive", "maxExclusive")
+  if (has("minInclusive") && has("minExclusive")) return err1("minInclusive", "minExclusive")
+  if (has("length") && has("maxLength")) return err8("maxLength")
+  if (has("length") && has("minLength")) return err8("minLength")
+  
+  // restrições relativas a colisões entre os valores dos constraining facets
+  if (has("enumeration")) {
+    for (let i = 0; i < f.enumeration.length; i++) {
+      if (has("totalDigits") && countDigits(f.enumeration[i]) > f.totalDigits) return err5("totalDigits", f.totalDigits, f.enumeration[i], false)
+      if (has("fractionDigits") && countFracDigits(f.enumeration[i]) > f.fractionDigits) return err5("fractionDigits", f.fractionDigits, f.enumeration[i], true)
+      if (has("maxExclusive") && f.enumeration[i] >= f.maxExclusive) return err3("maxExclusive", f.enumeration[i], f.maxExclusive, ">=")
+      if (has("maxInclusive") && f.enumeration[i] > f.maxInclusive) return err3("maxInclusive", f.enumeration[i], f.maxInclusive, ">")
+      if (has("minExclusive") && f.enumeration[i] <= f.minExclusive) return err3("minExclusive", f.enumeration[i], f.minExclusive, "<=")
+      if (has("minInclusive") && f.enumeration[i] < f.minInclusive) return err3("minInclusive", f.enumeration[i], f.minInclusive, "<")
+      if (has("pattern") && !new RegExp(f.pattern).test(f.enumeration[i])) return err6(f.enumeration[i])
+      if (has("length") && enumLength(f.enumeration[i], type.base) != f.length) return err7("length", f.enumeration[i], f.length, "=")
+      if (has("maxLength") && enumLength(f.enumeration[i], type.base) > f.maxLength) return err7("maxLength", f.enumeration[i], f.maxLength, "<=")
+      if (has("minLength") && enumLength(f.enumeration[i], type.base) < f.minLength) return err7("minLength", f.enumeration[i], f.minLength, ">=")
+    }
+  }
+  if (has("totalDigits")) {
+    if (has("fractionDigits") && f.fractionDigits > f.totalDigits) return err2("fractionDigits", "totalDigits", "=", false, "")
+    if (has("maxExclusive") && f.maxExclusive < 0) {
+      if (countIntDigits(f.maxExclusive) > f.totalDigits) return err4("maxExclusive", "totalDigits", f.totalDigits, f.maxExclusive)
+      if (isBaseInt(type.type) && f.maxExclusive == parseInt(`-${'9'.repeat(f.totalDigits)}`)) return err4("maxExclusive", "totalDigits", f.totalDigits, f.maxExclusive)
+    }
+    if (has("minExclusive") && f.minExclusive > 0) {
+      if (countIntDigits(f.minExclusive) > f.totalDigits) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
+      if (isBaseInt(type.type) && f.minExclusive == parseInt('9'.repeat(f.totalDigits))) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
+    }
+    if (has("maxInclusive") && f.maxInclusive < 0 && countIntDigits(f.maxInclusive) > f.totalDigits) return err4("maxInclusive", "totalDigits", f.totalDigits, f.maxInclusive)
+    if (has("minInclusive") && f.minInclusive > 0 && countIntDigits(f.minInclusive) > f.totalDigits) return err4("minInclusive", "totalDigits", f.totalDigits, f.minInclusive)
+  }
+  if (has("maxExclusive")) {
+    if (has("minInclusive") && f.minInclusive >= f.maxExclusive) return err2("minInclusive", "maxExclusive", "=", false, "")
+    if (has("minExclusive")) {
+      if (isBaseInt(type.type) && f.minExclusive >= f.maxExclusive-1) return err2("minExclusive", "maxExclusive", "", true, " - 1")
+      else {
+        let regex = null
+
+        if (type.type == "date") regex = /^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/
+        if (type.type == "dateTime") regex = /^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?/
+        if (type.type == "time") regex = /^([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?/
+        if (type.type == "gYear") regex = /^\-?\d+/
+        if (type.type == "gYearMonth") regex = /^\-?\d{4,5}\-(0[1-9]|1[0-2])/
+        if (type.type == "gDay") regex = /^\-{3}(0[1-9]|[12][0-9]|3[01])/
+        if (type.type == "gMonth") regex = /^\-{2}(0[1-9]|1[0-2])/
+        if (type.type == "gMonthDay") regex = /^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])/
+        
+        if (type.type == "duration") {
+          if (durationToMS(f.minExclusive) >= durationToMS(f.maxExclusive)-1) return err2("minExclusive", "maxExclusive", "=", false, " - 1")
+        }
+        else if (f.minExclusive >= f.maxExclusive) {
+          if (regex !== null) return err2("minExclusive", "maxExclusive", "=", false, " - 1")
+          return err2("minExclusive", "maxExclusive", "", false, "")
+        }
+        else if (regex !== null && adjacentASCII(f.minExclusive.match(regex)[0], f.maxExclusive.match(regex)[0])) return err2("minExclusive", "maxExclusive", "=", false, " - 1")
+      }
+    }
+  }
+  if (has("maxInclusive")) {
+    if (has("minExclusive") && f.minExclusive >= f.maxInclusive) return err2("minExclusive", "maxInclusive", "", false, "")
+    if (has("minInclusive") && f.minInclusive > f.maxInclusive) return err2("minInclusive", "maxInclusive", "=", false, "")
+  }
+  if (has("maxLength")) {
+    if (has("minLength") && f.minLength > f.maxLength) return err2("minLength", "maxLength", "=", false, "")
+  }
+
+  // restrições relativas aos intervalos de valores válidos do tipo base em questão
+  if (type.type == "gDay") {
+    if (has("maxExclusive") && f.maxExclusive.substring(0,5) == "---01") return err9("maxExclusive", "gDay", "> '01'")
+    if (has("minExclusive") && f.minExclusive.substring(0,5) == "---31") return err9("minExclusive", "gDay", "< '31'")
+  }
+  if (type.type == "gMonth") {
+    if (has("maxExclusive") && f.maxExclusive.substring(0,4) == "--01") return err9("maxExclusive", "gMonth", "> '01'")
+    if (has("minExclusive") && f.minExclusive.substring(0,4) == "--12") return err9("minExclusive", "gMonth", "< '12'")
+  }
+  if (type.type == "gMonthDay") {
+    if (has("maxExclusive") && f.maxExclusive.substring(0,7) == "--01-01") return err9("maxExclusive", "gMonthDay", "> '01/01'")
+    if (has("minExclusive") && f.minExclusive.substring(0,7) == "--12-31") return err9("minExclusive", "gMonthDay", "< '12/31'")
+  }
+  if (type.type == "duration" && has("maxExclusive")) {
+    let max = durationToMS(f.maxExclusive)
+    if (!max) return err9("maxExclusive", "duration", "> 0")
+  }
+  
+  // se houver enumerações ou patterns, juntar todos os seus valores numa só faceta
+  content = content.filter(x => x.element != "enumeration" && x.element != "pattern")
+  if (has("enumeration")) content.push({element: "enumeration", attrs: {value: f.enumeration}})
+  if (has("pattern")) content.push({element: "pattern", attrs: {value: f.pattern}})
+  
+  // adicionar de novo o simpleType ao conteúdo, caso o tenha removido no início da função
+  if (st !== null) content.unshift(st)
+  return data(content)
 }
+
+// verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
+// esta função só verifica o espaço léxico do atributo "value" dos elementos <minExclusive>, <minInclusive>, <maxExclusive>, <maxInclusive> e <enumeration>
+// os restantes não dependem do tipo base e já foram verificados antes
+function check_constrFacetBase(base, type, content) {
+  // criar um array com os nomes de todos os constraining facets do tipo base
+  let content_els = content.map(x => x.element)
+  
+  // criar array com o nome dos constraining facets válidos para o tipo em questão
+  let facets = []
+
+  switch (type.base) {
+    case "anyURI": case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "language": case "Name": case "NCName": 
+    case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
+      facets = ["enumeration","length","maxLength","minLength","pattern"]; break
+
+    case "boolean": facets = ["pattern"]; break
+
+    case "byte": case "decimal": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger": case "nonPositiveInteger":
+    case "positiveInteger": case "short": case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
+      facets = ["enumeration","fractionDigits","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern","totalDigits"]; break
+
+    case "date": case "dateTime": case "double": case "duration": case "float": case "gDay": case "gMonth": case "gMonthDay": case "gYear": case "gYearMonth": case "time":
+    facets = ["enumeration","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern"]; break
+
+    case "list": case "ENTITIES": case "IDREFS": case "NMTOKENS": 
+      facets = ["enumeration","length","maxLength","minLength"]; break
+  }
+
+  // o elemento <whiteSpace> pode aparecer em qualquer tipo base
+  facets.push("whiteSpace")
+
+  // verificar se facets possui todos os elementos de content_els para ver se há algum constraining facet inválido no tipo em questão
+  if (!content_els.every(v => facets.includes(v)))
+    return error(`${type.type == "list" ? "Um tipo derivado por lista" : `O tipo '${type.type}'`} só permite os elementos de restrição <${facets.join(">, <")}>!`)
+
+  // verificar se o atributo "value" pertence ao espaço léxico do tipo base
+  // no caso de listas, só seria preciso verificar os <enumeration> aqui e isso é feito na check_listEnumeration
+  for (let i = 0; i < content.length; i++) {
+    if (!isListType(type.base) && ["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) {
+      let value = check_constrFacetBase_aux(base, type.base, content[i].attrs.value)
+
+      if ("error" in value) return value
+      content[i].attrs.value = value.data
+    }
+  }
+  
+  return data(content)
+}
+
+// verificar se o valor pertence ao espaço léxico do tipo em que se baseia (por regex)
+// base_name tem o prefixo para printar no erro, base_type não
+function check_constrFacetBase_aux(base_name, base_type, value) {
+  let error_msg = `'${value}' não é um valor válido para o tipo '${base_name}'!`
+
+  switch (base_type) {
+    case "boolean":
+      if (value === "true") value = true
+      else if (value === "false") value = false
+      else return error(error_msg); break
+    case "byte": case "int": case "integer": case "long": case "short":
+    case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
+      if (!/^(\+|\-)?\d+$/.test(value)) return error(error_msg)
+      value = parseInt(value)
+
+      let min, max
+      if (base_type == "byte") {min = -128; max = 127}
+      if (base_type == "short") {min = -32768; max = 32767}
+      if (base_type == "int") {min = -2147483648; max = 2147483647}
+      if (base_type == "long") {min = -9223372036854775808; max = 9223372036854775807}
+      if (base_type == "unsignedByte") {min = 0; max = 255}
+      if (base_type == "unsignedShort") {min = 0; max = 65535}
+      if (base_type == "unsignedInt") {min = 0; max = 4294967295}
+      if (base_type == "unsignedLong") {min = 0; max = 18446744073709551615}
+
+      if (value === NaN || (base_type != "integer" && !(value >= min && value <= max))) return error(error_msg); break
+    case "date":
+      if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+    case "dateTime":
+      if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+    case "decimal":
+      if (!/^(\+|-)?(\.\d+|\d+(\.\d+)?)$/.test(value)) return error(error_msg)
+      value = parseFloat(value); break
+    case "double":
+    case "float":
+      if (!/^((\+|-)?((\.\d+|\d+(\.\d+)?)([eE](\+|-)?\d+)?)|-?INF|NaN)$/.test(value)) return error(error_msg)
+      value = base_type == "double" ? parseDouble(value) : parseFloat(value); break
+    case "duration":
+      if (!/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(((\d+)(\.\d+)?|(\.\d+))S)?)?$/.test(value)) return error(error_msg); break
+    case "ENTITY": case "ID": case "IDREF": case "NCName":
+      if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
+    case "gDay":
+      if (!/^\-{3}(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+    case "gMonth":
+      if (!/^\-{2}(0[1-9]|1[0-2])(\-{2})?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+    case "gMonthDay":
+      if (!/^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+    case "gYear":
+      if (!/^\-?\d{4,5}(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+    case "gYearMonth":
+      if (!/^\-?\d{4,5}\-(0[1-9]|1[0-2])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+    case "language":
+      if (!/^([a-zA-Z]{2}|[iI]\-[a-zA-Z]+|[xX]\-[a-zA-Z]{1,8})(\-[a-zA-Z]{1,8})*$/.test(value)) return error(error_msg); break
+    case "Name":
+      if (!/^([a-zA-Z_:]|[^\x00-\x7F])([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
+    case "negativeInteger":
+      if (!/^-\d+$/.test(value)) return error(error_msg)
+      value = parseInt(value)
+      if (value === NaN || !(value <= -1)) return error(error_msg); break
+    case "NMTOKEN":
+      if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+$/.test(value)) return error(error_msg); break
+    case "nonNegativeInteger":
+      if (!/^\+?\d+$/.test(value)) return error(error_msg)
+      value = parseInt(value)
+      if (value === NaN || !(value >= 0)) return error(error_msg); break
+    case "nonPositiveInteger":
+      if (!/^0+|\-\d+$/.test(value)) return error(error_msg)
+      value = parseInt(value)
+      if (value === NaN || !(value <= 0)) return error(error_msg); break
+    case "positiveInteger":
+      if (!/^\+?\d+$/.test(value)) return error(error_msg)
+      value = parseInt(value)
+      if (value === NaN || !(value >= 1)) return error(error_msg); break
+    case "normalizedString":
+      value = value.trim().replace(/[\t\n\r]/g," "); break
+    case "NOTATION":
+    case "QName":
+      if (!/^(([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*:)?([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg)
+      let split = value.split(":")
+      if (split.length == 2 && !existsPrefix(split[0])) return error(error_msg); break
+    case "time":
+      if (!/^([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
+    case "token":
+      value = value.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," "); break
+  }
+
+  return data(value)
+}
+
+
 
 // name = nome do novo tipo, st_content = conteúdo do novo simpleType
 function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
   let base, base_content, new_content, fst_content = st_content[0]
   
   // está a derivar um simpleType por lista
-  if (fst_content.element == "list")
+  if (fst_content.element == "list") {
+    // se tiver atributo itemType, colocar o conteúdo do tipo respetivo no conteúdo para uniformizar com os casos em que vem com o simpleType definido dentro
+    if ("itemType" in fst_content.attrs) {
+      let type = getTypeInfo(fst_content.attrs.itemType, default_prefix, simpleTypes)
+      fst_content.content.push({element: "simpleType", attrs: {}, built_in_base: type.base, content: simpleTypes[type.type].content})
+    }
     return restrict_list(name, fst_content.content[0].built_in_base, fst_content.content[0].content, [], [], default_prefix, simpleTypes)
+  }
 
   // está a derivar um simpleType por restrição
   if (fst_content.element == "restriction") {
@@ -366,6 +633,35 @@ function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, ba
   return data(true)
 }
 
+
+
+function restrict_list(name, elem_base, elem_content, list_base_content, list_new_content, default_prefix, simpleTypes) {
+  // se for um dos tipos de listas embutidos, considerar a base dos seus elementos
+  if (elem_base == "ENTITIES") elem_base = "ENTITY"
+  else if (elem_base == "IDREFS") elem_base = "IDREF"
+  else if (elem_base == "NMTOKENS") elem_base = "NMTOKEN"
+
+  // verificar se só tem facetas válidas relativas a listas
+  let type = getTypeInfo({list: true}, default_prefix, simpleTypes)
+  list_new_content = check_constrFacetBase("list", type, list_new_content)
+
+  if ("error" in list_new_content) return list_new_content
+  list_new_content = list_new_content.data
+
+  // se tiver uma enumeration da lista, temos de validar semanticamente cada elemento da lista, de acordo com o seu tipo base
+  let enum_facet = list_new_content.filter(x => x.element == "enumeration")
+  if (enum_facet.length > 0) {
+    let check = check_listEnumeration(elem_base, enum_facet[0].attrs.value)
+    if ("error" in check) return check
+  }
+
+  // verificar a recursividade das facetas
+  list_new_content = restrict_simpleType2(name, type, list_base_content, list_new_content)
+  if ("error" in list_new_content) return list_new_content
+  
+  return data({built_in_base: elem_base, list: list_new_content.data, content: elem_content})
+}
+
 // validar os elementos de enumerações de listas individualmente conforme o seu tipo base
 function check_listEnumeration(base, enumerations) {
   for (let i = 0; i < enumerations.length; i++) {
@@ -378,290 +674,6 @@ function check_listEnumeration(base, enumerations) {
   }
   
   return data(true)
-}
-
-// verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
-// esta função só verifica o espaço léxico do atributo "value" dos elementos <minExclusive>, <minInclusive>, <maxExclusive>, <maxInclusive> e <enumeration>
-// os restantes não dependem do tipo base e já foram verificados antes
-function check_constrFacetBase(base, type, content) {
-  // criar um array com os nomes de todos os constraining facets do tipo base
-  let content_els = content.map(x => x.element)
-  
-  // criar array com o nome dos constraining facets válidos para o tipo em questão
-  let facets = []
-
-  switch (type.base) {
-    case "anyURI": case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "language": case "Name": case "NCName": 
-    case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
-      facets = ["enumeration","length","maxLength","minLength","pattern"]; break
-
-    case "boolean": facets = ["pattern"]; break
-
-    case "byte": case "decimal": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger": case "nonPositiveInteger":
-    case "positiveInteger": case "short": case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
-      facets = ["enumeration","fractionDigits","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern","totalDigits"]; break
-
-    case "date": case "dateTime": case "double": case "duration": case "float": case "gDay": case "gMonth": case "gMonthDay": case "gYear": case "gYearMonth": case "time":
-    facets = ["enumeration","maxExclusive","maxInclusive","minExclusive","minInclusive","pattern"]; break
-
-    case "list": case "ENTITIES": case "IDREFS": case "NMTOKENS": 
-      facets = ["enumeration","length","maxLength","minLength"]; break
-  }
-
-  // o elemento <whiteSpace> pode aparecer em qualquer tipo base
-  facets.push("whiteSpace")
-
-  // verificar se facets possui todos os elementos de content_els para ver se há algum constraining facet inválido no tipo em questão
-  if (!content_els.every(v => facets.includes(v)))
-    return error(`${type.type == "list" ? "Um tipo derivado por lista" : `O tipo '${type.type}'`} só permite os elementos de restrição <${facets.join(">, <")}>!`)
-
-  // verificar se o atributo "value" pertence ao espaço léxico do tipo base
-  // no caso de listas, só seria preciso verificar os <enumeration> aqui e isso é feito na check_listEnumeration
-  for (let i = 0; i < content.length; i++) {
-    if (!isListType(type.base) && ["minExclusive","minInclusive","maxExclusive","maxInclusive","enumeration"].includes(content[i].element)) {
-      let value = check_constrFacetBase_aux(base, type.base, content[i].attrs.value)
-
-      if ("error" in value) return value
-      content[i].attrs.value = value.data
-    }
-  }
-  
-  return data(content)
-}
-
-// verificar se o valor pertence ao espaço léxico do tipo em que se baseia (por regex)
-// base_name tem o prefixo para printar no erro, base_type não
-function check_constrFacetBase_aux(base_name, base_type, value) {
-  let error_msg = `'${value}' não é um valor válido para o tipo '${base_name}'!`
-
-  switch (base_type) {
-    case "boolean":
-      if (value === "true") value = true
-      else if (value === "false") value = false
-      else return error(error_msg); break
-    case "byte": case "int": case "integer": case "long": case "short":
-    case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
-      if (!/^(\+|\-)?\d+$/.test(value)) return error(error_msg)
-      value = parseInt(value)
-
-      let min, max
-      if (base_type == "byte") {min = -128; max = 127}
-      if (base_type == "short") {min = -32768; max = 32767}
-      if (base_type == "int") {min = -2147483648; max = 2147483647}
-      if (base_type == "long") {min = -9223372036854775808; max = 9223372036854775807}
-      if (base_type == "unsignedByte") {min = 0; max = 255}
-      if (base_type == "unsignedShort") {min = 0; max = 65535}
-      if (base_type == "unsignedInt") {min = 0; max = 4294967295}
-      if (base_type == "unsignedLong") {min = 0; max = 18446744073709551615}
-
-      if (value === NaN || (base_type != "integer" && !(value >= min && value <= max))) return error(error_msg); break
-    case "date":
-      if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-    case "dateTime":
-      if (!/^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-    case "decimal":
-      if (!/^(\+|-)?(\.\d+|\d+(\.\d+)?)$/.test(value)) return error(error_msg)
-      value = parseFloat(value); break
-    case "double":
-    case "float":
-      if (!/^((\+|-)?((\.\d+|\d+(\.\d+)?)([eE](\+|-)?\d+)?)|-?INF|NaN)$/.test(value)) return error(error_msg)
-      value = base_type == "double" ? parseDouble(value) : parseFloat(value); break
-    case "duration":
-      if (!/^-?P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(((\d+)(\.\d+)?|(\.\d+))S)?)?$/.test(value)) return error(error_msg); break
-    case "ENTITY": case "ID": case "IDREF": case "NCName":
-      if (!/^([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
-    case "gDay":
-      if (!/^\-{3}(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-    case "gMonth":
-      if (!/^\-{2}(0[1-9]|1[0-2])(\-{2})?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-    case "gMonthDay":
-      if (!/^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-    case "gYear":
-      if (!/^\-?\d{4,5}(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-    case "gYearMonth":
-      if (!/^\-?\d{4,5}\-(0[1-9]|1[0-2])(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-    case "language":
-      if (!/^([a-zA-Z]{2}|[iI]\-[a-zA-Z]+|[xX]\-[a-zA-Z]{1,8})(\-[a-zA-Z]{1,8})*$/.test(value)) return error(error_msg); break
-    case "Name":
-      if (!/^([a-zA-Z_:]|[^\x00-\x7F])([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg); break
-    case "negativeInteger":
-      if (!/^-\d+$/.test(value)) return error(error_msg)
-      value = parseInt(value)
-      if (value === NaN || !(value <= -1)) return error(error_msg); break
-    case "NMTOKEN":
-      if (!/^([a-zA-Z0-9\.:\-_]|[^\x00-\x7F])+$/.test(value)) return error(error_msg); break
-    case "nonNegativeInteger":
-      if (!/^\+?\d+$/.test(value)) return error(error_msg)
-      value = parseInt(value)
-      if (value === NaN || !(value >= 0)) return error(error_msg); break
-    case "nonPositiveInteger":
-      if (!/^0+|\-\d+$/.test(value)) return error(error_msg)
-      value = parseInt(value)
-      if (value === NaN || !(value <= 0)) return error(error_msg); break
-    case "positiveInteger":
-      if (!/^\+?\d+$/.test(value)) return error(error_msg)
-      value = parseInt(value)
-      if (value === NaN || !(value >= 1)) return error(error_msg); break
-    case "normalizedString":
-      value = value.trim().replace(/[\t\n\r]/g," "); break
-    case "NOTATION":
-    case "QName":
-      if (!/^(([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*:)?([a-zA-Z_]|[^\x00-\x7F])([a-zA-Z0-9\.\-_]|[^\x00-\x7F])*$/.test(value)) return error(error_msg)
-      let split = value.split(":")
-      if (split.length == 2 && !existsPrefix(split[0])) return error(error_msg); break
-    case "time":
-      if (!/^([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?(Z|(\+|-)([01][0-9]|2[0-3]):([0-5][0-9]))?$/.test(value)) return error(error_msg); break
-    case "token":
-      value = value.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," "); break
-  }
-
-  return data(value)
-}
-
-// validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
-function check_restrictionST_facets(el_name, base, content, default_prefix, simpleTypes) {
-  // simpleType não é uma faceta, remover temporariamente do conteúdo se tiver um
-  let st = null
-  if (content.length > 0 && content[0].element == "simpleType") st = content.shift()
-
-  // se for um tipo lista, a base devolvida pela getTypeInfo é dos elementos da lista
-  let type = getTypeInfo(base, default_prefix, simpleTypes)
-  if (type.type != "list" && type.prefix == default_prefix) {
-    // se for um tipo lista, neste função interessa saber isso e não a base dos elementos da lista
-    if ("list" in simpleTypes[type.type]) type = getTypeInfo({list: true}, default_prefix, simpleTypes)
-  }
-  
-  // verificar se os valores especificados nas constraining facets pertencem ao espaço léxico do tipo em que se baseiam
-  content = check_constrFacetBase(base, type, content)
-  if ("error" in content) return content
-  content = content.data
-
-  let f = {pattern: [], enumeration: []} // objeto com os pares chave-valor
-      
-  for (let i = 0; i < content.length; i++) {
-    let key = content[i].element,
-        value = content[i].attrs.value
-    
-    // só os atributos "pattern" e "enumeration" é que podem aparecer várias vezes
-    if (key == "pattern" || key == "enumeration") f[key].push(value)
-    else {
-      if (key in f) return error(`O elemento '${key}' só pode ser definido uma vez em cada elemento <${el_name}>!`)
-      else f[key] = value
-    }
-  }
-
-  // se não houver elementos "pattern" ou "enumeration", apagar essas chaves do objeto
-  if (!f.enumeration.length) delete f.enumeration
-  if (!f.pattern.length) delete f.pattern
-  else f.pattern = f.pattern.map(x => '^('+x+')$').join("|") // se houver vários patterns no mesmo passo de derivação, são ORed juntos
-  
-  let err1 = (a1,a2) => error(`As facetas <${a1}> e <${a2}> são mutuamente exclusivas no mesmo passo de derivação!`)
-  let err2 = (a1,a2,eq,int,offset) => error(`${int ? "Como o tipo base diz respeito a números inteiros, o" : "O"} valor da faceta <${a1}> deve ser <${eq} ao da <${a2}>${offset}!`)
-  let err3 = (el,val,lim,comp) => error(`O valor '${val}' da faceta <enumeration> é ${comp} a ${lim}, o que contradiz a faceta <${el}>!`)
-  let err4 = (a1,a2,dig,val) => error(`O valor '${val}' da faceta <${a1}> só permite valores com mais de ${dig} dígitos, o que contradiz a faceta <${a2}>!`)
-  let err5 = (el,dig,val,frac) => error(`O valor '${val}' da faceta <enumeration> tem mais do que ${dig} dígitos${frac ? " fracionários" : ""}, o que contradiz a faceta <${el}>!`)
-  let err6 = (val) => error(`O valor '${val}' da faceta <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern> no mesmo passo de derivação!`)
-  let err7 = (el,val,len,comp) => error(`O valor '${val}' da faceta <enumeration> não tem comprimento ${comp} ${len}, o que contradiz a faceta <${el}>!`)
-  let err8 = (el) => error(`É um erro o tipo base não ter a faceta <${el}> se a restrição atual o tem, e a restrição atual ou o tipo base têm a faceta <length>!`)
-  let err9 = (el,base,val) => error(`O valor da faceta <${el}> para o tipo base '${base}' deve ser ${val}, senão o espaço de valores válidos é vazio!`)
-
-  let has = facet => facet in f
-
-  // atributos mutuamente exclusivos
-  if (has("maxInclusive") && has("maxExclusive")) return err1("maxInclusive", "maxExclusive")
-  if (has("minInclusive") && has("minExclusive")) return err1("minInclusive", "minExclusive")
-  if (has("length") && has("maxLength")) return err8("maxLength")
-  if (has("length") && has("minLength")) return err8("minLength")
-  
-  // restrições relativas a colisões entre os valores dos constraining facets
-  if (has("enumeration")) {
-    for (let i = 0; i < f.enumeration.length; i++) {
-      if (has("totalDigits") && countDigits(f.enumeration[i]) > f.totalDigits) return err5("totalDigits", f.totalDigits, f.enumeration[i], false)
-      if (has("fractionDigits") && countFracDigits(f.enumeration[i]) > f.fractionDigits) return err5("fractionDigits", f.fractionDigits, f.enumeration[i], true)
-      if (has("maxExclusive") && f.enumeration[i] >= f.maxExclusive) return err3("maxExclusive", f.enumeration[i], f.maxExclusive, ">=")
-      if (has("maxInclusive") && f.enumeration[i] > f.maxInclusive) return err3("maxInclusive", f.enumeration[i], f.maxInclusive, ">")
-      if (has("minExclusive") && f.enumeration[i] <= f.minExclusive) return err3("minExclusive", f.enumeration[i], f.minExclusive, "<=")
-      if (has("minInclusive") && f.enumeration[i] < f.minInclusive) return err3("minInclusive", f.enumeration[i], f.minInclusive, "<")
-      if (has("pattern") && !new RegExp(f.pattern).test(f.enumeration[i])) return err6(f.enumeration[i])
-      if (has("length") && enumLength(f.enumeration[i], type.base) != f.length) return err7("length", f.enumeration[i], f.length, "=")
-      if (has("maxLength") && enumLength(f.enumeration[i], type.base) > f.maxLength) return err7("maxLength", f.enumeration[i], f.maxLength, "<=")
-      if (has("minLength") && enumLength(f.enumeration[i], type.base) < f.minLength) return err7("minLength", f.enumeration[i], f.minLength, ">=")
-    }
-  }
-  if (has("totalDigits")) {
-    if (has("fractionDigits") && f.fractionDigits > f.totalDigits) return err2("fractionDigits", "totalDigits", "=", false, "")
-    if (has("maxExclusive") && f.maxExclusive < 0) {
-      if (countIntDigits(f.maxExclusive) > f.totalDigits) return err4("maxExclusive", "totalDigits", f.totalDigits, f.maxExclusive)
-      if (isBaseInt(type.type) && f.maxExclusive == parseInt(`-${'9'.repeat(f.totalDigits)}`)) return err4("maxExclusive", "totalDigits", f.totalDigits, f.maxExclusive)
-    }
-    if (has("minExclusive") && f.minExclusive > 0) {
-      if (countIntDigits(f.minExclusive) > f.totalDigits) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
-      if (isBaseInt(type.type) && f.minExclusive == parseInt('9'.repeat(f.totalDigits))) return err4("minExclusive", "totalDigits", f.totalDigits, f.minExclusive)
-    }
-    if (has("maxInclusive") && f.maxInclusive < 0 && countIntDigits(f.maxInclusive) > f.totalDigits) return err4("maxInclusive", "totalDigits", f.totalDigits, f.maxInclusive)
-    if (has("minInclusive") && f.minInclusive > 0 && countIntDigits(f.minInclusive) > f.totalDigits) return err4("minInclusive", "totalDigits", f.totalDigits, f.minInclusive)
-  }
-  if (has("maxExclusive")) {
-    if (has("minInclusive") && f.minInclusive >= f.maxExclusive) return err2("minInclusive", "maxExclusive", "=", false, "")
-    if (has("minExclusive")) {
-      if (isBaseInt(type.type) && f.minExclusive >= f.maxExclusive-1) return err2("minExclusive", "maxExclusive", "", true, " - 1")
-      else {
-        let regex = null
-
-        if (type.type == "date") regex = /^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])/
-        if (type.type == "dateTime") regex = /^-?[0-9]{4,5}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?/
-        if (type.type == "time") regex = /^([01][0-9]|2[0-3])(:([0-5][0-9])){2}(\.\d+)?/
-        if (type.type == "gYear") regex = /^\-?\d+/
-        if (type.type == "gYearMonth") regex = /^\-?\d{4,5}\-(0[1-9]|1[0-2])/
-        if (type.type == "gDay") regex = /^\-{3}(0[1-9]|[12][0-9]|3[01])/
-        if (type.type == "gMonth") regex = /^\-{2}(0[1-9]|1[0-2])/
-        if (type.type == "gMonthDay") regex = /^\-{2}(0[1-9]|1[0-2])\-(0[1-9]|[12][0-9]|3[01])/
-        
-        if (type.type == "duration") {
-          if (durationToMS(f.minExclusive) >= durationToMS(f.maxExclusive)-1) return err2("minExclusive", "maxExclusive", "=", false, " - 1")
-        }
-        else if (f.minExclusive >= f.maxExclusive) {
-          if (regex !== null) return err2("minExclusive", "maxExclusive", "=", false, " - 1")
-          return err2("minExclusive", "maxExclusive", "", false, "")
-        }
-        else if (regex !== null && adjacentASCII(f.minExclusive.match(regex)[0], f.maxExclusive.match(regex)[0])) return err2("minExclusive", "maxExclusive", "=", false, " - 1")
-      }
-    }
-  }
-  if (has("maxInclusive")) {
-    if (has("minExclusive") && f.minExclusive >= f.maxInclusive) return err2("minExclusive", "maxInclusive", "", false, "")
-    if (has("minInclusive") && f.minInclusive > f.maxInclusive) return err2("minInclusive", "maxInclusive", "=", false, "")
-  }
-  if (has("maxLength")) {
-    if (has("minLength") && f.minLength > f.maxLength) return err2("minLength", "maxLength", "=", false, "")
-  }
-
-  // restrições relativas aos intervalos de valores válidos do tipo base em questão
-  if (type.type == "gDay") {
-    if (has("maxExclusive") && f.maxExclusive.substring(0,5) == "---01") return err9("maxExclusive", "gDay", "> '01'")
-    if (has("minExclusive") && f.minExclusive.substring(0,5) == "---31") return err9("minExclusive", "gDay", "< '31'")
-  }
-  if (type.type == "gMonth") {
-    if (has("maxExclusive") && f.maxExclusive.substring(0,4) == "--01") return err9("maxExclusive", "gMonth", "> '01'")
-    if (has("minExclusive") && f.minExclusive.substring(0,4) == "--12") return err9("minExclusive", "gMonth", "< '12'")
-  }
-  if (type.type == "gMonthDay") {
-    if (has("maxExclusive") && f.maxExclusive.substring(0,7) == "--01-01") return err9("maxExclusive", "gMonthDay", "> '01/01'")
-    if (has("minExclusive") && f.minExclusive.substring(0,7) == "--12-31") return err9("minExclusive", "gMonthDay", "< '12/31'")
-  }
-  if (type.type == "duration" && has("maxExclusive")) {
-    let max = durationToMS(f.maxExclusive)
-    if (!max) return err9("maxExclusive", "duration", "> 0")
-  }
-  
-  // se houver enumerações ou patterns, juntar todos os seus valores numa só faceta
-  content = content.filter(x => x.element != "enumeration" && x.element != "pattern")
-  if (has("enumeration")) content.push({element: "enumeration", attrs: {value: f.enumeration}})
-  if (has("pattern")) content.push({element: "pattern", attrs: {value: f.pattern}})
-  
-  // adicionar de novo o simpleType ao conteúdo, caso o tenha removido no início da função
-  if (st !== null) content.unshift(st)
-  return data(content)
 }
 
 module.exports = {

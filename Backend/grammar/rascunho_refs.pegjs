@@ -5,6 +5,8 @@
 
   // queue para invocações de funções de validação de referências na schema (refs e types) - para os elementos referenciados não terem de aparecer antes das referências
   let queue = []
+  // queue para invocações de funções relacionadas com simpleTypes
+  let st_queue = []
   // prefixo definido na declaração da schema
   let default_prefix = null
   // prefixos de namespaces declarados na schema
@@ -48,8 +50,28 @@
   const checkQM = (q1,q2,attr,val) => q1 === q2 ? (attr===null ? true : {attr,val}) : error("Deve encapsular o valor em aspas ou em apóstrofes. Não pode usar um de cada!")
   // executar todas as invocações guardadas na queue para ver se são válidas
   const checkQueue = () => queue.reduce((accum, curr) => accum && queueFuncs[curr.attr](...curr.args), true)
+
+  const checkStQueue = () => st_queue.map(x => st_queueFuncs[x.func](...x.args, x.ref))
   // se for null, converte para array vazio; senão, remove os nulls do array
   const cleanContent = content => content === null ? [] : content.filter(e => e !== null)
+
+  const st_queueFuncs = {
+    restrict_simpleType: (attrs, content, ref) => {
+      let st = checkError(restrictionsAPI.restrict_simpleType(attrs.name, content, default_prefix, simpleTypes))
+      if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(st))
+
+      delete ref.content
+      ref = {element: ref.element, attrs: ref.attrs, ...st}
+    },
+    list_itemType: (attrs, ref) => {
+      let type = restrictionsAPI.getTypeInfo(attrs.itemType, default_prefix, simpleTypes)
+      ref.content.push({element: "simpleType", attrs: {}, built_in_base: type.base, content: simpleTypes[type.type].content})
+    },
+    check_restrictionST_facets: (attrs, content, ref) => {
+      let base = "base" in attrs ? attrs.base : ("list" in content[0] ? {list: true} : content[0].built_in_base)
+      ref.content = checkError(restrictionsAPI.check_restrictionST_facets(el_name, base, content, default_prefix, simpleTypes))
+    }
+  }
 
   // funções invocadas pela queue
   const queueFuncs = {
@@ -485,11 +507,10 @@ any_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs / any_namespace / proc
 simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:simpleType_attrs ws (openEl {type_depth++}) ws content:simpleType_content close_el:close_XSD_el
              &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} {
   if (!--type_depth) current_type = null
+  let st = {element: el_name, attrs, content}
 
-  let st = checkError(restrictionsAPI.restrict_simpleType(attrs.name, content, default_prefix, simpleTypes))
-  if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(st))
-  
-  return {element: el_name, attrs, ...st}
+  st_queue.push({func: "restrict_simpleType", args: [attrs, content], ref: st})
+  return st
 }
 
 simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* {return checkError(attrsAPI.check_localTypeAttrs(el, "simpleType", schema_depth, curr))}
@@ -570,8 +591,11 @@ union_content = c:(annotation? simpleType*) {return cleanContent(c.flat())}
 
 list = prefix:open_XSD_el el_name:"list" attrs:list_attrs ws 
        close:(merged_close / openEl content:list_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-       &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "itemType", attrs, close.content)} 
-       {return {element: el_name, attrs, content: close.content}}
+       &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "itemType", attrs, close.content)} {
+  let list = {element: el_name, content: close.content}
+  if ("itemType" in attrs) st_queue.push({func: "list_itemType", args: [attrs], ref: list})
+  return list
+}
 
 list_attrs = attrs:(elem_id list_itemType? / list_itemType elem_id?)? {return getAttrs(attrs)}
 
@@ -585,8 +609,9 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)} {
-  let base = "base" in attrs ? attrs.base : ("list" in close.content[0] ? {list: true} : close.content[0].built_in_base)
-  return {element: el_name, attrs, content: checkError(restrictionsAPI.check_restrictionST_facets(el_name, base, close.content, default_prefix, simpleTypes))}
+  let restriction = {element: el_name, attrs, content: close.content}
+  st_queue.push({func: "check_restrictionST_facets", args: [attrs, close.content], ref: restriction})
+  return restriction
 }
 
 base_attrs = attrs:(base elem_id? / elem_id base?)? {return getAttrs(attrs)}

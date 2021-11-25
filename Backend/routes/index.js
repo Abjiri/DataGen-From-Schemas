@@ -9,6 +9,7 @@ const converter = require('../converter/converter')
 router.post('/xml_schema', (req, res) => {
   try {
     let data = parser.parse(req.body)
+    console.log(JSON.stringify(data))
     let model = converter.convertXSD(data.xsd, data.simpleTypes)
     console.log(model)
 
