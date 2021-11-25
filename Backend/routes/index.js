@@ -9,9 +9,9 @@ const converter = require('../converter/converter')
 router.post('/xml_schema', (req, res) => {
   try {
     let data = parser.parse(req.body)
-    console.log(JSON.stringify(data))
+    //console.log(JSON.stringify(data))
     let model = converter.convertXSD(data.xsd, data.simpleTypes)
-    console.log(model)
+    //console.log(model)
 
     //https://datagen.di.uminho.pt/api/datagen/xml
     axios.post("http://localhost:12080/api/datagen/xml", model, {headers: {'Content-Type': 'text/plain'}})

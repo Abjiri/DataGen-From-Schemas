@@ -194,7 +194,7 @@ module.exports = /*
         peg$c47 = peg$literalExpectation("schema", false),
         peg$c48 = ">",
         peg$c49 = peg$literalExpectation(">", false),
-        peg$c50 = function(el_name, attrs, content) {return checkQueue()},
+        peg$c50 = function(el_name, attrs, content) {return check_stQueue() && checkQueue()},
         peg$c51 = function(el_name, attrs, content) {
           content = complete_refs(content, content)
           return {element: el_name, prefix: default_prefix, attrs, content: content.filter(x => x.element == "element")}
@@ -347,10 +347,17 @@ module.exports = /*
         peg$c182 = function(prefix, el_name, attrs, content, close_el) {
           if (!--type_depth) current_type = null
 
-          let st = checkError(restrictionsAPI.restrict_simpleType(attrs.name, content, default_prefix, simpleTypes))
-          if ("name" in attrs) simpleTypes[attrs.name] = JSON.parse(JSON.stringify(st))
-          
-          return {element: el_name, attrs, ...st}
+          let simpleType = {element: el_name, attrs}, arg_name = attrs.name
+          // o nome de um simpleType nunca pode começar por algarismos, logo nunca coincide com um simpleType existente
+          if (!("name" in attrs)) simpleType.attrs.name = "" + ++noNameST
+
+          st_queue.simpleTypes.push({
+            info: {name: simpleType.attrs.name, base: restrictionsAPI.get_baseST(content, default_prefix, simpleTypes)},
+            args: [arg_name, content],
+            ref: simpleType
+          })
+
+          return simpleType
         },
         peg$c183 = function(el) {return checkError(attrsAPI.check_localTypeAttrs(el, "simpleType", schema_depth, curr))},
         peg$c184 = function(attr, q1, val, q2) {return newLocalType(val,"simpleType")},
@@ -399,8 +406,17 @@ module.exports = /*
         peg$c227 = peg$literalExpectation("restriction", false),
         peg$c228 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)},
         peg$c229 = function(prefix, el_name, attrs, close) {
-          let base = "base" in attrs ? attrs.base : ("list" in close.content[0] ? {list: true} : close.content[0].built_in_base)
-          return {element: el_name, attrs, content: checkError(restrictionsAPI.check_restrictionST_facets(el_name, base, close.content, default_prefix, simpleTypes))}
+          let restriction = {element: el_name, attrs}, arg_base = attrs.base
+          if (!("base" in attrs)) restriction.attrs.base = close.content[0].attrs.name
+
+          st_queue.restrictions.push({
+            // ou é o atributo base ou o nome do simpleType filho
+            base: restrictionsAPI.getTypeInfo(restriction.attrs.base, default_prefix, simpleTypes).type,
+            args: [arg_base, close.content],
+            ref: restriction
+          })
+
+          return restriction
         },
         peg$c230 = "base",
         peg$c231 = peg$literalExpectation("base", false),
@@ -13387,6 +13403,8 @@ module.exports = /*
 
       // queue para invocações de funções de validação de referências na schema (refs e types) - para os elementos referenciados não terem de aparecer antes das referências
       let queue = []
+      // queue para invocações de funções relacionadas com definição e restrição de simpleTypes
+      let st_queue = {simpleTypes: [], restrictions: []}
       // prefixo definido na declaração da schema
       let default_prefix = null
       // prefixos de namespaces declarados na schema
@@ -13416,6 +13434,8 @@ module.exports = /*
       let local_types = {simpleType: [], complexType: [], simpleContent: []}
       // boleano para indicar se um tipo referenciado tem de corresponder a um tipo built-in ou simpleType apenas (false), ou pode ser um complexType também (true) 
       let any_type = "BSC"
+      // número de simpleTypes sem nome criados na schema, para guardar referência na st_queue
+      let noNameST = 0
 
       
       // Funções auxiliares gerais ------------------------------
@@ -13432,6 +13452,36 @@ module.exports = /*
       const checkQueue = () => queue.reduce((accum, curr) => accum && queueFuncs[curr.attr](...curr.args), true)
       // se for null, converte para array vazio; senão, remove os nulls do array
       const cleanContent = content => content === null ? [] : content.filter(e => e !== null)
+
+      // verificar todas as definições e restrições de simpleTypes colocadas na st_queue
+      const check_stQueue = () => {
+        let parsed_types = restrictionsAPI.built_in_types(simpleTypes)
+
+        while (st_queue.restrictions.length > 0 || st_queue.simpleTypes.length > 0) {
+          let r = st_queue.restrictions.filter(x => parsed_types.includes(x.base))
+          st_queue.restrictions = st_queue.restrictions.filter(x => !parsed_types.includes(x.base))
+
+          let st = st_queue.simpleTypes.filter(x => parsed_types.includes(x.info.base))
+          st_queue.simpleTypes = st_queue.simpleTypes.filter(x => !parsed_types.includes(x.info.base))
+
+          r.map(x => {
+            let arg_base = x.args[0], content = x.args[1]
+            let base = arg_base !== undefined ? arg_base : ("list" in content[0] ? {list: true} : content[0].built_in_base)
+            x.ref.content = checkError(restrictionsAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
+          })
+
+          st.map(x => {
+            let name = x.args[0], content = x.args[1]
+            let parsed = checkError(restrictionsAPI.restrict_simpleType(name, content, default_prefix, simpleTypes))
+            /* if ("name" in attrs) */ simpleTypes[name] = JSON.parse(JSON.stringify(parsed))
+            Object.assign(x.ref, parsed)
+          })
+          
+          parsed_types = parsed_types.concat(st.map(x => x.info.name))
+        }
+
+        return true
+      }
 
       // funções invocadas pela queue
       const queueFuncs = {

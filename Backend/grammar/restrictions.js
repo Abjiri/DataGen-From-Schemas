@@ -95,9 +95,13 @@ function getTypeInfo(type, default_prefix, simpleTypes) {
   }
   // tipo embutido ou local desta schema
   else prefix = default_prefix
-  
+
   // é um tipo da schema local, logo se não for embutido, é possível encontrar a sua base embutida na estrutura simpleTypes
-  if (prefix == default_prefix) base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
+  if (prefix == default_prefix) {
+    // o 2º caso do if só acontece na get_baseST, porque os tipos ainda não foram parsed e colocados na simpleTypes 
+    if (builtin_types.includes(type) || !(type in simpleTypes)) base = type
+    else base = simpleTypes[type].built_in_base
+  }
 
   return {type, base, prefix}
 }
@@ -171,7 +175,7 @@ function create_simpleTypes(default_prefix) {
 
 
 // validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
-function check_restrictionST_facets(el_name, base, content, default_prefix, simpleTypes) {
+function check_restrictionST_facets(base, content, default_prefix, simpleTypes) {
   // simpleType não é uma faceta, remover temporariamente do conteúdo se tiver um
   let st = null
   if (content.length > 0 && content[0].element == "simpleType") st = content.shift()
@@ -197,7 +201,7 @@ function check_restrictionST_facets(el_name, base, content, default_prefix, simp
     // só os atributos "pattern" e "enumeration" é que podem aparecer várias vezes
     if (key == "pattern" || key == "enumeration") f[key].push(value)
     else {
-      if (key in f) return error(`O elemento '${key}' só pode ser definido uma vez em cada elemento <${el_name}>!`)
+      if (key in f) return error(`O elemento '${key}' só pode ser definido uma vez em cada elemento <restriction>!`)
       else f[key] = value
     }
   }
@@ -455,6 +459,20 @@ function check_constrFacetBase_aux(base_name, base_type, value) {
 }
 
 
+function get_baseST(st_content, default_prefix, simpleTypes) {
+  let fst_content = st_content[0]
+  let base
+
+  if (fst_content.element == "list")
+    base = "itemType" in fst_content.attrs ? fst_content.attrs.itemType : fst_content.content[0].attrs.name
+
+  if (fst_content.element == "restriction") {
+    if ("base" in fst_content.attrs) base = fst_content.attrs.base
+    else base = fst_content.content[0].attrs.name
+  }
+  
+  return getTypeInfo(base, default_prefix, simpleTypes).type
+}
 
 // name = nome do novo tipo, st_content = conteúdo do novo simpleType
 function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
@@ -680,6 +698,7 @@ module.exports = {
   built_in_types,
   getTypeInfo,
   create_simpleTypes,
+  get_baseST,
   restrict_simpleType,
   check_restrictionST_facets
 }
