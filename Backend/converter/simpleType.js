@@ -468,20 +468,26 @@ function parseList(st, content, isGenType, has) {
    
    return "'" + str.slice(0,-1) + "'"
 }
+
+function parseUnion(union, content, has) {
+   console.log(content)
+   if (has("enumeration")) return `'{{random("${content.enumeration.join('","')}")}}'`
+   if (has("pattern")) return new RandExp(content.pattern).gen()
+
+   union = union.map(x => parseSimpleType(x))
+   return union[randomize(0, union.length-1)]
+}
  
 function parseSimpleType(st) {
-   // derivação por união
-   if ("union" in st) {
-      st.union = st.union.map(x => parseSimpleType(x))
-      return st.union[randomize(0, st.union.length-1)]
-   }
-    
    let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
 
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in content
    // verifica se a base é um dos tipos cujo valor é gerado por função anónima do DataGen
    let isGenType = base => ["date","dateTime","duration","gMonthDay","gYearMonth"].includes(base)
+
+   // derivação por união
+   if ("union" in st) return parseUnion(st.union, content, has)
 
    // derivação por lista
    if ("list" in st) return parseList(st, content, isGenType, has)
