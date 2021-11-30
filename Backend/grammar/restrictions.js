@@ -502,7 +502,16 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
     // se tiver atributo itemType, colocar o conteúdo do tipo respetivo no conteúdo para uniformizar com os casos em que vem com o simpleType definido dentro
     if ("itemType" in fst_content.attrs) {
       let type = getTypeInfo(fst_content.attrs.itemType, default_prefix, simpleTypes)
-      fst_content.content.push({element: "simpleType", attrs: {}, built_in_base: type.base, content: simpleTypes[type.type].content})
+      let st = JSON.parse(JSON.stringify(simpleTypes[type.type]))
+      if (!("built_in_base" in st)) st.built_in_base = type.base
+      fst_content.content.push({element: "simpleType", attrs: {}, ...st})
+    }
+
+    // não permitir criar listas de listas
+    if ("list" in fst_content.content[0] || ("union" in fst_content.content[0] && fst_content.content[0].union.some(x => "list" in x))) {
+      let name_str = name !== undefined ? ` '${name}'` : ""
+      let base_str = "itemType" in fst_content.attrs ? ` '${fst_content.attrs.itemType}'` : ""
+      return error(`Na definição do tipo lista${name_str}, o tipo base${base_str} é inválido porque ou é um tipo lista, ou um tipo união que contém uma lista!`)
     }
     return restrict_list(name, fst_content.content[0].built_in_base, fst_content.content[0].content, [], [], default_prefix, simpleTypes)
   }
