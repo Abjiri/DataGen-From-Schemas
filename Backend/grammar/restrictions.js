@@ -22,7 +22,10 @@ let isObject = x => typeof x === 'object' && !Array.isArray(x) && x !== null
 // criar array com os nomes do tipos embutidos da XML Schema
 const built_in_types = simpleTypes => {
   let types = []
-  for (let p in simpleTypes) if (!("built_in_base" in simpleTypes[p] || "union" in simpleTypes[p])) types.push(p)
+  for (let p in simpleTypes) {
+    if (["ENTITIES","IDREFS","NMTOKENS"].includes(p)) types.push(p)
+    else if (!["built_in_base","list","union"].some(x => x in simpleTypes[p])) types.push(p)
+  }
   return types
 }
 
@@ -167,8 +170,11 @@ function create_simpleTypes(default_prefix) {
   })
   
   // colocar os tipos derivados por lista no objeto
-  let list_types = ["ENTITIES","IDREFS","NMTOKENS"]
-  list_types.forEach(x => obj[x].list = [{ element: "minLength", attrs: {value: 1} }])
+  let list_types = [["ENTITIES","ENTITY"],["IDREFS","IDREF"],["NMTOKENS","NMTOKEN"]]
+  list_types.forEach(x => {
+    obj[x[0]].content = [{built_in_base: x[1], content: obj[x[0]].content}]
+    obj[x[0]].list = [{ element: "minLength", attrs: {value: 1} }]
+  })
   
   return obj
 }
@@ -502,9 +508,19 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
     // se tiver atributo itemType, colocar o conteúdo do tipo respetivo no conteúdo para uniformizar com os casos em que vem com o simpleType definido dentro
     if ("itemType" in fst_content.attrs) {
       let type = getTypeInfo(fst_content.attrs.itemType, default_prefix, simpleTypes)
-      fst_content.content.push({element: "simpleType", attrs: {}, built_in_base: type.base, content: simpleTypes[type.type].content})
+      let st = JSON.parse(JSON.stringify(simpleTypes[type.type]))
+      if (!("built_in_base" in st)) st.built_in_base = type.base
+      fst_content.content.push({element: "simpleType", attrs: {}, ...st})
     }
-    return restrict_list(name, fst_content.content[0].built_in_base, fst_content.content[0].content, [], [], default_prefix, simpleTypes)
+
+    // não permitir criar listas de listas
+    if ("list" in fst_content.content[0] || ("union" in fst_content.content[0] && fst_content.content[0].content.some(x => "list" in x))) {
+      let name_str = name !== undefined ? ` '${name}'` : ""
+      let base_str = "itemType" in fst_content.attrs ? ` '${fst_content.attrs.itemType}'` : ""
+      return error(`Na definição do tipo lista${name_str}, o tipo base${base_str} é inválido porque ou é um tipo lista, ou um tipo união que contém uma lista!`)
+    }
+
+    return restrict_list(name, fst_content.content[0], [], default_prefix, simpleTypes)
   }
 
   // está a derivar um simpleType por restrição
@@ -513,11 +529,11 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
       new_content = fst_content.content.filter((x,i) => i>0)
 
       if ("union" in fst_content.content[0]) {
-        return restrict_union(name, {}, fst_content.content[0].union, [], new_content, default_prefix, simpleTypes)
+        return restrict_union(name, {}, fst_content.content[0].content, [], new_content, default_prefix, simpleTypes)
       }
       // se estiver a restringir um tipo derivado por lista, as novas restrições são relativas à lista e não ao tipo base
       else if ("list" in fst_content.content[0]) {
-        return restrict_list(name, fst_content.content[0].built_in_base, fst_content.content[0].content, fst_content.content[0].list, new_content, default_prefix, simpleTypes)
+        return restrict_list(name, fst_content.content[0], new_content, default_prefix, simpleTypes)
       }
       else {
         base = fst_content.content[0].built_in_base
@@ -531,9 +547,9 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
 
       base_content = JSON.parse(JSON.stringify(simpleTypes[type.type]))
 
-      if ("union" in base_content) return restrict_union(name, {}, base_content.union, base_content.content, new_content, default_prefix, simpleTypes)
+      if ("union" in base_content) return restrict_union(name, {}, base_content.content, base_content.union, new_content, default_prefix, simpleTypes)
       // se for um tipo lista, os constraining facets base são relativos à lista, senão ao tipo base
-      if ("list" in base_content) return restrict_list(name, type.base, base_content.content, base_content.list, fst_content.content, default_prefix, simpleTypes)
+      if ("list" in base_content) return restrict_list(name, base_content, fst_content.content, default_prefix, simpleTypes)
       else base_content = base_content.content
     }
   }
@@ -690,13 +706,21 @@ function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, ba
 
 
 
-function restrict_list(name, elem_base, elem_content, list_base_content, list_new_content, default_prefix, simpleTypes) {
-  // se for um dos tipos de listas embutidos, considerar a base dos seus elementos
-  if (elem_base == "ENTITIES") elem_base = "ENTITY"
-  else if (elem_base == "IDREFS") elem_base = "IDREF"
-  else if (elem_base == "NMTOKENS") elem_base = "NMTOKEN"
-
+function restrict_list(name, base, list_new_content, default_prefix, simpleTypes) {
   let type = getTypeInfo({list: true}, default_prefix, simpleTypes)
+
+  // facetas base relativas à lista
+  let list_base_content = "list" in base ? base.list : []
+
+  // todos os tipos base dos elementos desta lista
+  let elem_bases
+  if ("list" in base) elem_bases = base.content.map(x => x.built_in_base)
+  else elem_bases = "union" in base ? base.content.map(x => x.built_in_base) : [base.built_in_base]
+
+  // estrutura com conteúdo(s) e built_in_base(s)
+  let elem_content
+  if ("list" in base) elem_content = base.content
+  else elem_content = "union" in base ? base.content : [{built_in_base: base.built_in_base, content: base.content}]
 
   // verificar se só tem facetas válidas relativas a listas
   list_new_content = check_constrFacetBase("list", type, list_new_content)
@@ -706,7 +730,7 @@ function restrict_list(name, elem_base, elem_content, list_base_content, list_ne
   // se tiver uma enumeration da lista, temos de validar semanticamente cada elemento da lista, de acordo com o seu tipo base
   let enum_facet = list_new_content.filter(x => x.element == "enumeration")
   if (enum_facet.length > 0) {
-    let check = check_listEnumeration(elem_base, enum_facet[0].attrs.value)
+    let check = check_listEnumeration(elem_bases, enum_facet[0].attrs.value)
     if ("error" in check) return check
   }
 
@@ -714,20 +738,20 @@ function restrict_list(name, elem_base, elem_content, list_base_content, list_ne
   list_new_content = restrict_simpleType2(name, type, list_base_content, list_new_content)
   if ("error" in list_new_content) return list_new_content
   
-  return data({built_in_base: elem_base, list: list_new_content.data, content: elem_content})
+  return data({list: list_new_content.data, content: elem_content})
 }
 
 // validar os elementos de enumerações de listas individualmente conforme o seu tipo base
-function check_listEnumeration(base, enumerations) {
+function check_listEnumeration(bases, enumerations) {
   for (let i = 0; i < enumerations.length; i++) {
     let values = enumerations[i].split(/[ \t\n\r]+/g)
 
     for (let j = 0; j < values.length; j++) {
-      let check = check_constrFacetBase_aux(base, base, values[j])
-      if ("error" in check) return check
+      let check = bases.map(b => check_constrFacetBase_aux(b, b, values[j]))
+      if (check.every(x => "error" in x)) return error(`'${values[j]}' não é um valor válido para nenhum dos tipos base da lista '${bases.join("', '")}'!`)
     }
   }
-  
+
   return data(true)
 }
 
@@ -740,7 +764,7 @@ function restrict_union(name, attrs, types, base_facets, new_facets, default_pre
     let type = getTypeInfo(x, default_prefix, simpleTypes)
     let st = JSON.parse(JSON.stringify(simpleTypes[type.type]))
     
-    if (!("built_in_base" in st)) st.built_in_base = type.base
+    if (!["built_in_base","list","union"].some(x => x in st)) st.built_in_base = type.base
     return st
   }))
 
@@ -753,7 +777,7 @@ function restrict_union(name, attrs, types, base_facets, new_facets, default_pre
   if ("error" in new_facets) return new_facets
   new_facets = new_facets.data
   
-  return data({union: types, content: new_facets})
+  return data({union: new_facets, content: types})
 }
 
 function check_unionFacets(name, types, base_facets, new_facets, default_prefix, simpleTypes) {
@@ -769,35 +793,47 @@ function check_unionFacets(name, types, base_facets, new_facets, default_prefix,
   let final_facets = []
   if ("enumeration" in f) final_facets.push({element: "enumeration", attrs: {value: f.enumeration}})
   if ("pattern" in f) final_facets.push({element: "pattern", attrs: {value: f.pattern}})
-
+  
   // verificar se as novas facetas de restrição são válidas em relação às já anteriormente existentes em relação à união
   final_facets = restrict_simpleType2(name, getTypeInfo({union: true}, default_prefix, simpleTypes), base_facets, final_facets)
   if ("error" in final_facets) return final_facets
   final_facets = final_facets.data
   
-  if ("enumeration" in f) {
-    // verificar se as facetas enumeration e pattern na mesma restrição não se contradizem
-    if ("pattern" in f) {
+  // verificar se as facetas enumeration e pattern na mesma restrição não se contradizem
+  if ("pattern" in f) {
+    if ("enumeration" in f) {
       for (let i = 0; i < f.enumeration.length; i++) {
         if (!new RegExp(f.pattern).test(f.enumeration[i])) {
           return error(`O valor '${f.enumeration[i]}' da faceta <enumeration> não obedece à expressão regular do(s) elemento(s) <pattern> no mesmo passo de derivação!`)
         }
       }
     }
-    
+  }
+  
+  if ("enumeration" in f) {    
+    // função auxiliar para verificar se pelo menos um dos valores enumerados é lexicamente válido para este tipo
+    let check_types = (types, enum_value, arr) => {
+      types.map(t => {
+        if ("list" in t) t.content.map(tt => arr.push({type: t, result: check_listEnumeration([tt.built_in_base], [enum_value])}))
+        else if ("union" in t) arr = check_types(t.content, enum_value, arr)
+        else arr.push({type: t, result: check_listEnumeration([t.built_in_base], [enum_value])})
+      })
+      return arr
+    }
+
     // verificar se todos os valores enumerados são válidos lexicamente e em termos de recursividade de facetas para um dos tipos base, no mínimo
     let list_type = getTypeInfo({list: true}, default_prefix, simpleTypes)    
     let check = f.enumeration.map(x => {
       // verificar se pelo menos um dos valores enumerados é lexicamente válido para este tipo
-      let res = types.map(t => check_listEnumeration(t.built_in_base, [x]))
+      let res = check_types(types, x, [])
 
       res.map((y,i) => {
-        if ("data" in y) {
+        if ("data" in y.result) {
           // verificar se a recursividade das facetas é válida para este tipo e este valor de enumeração
-          let type = "list" in types[i] ? list_type : getTypeInfo(types[i].built_in_base, default_prefix, simpleTypes)
+          let type = "list" in y.type ? list_type : getTypeInfo(y.type.built_in_base, default_prefix, simpleTypes)
           let fac = final_facets.filter(z => z.element != "enumeration").concat([{element: "enumeration", attrs: {value: [x]}}])
 
-          res[i] = restrict_simpleType2(name, type, "list" in types[i] ? types[i].list : types[i].content, fac)
+          res[i] = restrict_simpleType2(name, type, "list" in y.type ? y.type.list : y.type.content, fac)
         }
         else res[i] = false
       })
@@ -814,8 +850,11 @@ function check_unionFacets(name, types, base_facets, new_facets, default_prefix,
         check[i] = check[i].filter(x => x !== false)
         let fst_error = check[i].shift()
 
-        if (check[i].length > 0) check[i].map((x,j) => check[i][j] = x.error.slice(0,-1).split(",").filter((_,ind) => ind>0).join(","))
-        return error(fst_error.error.slice(0,-1) + ";" + check[i].join(";"))
+        if (check[i].length > 0) {
+          check[i].map((x,j) => check[i][j] = x.error.slice(0,-1).split(",").filter((_,ind) => ind>0).join(","))
+          return error(fst_error.error.slice(0,-1) + ";" + check[i].join(";"))
+        }
+        return error(fst_error.error)
       }
     }
   }

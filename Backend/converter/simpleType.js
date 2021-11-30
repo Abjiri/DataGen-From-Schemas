@@ -443,7 +443,15 @@ function parseRestriction(content, base, list, has) {
    }
 }
 
-function parseList(st, content, isGenType, has) {
+function parseList(st, isGenType) {
+   console.log("parseList")
+   console.log(JSON.stringify(st.content))
+   st.content.map((x,i) => st.content[i].content = st.content[i].content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {}))
+   console.log(JSON.stringify(st.content))
+
+   // verificar se a faceta em questão existe no conteúdo
+   let has = facet => facet in st.content[0].content
+
    let list = st.list.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
    if ("enumeration" in list) return `'{{random("${list.enumeration.join('","')}")}}'`
 
@@ -458,39 +466,46 @@ function parseList(st, content, isGenType, has) {
    else if (max === null) max = min + 5
    else if (min === null) min = min-5 > 0 ? min-5 : 0
 
-   if (isGenType(st.built_in_base)) {
-      return parseRestriction(content, st.built_in_base, {max, min}, has)
+   // ADEQUAR O CÓDIGO DAQUI PARA BAIXO PARA GERAR VÁRIOS TIPOS ----------
+
+   if (isGenType(st.content[0].built_in_base)) {
+      return parseRestriction(st.content, st.content[0].built_in_base, {max, min}, has)
    }
    else {
       for (let i = 0; i < randomize(min,max); i++)
-         str += parseRestriction(content, st.built_in_base, {max, min}, has) + " "
+         str += parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min}, has) + " "
    }
    
    return "'" + str.slice(0,-1) + "'"
 }
 
-function parseUnion(union, content, has) {
-   console.log(content)
-   if (has("enumeration")) return `'{{random("${content.enumeration.join('","')}")}}'`
-   if (has("pattern")) return new RandExp(content.pattern).gen()
-
-   union = union.map(x => parseSimpleType(x))
-   return union[randomize(0, union.length-1)]
+function parseUnion(st) {
+   let content = st.union.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
+   
+   if ("enumeration" in content) return `'{{random("${content.enumeration.join('","')}")}}'`
+   if ("pattern" in content) return new RandExp(content.pattern).gen()
+   
+   st.content = st.content.map(x => {console.log("oi"); return parseSimpleType(x)})
+   return st.content[randomize(0, st.content.length-1)]
 }
  
 function parseSimpleType(st) {
+   console.log()
+   console.log(st)
+   
+   // verifica se a base é um dos tipos cujo valor é gerado por função anónima do DataGen
+   let isGenType = base => ["date","dateTime","duration","gMonthDay","gYearMonth"].includes(base)
+
+   // derivação por lista
+   if ("list" in st) return parseList(st, isGenType)
+
+   // derivação por união
+   if ("union" in st) return parseUnion(st)
+
    let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
 
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in content
-   // verifica se a base é um dos tipos cujo valor é gerado por função anónima do DataGen
-   let isGenType = base => ["date","dateTime","duration","gMonthDay","gYearMonth"].includes(base)
-
-   // derivação por união
-   if ("union" in st) return parseUnion(st.union, content, has)
-
-   // derivação por lista
-   if ("list" in st) return parseList(st, content, isGenType, has)
    
    // derivação por restrição
    let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1}, has)

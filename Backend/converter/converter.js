@@ -108,7 +108,7 @@ function parseType(type) {
    type = getTypeInfo(type)
    let st = simpleTypes[type.type]
 
-   if (!("built_in_base" in st)) st.built_in_base = type.base
+   if (!["built_in_base","list","union"].some(x => x in st)) st.built_in_base = type.base
    return parseSimpleType(st)
 }
 

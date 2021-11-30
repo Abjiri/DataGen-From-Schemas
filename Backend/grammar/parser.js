@@ -13538,7 +13538,7 @@ module.exports = /*
           else if (content[i].element == "element" && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
 
           // repetir recursivamente para os elementos filho
-          if (Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems)
+          if (content[i].element != "simpleType" && Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems)
         }
         
         return content
