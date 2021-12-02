@@ -411,8 +411,6 @@ function parseLanguage(c, has) {
 }
 
 function parseRestriction(content, base, list) {
-   console.log("oi")
-   console.log(content)
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in content
 
@@ -449,9 +447,7 @@ function parseRestriction(content, base, list) {
 }
 
 function parseList(st, isGenType) {
-   console.log("parseList")
    st.content.map((x,i) => st.content[i].content = st.content[i].content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {}))
-   console.log(st.content)
 
    let list = st.list.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
    if ("enumeration" in list) return `'{{random("${list.enumeration.join('","')}")}}'`
@@ -467,20 +463,31 @@ function parseList(st, isGenType) {
    else if (max === null) max = min + 5
    else if (min === null) min = min-5 > 0 ? min-5 : 0
 
-   // ADEQUAR O CÓDIGO DAQUI PARA BAIXO PARA GERAR VÁRIOS TIPOS ----------
-
    if (st.content.length == 1) {
-      if (isGenType(st.content[0].built_in_base)) {
-         return parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min})
-      }
+      let elem = parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min})
+
+      if (isGenType(st.content[0].built_in_base)) return elem
       else {
-         for (let i = 0; i < randomize(min,max); i++)
-            str += parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min}) + " "
+         for (let i = 0; i < randomize(min,max); i++) str += elem + " "
          return "'" + str.slice(0,-1) + "'"
       }
    }
    else {
-      st.content = st.content.map(x => {console.log(x); return parseRestriction(x.content, x.built_in_base, {max: 1, min: 1})})
+      str = "gen => {\nlet str = ''\n\n"
+      let type_len = st.content.length - 1
+
+      for (let i = 0; i < randomize(min,max); i++) {
+         let type_ind = randomize(0, type_len)
+         let elem = parseRestriction(st.content[type_ind].content, st.content[type_ind].built_in_base, {max, min})
+
+         if (isGenType(st.content[type_ind].built_in_base)) {
+            str += `let f${i} = ()${elem.slice(3)}\n`
+            str += `str += f${i}() + " "\n\n`
+         }
+         else str += `str += gen.${elem.startsWith("{{") ? elem.slice(2,-2) : elem} + " "\n\n`
+      }
+      
+      return str + "return str.slice(0,-1)\n}"
    }
 }
 
@@ -498,8 +505,7 @@ function parseSimpleType(st) {
    }
 
    // derivação por restrição
-   let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})   
-   console.log(content)
+   let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
    let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1})
    return isGenType(st.built_in_base) ? parsed : ("'" + parsed + "'")
 }
