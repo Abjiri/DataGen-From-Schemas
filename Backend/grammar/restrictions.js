@@ -189,7 +189,7 @@ function check_restrictionST_facets(base, content, default_prefix, simpleTypes) 
 
   // se for um tipo lista, a base devolvida pela getTypeInfo é dos elementos da lista
   let type = getTypeInfo(base, default_prefix, simpleTypes)
-  if (type.type != "list" && type.prefix == default_prefix) {
+  if (!["list","union"].includes(type.type) && type.prefix == default_prefix) {
     // se for um tipo lista, neste função interessa saber isso e não a base dos elementos da lista
     if ("list" in simpleTypes[type.type]) type = getTypeInfo({list: true}, default_prefix, simpleTypes)
   }
@@ -500,7 +500,7 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
 
   // está a derivar um simpleType por união
   if (fst_content.element == "union") {
-    return restrict_union(name, fst_content.attrs, fst_content.content, [], [], default_prefix, simpleTypes)
+    return restrict_union(name, fst_content.attrs, fst_content.content, [], default_prefix, simpleTypes)
   }
   
   // está a derivar um simpleType por lista
@@ -514,7 +514,7 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
     }
 
     // não permitir criar listas de listas
-    if ("list" in fst_content.content[0] || ("union" in fst_content.content[0] && fst_content.content[0].content.some(x => "list" in x))) {
+    if ("list" in fst_content.content[0] || ("union" in fst_content.content[0] && fst_content.content[0].union.some(x => "list" in x))) {
       let name_str = name !== undefined ? ` '${name}'` : ""
       let base_str = "itemType" in fst_content.attrs ? ` '${fst_content.attrs.itemType}'` : ""
       return error(`Na definição do tipo lista${name_str}, o tipo base${base_str} é inválido porque ou é um tipo lista, ou um tipo união que contém uma lista!`)
@@ -529,7 +529,7 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
       new_content = fst_content.content.filter((x,i) => i>0)
 
       if ("union" in fst_content.content[0]) {
-        return restrict_union(name, {}, fst_content.content[0].content, [], new_content, default_prefix, simpleTypes)
+        return restrict_union(name, {}, fst_content.content[0].union, new_content, default_prefix, simpleTypes)
       }
       // se estiver a restringir um tipo derivado por lista, as novas restrições são relativas à lista e não ao tipo base
       else if ("list" in fst_content.content[0]) {
@@ -547,7 +547,7 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
 
       base_content = JSON.parse(JSON.stringify(simpleTypes[type.type]))
 
-      if ("union" in base_content) return restrict_union(name, {}, base_content.content, base_content.union, new_content, default_prefix, simpleTypes)
+      if ("union" in base_content) return restrict_union(name, {}, base_content.union, new_content, default_prefix, simpleTypes)
       // se for um tipo lista, os constraining facets base são relativos à lista, senão ao tipo base
       if ("list" in base_content) return restrict_list(name, base_content, fst_content.content, default_prefix, simpleTypes)
       else base_content = base_content.content
@@ -574,6 +574,8 @@ function restrict_simpleType2(name, base, base_content, new_content) {
       let results = []
 
       arr.map(x => {
+        if (x[1] == "include") {
+        }
         for (let i = 0; i < (new_facet == "enumeration" ? new_value.length : 1); i++) {
           results.push(restrict_simpleType_aux(name, base, x[0], new_facet, base_els, base_content, new_facet == "enumeration" ? new_value[i] : new_value, x[1]))
         }
@@ -715,12 +717,12 @@ function restrict_list(name, base, list_new_content, default_prefix, simpleTypes
   // todos os tipos base dos elementos desta lista
   let elem_bases
   if ("list" in base) elem_bases = base.content.map(x => x.built_in_base)
-  else elem_bases = "union" in base ? base.content.map(x => x.built_in_base) : [base.built_in_base]
+  else elem_bases = "union" in base ? base.union.map(x => x.built_in_base) : [base.built_in_base]
 
   // estrutura com conteúdo(s) e built_in_base(s)
   let elem_content
   if ("list" in base) elem_content = base.content
-  else elem_content = "union" in base ? base.content : [{built_in_base: base.built_in_base, content: base.content}]
+  else elem_content = "union" in base ? base.union : [{built_in_base: base.built_in_base, content: base.content}]
 
   // verificar se só tem facetas válidas relativas a listas
   list_new_content = check_constrFacetBase("list", type, list_new_content)
@@ -757,30 +759,31 @@ function check_listEnumeration(bases, enumerations) {
 
 
 
-function restrict_union(name, attrs, types, base_facets, new_facets, default_prefix, simpleTypes) {
+function restrict_union(name, attrs, types, new_facets, default_prefix, simpleTypes) {
   let memberTypes = "memberTypes" in attrs ? attrs.memberTypes : []
 
-  types = types.concat(memberTypes.map(x => {
+  memberTypes.map(x => {
     let type = getTypeInfo(x, default_prefix, simpleTypes)
     let st = JSON.parse(JSON.stringify(simpleTypes[type.type]))
     
     if (!["built_in_base","list","union"].some(x => x in st)) st.built_in_base = type.base
-    return st
-  }))
-
+    if ("union" in st) types = types.concat(st.union)
+    else types.push(st)
+  })
   // verificar se só tem facetas válidas relativas a restrições de uniões
   new_facets = check_constrFacetBase("union", getTypeInfo({union: true}, default_prefix, simpleTypes), new_facets)
   if ("error" in new_facets) return new_facets
   new_facets = new_facets.data
 
-  new_facets = check_unionFacets(name, types, base_facets, new_facets, default_prefix, simpleTypes)
+  new_facets = check_unionFacets(name, types, new_facets, default_prefix, simpleTypes)
   if ("error" in new_facets) return new_facets
   new_facets = new_facets.data
   
-  return data({union: new_facets, content: types})
+  if (!new_facets.length) return data({union: types})
+  return data({built_in_base: {union: true}, content: new_facets})
 }
 
-function check_unionFacets(name, types, base_facets, new_facets, default_prefix, simpleTypes) {
+function check_unionFacets(name, types, new_facets, default_prefix, simpleTypes) {
   let f = {pattern: [], enumeration: []} // objeto com os pares chave-valor
   new_facets.map(x => f[x.element].push(x.attrs.value))
   
@@ -793,11 +796,6 @@ function check_unionFacets(name, types, base_facets, new_facets, default_prefix,
   let final_facets = []
   if ("enumeration" in f) final_facets.push({element: "enumeration", attrs: {value: f.enumeration}})
   if ("pattern" in f) final_facets.push({element: "pattern", attrs: {value: f.pattern}})
-  
-  // verificar se as novas facetas de restrição são válidas em relação às já anteriormente existentes em relação à união
-  final_facets = restrict_simpleType2(name, getTypeInfo({union: true}, default_prefix, simpleTypes), base_facets, final_facets)
-  if ("error" in final_facets) return final_facets
-  final_facets = final_facets.data
   
   // verificar se as facetas enumeration e pattern na mesma restrição não se contradizem
   if ("pattern" in f) {
@@ -815,7 +813,6 @@ function check_unionFacets(name, types, base_facets, new_facets, default_prefix,
     let check_types = (types, enum_value, arr) => {
       types.map(t => {
         if ("list" in t) t.content.map(tt => arr.push({type: t, result: check_listEnumeration([tt.built_in_base], [enum_value])}))
-        else if ("union" in t) arr = check_types(t.content, enum_value, arr)
         else arr.push({type: t, result: check_listEnumeration([t.built_in_base], [enum_value])})
       })
       return arr
@@ -863,6 +860,7 @@ function check_unionFacets(name, types, base_facets, new_facets, default_prefix,
 }
 
 module.exports = {
+  isObject,
   built_in_types,
   getTypeInfo,
   create_simpleTypes,

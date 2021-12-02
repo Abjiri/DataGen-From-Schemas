@@ -13472,11 +13472,16 @@ module.exports = /*
 
             if (arg_base !== undefined) {
               base = arg_base
-              if ("union" in simpleTypes[x.base]) union = true
+              let base_st = simpleTypes[x.base]
+              
+              if (restrictionsAPI.isObject(base_st.built_in_base) && "union" in base_st.built_in_base) base = base_st.built_in_base
+              if ("union" in base_st) union = true
             }
             else {
-              if ("union" in content[0]) union = true
-              else base = "list" in content[0] ? {list: true} : content[0].built_in_base
+              if ("list" in content[0]) base = {list: true}
+              else if ("union" in content[0])  union = true
+              else if (restrictionsAPI.isObject(content[0].built_in_base) && "union" in content[0].built_in_base) base = content[0].built_in_base
+              else base = content[0].built_in_base
             }
             
             // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
