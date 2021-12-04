@@ -415,7 +415,7 @@ module.exports = /*
             args: [arg_base, close.content],
             ref: restriction
           })
-
+          
           return restriction
         },
         peg$c230 = "base",
@@ -13466,6 +13466,29 @@ module.exports = /*
           let st = st_queue.simpleTypes.filter(x => filter_aux(x.info.base))
           st_queue.simpleTypes = st_queue.simpleTypes.filter(x => !filter_aux(x.info.base))
 
+          if (!r.length && !st.length) {
+            r = st_queue.restrictions.filter(x => x.args[0] !== undefined)
+            let lists = st_queue.simpleTypes.filter(x => x.args[1][0].element == "list" && "itemType" in x.args[1][0].attrs)
+            let unions = st_queue.simpleTypes.filter(x => x.args[1][0].element == "union" && "memberTypes" in x.args[1][0].attrs)
+
+            lists = lists.filter(x => !parsed_types.includes(x.args[1][0].attrs.itemType))
+            unions = unions.filter((x,i) => {
+              unions[i].args[1][0].attrs.memberTypes = unions[i].args[1][0].attrs.memberTypes.filter(t => !parsed_types.includes(t))
+              return unions[i].args[1][0].attrs.memberTypes.length > 0
+            })
+
+            let r_error = `\t- algum dos tipos {'${r.map(x => x.base).join("', '")}'} referenciados no atributo "base" dos elementos <restriction> (simpleType)`
+            let l_error = `\t- algum dos tipos {'${lists.map(x => x.args[1][0].attrs.itemType).join("', '")}'} referenciados no atributo "itemType" dos elementos <list>`
+            let u_error = `\t- algum dos tipos {'${unions.map(x => x.args[1][0].attrs.memberTypes.join("', '")).join(", ")}'} referenciados no atributo "memberTypes" dos elementos <union>`
+
+            let err = "Existe uma referência a um tipo inválido que é:\n"
+            if (r.length > 0) err += r_error
+            if (lists.length > 0) err += (err[err.length-1] == "\n" ? "" : ";\n") + l_error
+            if (unions.length > 0) err += (err[err.length-1] == "\n" ? "" : ";\n") + u_error
+
+            return error(err + ".")
+          }
+
           r.map(x => {
             let arg_base = x.args[0], content = x.args[1]
             let base, union = false
@@ -13489,6 +13512,7 @@ module.exports = /*
             else x.ref.content = checkError(restrictionsAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
           })
 
+          console.log(JSON.stringify(st))
           st.map(x => {
             let name = x.args[0], content = x.args[1]
             let parsed = checkError(restrictionsAPI.restrict_simpleType(name, content, default_prefix, simpleTypes))
@@ -13513,7 +13537,7 @@ module.exports = /*
             BS: "tipo embutido ou simpleType",
             C: "complexType"
           }
-          
+
           if (curr_any_type != "C" && restrictionsAPI.built_in_types(simpleTypes).includes(type)) {
             return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
                                                             ${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
@@ -13525,7 +13549,7 @@ module.exports = /*
           return true
         }
       }
-      
+          
       // copiar os atributos de um elemento referenciado para o elemento que o referencia
       function complete_refs(content, global_elems) {
         for (let i = 0; i < content.length; i++) {

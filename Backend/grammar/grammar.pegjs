@@ -68,17 +68,46 @@
       let st = st_queue.simpleTypes.filter(x => filter_aux(x.info.base))
       st_queue.simpleTypes = st_queue.simpleTypes.filter(x => !filter_aux(x.info.base))
 
+      // dar uma mensagem de erro se estiver a ser referenciado algum tipo inválido
+      if (!r.length && !st.length) {
+        r = st_queue.restrictions.filter(x => x.args[0] !== undefined)
+        let lists = st_queue.simpleTypes.filter(x => x.args[1][0].element == "list" && "itemType" in x.args[1][0].attrs)
+        let unions = st_queue.simpleTypes.filter(x => x.args[1][0].element == "union" && "memberTypes" in x.args[1][0].attrs)
+
+        lists = lists.filter(x => !parsed_types.includes(x.args[1][0].attrs.itemType))
+        unions = unions.filter((x,i) => {
+          unions[i].args[1][0].attrs.memberTypes = unions[i].args[1][0].attrs.memberTypes.filter(t => !parsed_types.includes(t))
+          return unions[i].args[1][0].attrs.memberTypes.length > 0
+        })
+
+        let r_error = `\t- algum dos tipos {'${r.map(x => x.base).join("', '")}'} referenciados no atributo "base" dos elementos <restriction> (simpleType)`
+        let l_error = `\t- algum dos tipos {'${lists.map(x => x.args[1][0].attrs.itemType).join("', '")}'} referenciados no atributo "itemType" dos elementos <list>`
+        let u_error = `\t- algum dos tipos {'${unions.map(x => x.args[1][0].attrs.memberTypes.join("', '")).join(", ")}'} referenciados no atributo "memberTypes" dos elementos <union>`
+
+        let err = "Existe uma referência a um tipo inválido que é:\n"
+        if (r.length > 0) err += r_error
+        if (lists.length > 0) err += (err[err.length-1] == "\n" ? "" : ";\n") + l_error
+        if (unions.length > 0) err += (err[err.length-1] == "\n" ? "" : ";\n") + u_error
+
+        return error(err + ".")
+      }
+
       r.map(x => {
         let arg_base = x.args[0], content = x.args[1]
         let base, union = false
 
         if (arg_base !== undefined) {
           base = arg_base
-          if ("union" in simpleTypes[x.base]) union = true
+          let base_st = simpleTypes[x.base]
+          
+          if (restrictionsAPI.isObject(base_st.built_in_base) && "union" in base_st.built_in_base) base = base_st.built_in_base
+          if ("union" in base_st) union = true
         }
         else {
-          if ("union" in content[0]) union = true
-          else base = "list" in content[0] ? {list: true} : content[0].built_in_base
+          if ("list" in content[0]) base = {list: true}
+          else if ("union" in content[0])  union = true
+          else if (restrictionsAPI.isObject(content[0].built_in_base) && "union" in content[0].built_in_base) base = content[0].built_in_base
+          else base = content[0].built_in_base
         }
         
         // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
@@ -649,7 +678,7 @@ restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws
     args: [arg_base, close.content],
     ref: restriction
   })
-
+  
   return restriction
 }
 

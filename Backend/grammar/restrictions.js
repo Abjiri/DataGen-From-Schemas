@@ -82,6 +82,28 @@ function durationToMS(d) {
     return ms
 }
 
+// verificar que o tipo local que está a ser referenciado existe
+function validate_TypeRef(ref, curr, existsLocalType, default_prefix, simpleTypes) {
+  let error_msg = {
+    BSC: "tipo embutido, simpleType ou complexType",
+    BS: "tipo embutido ou simpleType",
+    C: "complexType"
+  }
+
+  let type = ref[ref.length-1]
+  let prefix = ref.length == 2 ? ref[0] : null
+
+  if (curr.any_type != "C" && built_in_types(simpleTypes).includes(type)) {
+    return prefix === default_prefix ? data(true) : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
+                                                    ${(default_prefix === null && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
+  }
+  if (prefix == null || prefix == default_prefix) {
+    if (!existsLocalType) return error(`Tem de referenciar um ${error_msg[curr.any_type]} válido!`)
+    if (!curr.curr && type === curr.type) return error(`Definições circulares detetadas para o tipo '${type}'! Isto significa que o '${type}' está contido na sua própria hierarquia, o que é um erro.`)
+  }
+  return data(true)
+}
+
 // determinar o nome e prefixo de schema do tipo em questão e o nome da sua base embutida
 /* operacional apenas para tipos da schema local */
 function getTypeInfo(type, default_prefix, simpleTypes) {
@@ -543,7 +565,7 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
     else {
       new_content = fst_content.content // constraining facets do novo tipo
       base = fst_content.attrs.base
-      let type = getTypeInfo(base, default_prefix, simpleTypes)
+      let type = getTypeInfo(base, default_prefix, simpleTypes) 
 
       base_content = JSON.parse(JSON.stringify(simpleTypes[type.type]))
 
@@ -863,6 +885,7 @@ module.exports = {
   isObject,
   built_in_types,
   getTypeInfo,
+  validate_TypeRef,
   create_simpleTypes,
   get_baseST,
   restrict_simpleType,
