@@ -156,6 +156,8 @@ function parseAttribute(el, depth) {
    }
 
    if ("type" in attrs) value = parseType(attrs.type)
+   else value = parseSimpleType(el.content[0])
+   
    return indent(depth) + str + value
 }
 
