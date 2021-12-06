@@ -124,6 +124,7 @@ function parseComplexType(el, depth) {
 
    parsed.attrs = parseAttributeGroup(el, depth+1)
 
+   el.content = el.content.filter(x => !x.element.includes("ttribute"))
    for (let i = 0; i < el.content.length; i++) {
       switch (el.content[i].element) {
          case "group": parsed.content = parseGroup(el.content[i], depth+1, {}).str.slice(0, -2); break;
@@ -136,7 +137,8 @@ function parseComplexType(el, depth) {
    if (!parsed.attrs.length && !parsed.content.length) return "{ missing(100) {empty: true} }"
 
    let str = "{\n"
-   if (parsed.attrs.length > 0) str += parsed.attrs + ",\n"
+   if (parsed.attrs.length > 0) str += parsed.attrs
+   if (parsed.content.length > 0) str += ",\n"
    return str + `${parsed.content}\n${indent(depth)}}`
 }
 
@@ -157,7 +159,7 @@ function parseAttribute(el, depth) {
 
    if ("type" in attrs) value = parseType(attrs.type)
    else value = parseSimpleType(el.content[0])
-   
+
    return indent(depth) + str + value
 }
 

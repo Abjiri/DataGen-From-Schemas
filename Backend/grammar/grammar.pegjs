@@ -768,7 +768,7 @@ complexType_block = ws2 attr:"block" ws "=" q1:QMo val:elem_final_values q2:QMc 
 complex_mixed = ws2 attr:"mixed" ws "=" q1:QMo val:boolean q2:QMc                                            {return checkQM(q1,q2,attr,val)}
 complexType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return newLocalType(val,"complexType")} {return checkQM(q1,q2,attr,val)}
 
-complexType_content = c:(annotation? (simpleContent / complexContent / (all / choiceOrSequence / group)? attributes)) {return cleanContent(c.flat(2))}
+complexType_content = c:(annotation? (simpleContent / complexContent / ((all / choiceOrSequence / group)? attributes))) {return cleanContent(c.flat(2))}
 
 
 // ----- <simpleContent> -----

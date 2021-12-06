@@ -13572,7 +13572,7 @@ module.exports = /*
             delete content[i].attrs.ref
           }
           // se for um elemento básico (sem "ref" nem filhos) e não tiver "type", assume-se que é string
-      else if (["element","attribute"].includes(content[i].element) && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
+          else if (["element","attribute"].includes(content[i].element) && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
 
           // repetir recursivamente para os elementos filho
           if (content[i].element != "simpleType" && Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems)
