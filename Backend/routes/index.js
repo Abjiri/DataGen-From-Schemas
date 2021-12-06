@@ -8,11 +8,8 @@ const converter = require('../converter/converter')
 // POST para gerar um dataset a partir de um XML schema
 router.post('/xml_schema', (req, res) => {
   try {
-    let data = parser.parse(req.body)
-    console.log("--------- DATA --------------")
-    console.log(JSON.stringify(data))
-    let model = converter.convertXSD(data.xsd, data.simpleTypes)
-    //console.log(model)
+    let data = parser.parse(req.body.xsd)
+    let model = converter.convertXSD(data.xsd, data.simpleTypes, req.body.unbounded)
 
     //https://datagen.di.uminho.pt/api/datagen/xml
     axios.post("http://localhost:12080/api/datagen/xml", model, {headers: {'Content-Type': 'text/plain'}})

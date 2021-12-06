@@ -2,6 +2,7 @@ const {parseSimpleType} = require('./simpleType')
 
 let default_prefix = null
 let simpleTypes = {}
+let unbounded = 0
 
 /* nr de elementos que vão ser criados como objetos temporariamente na DSL com uma chave especial 
 e convertidos posteriormente para a forma original na tradução JSON-XML do DataGen */
@@ -43,9 +44,10 @@ function getTypeInfo(type) {
 }
 
 
-function convertXSD(xsd, st) {
+function convertXSD(xsd, st, unbounded_value) {
    let str = "<!LANGUAGE pt>\n{\n"
    let depth = 1
+   unbounded = unbounded_value
    
    // variáveis globais
    default_prefix = xsd.prefix
@@ -72,6 +74,8 @@ function parseElement(el, depth, keys) {
    let elem_str = "", schemaElem = keys === null
    // se for aninhado, numerar as suas ocorrências para não dar overwrite na geração do DataGen
    let name = () => `${schemaElem ? "" : `DFS_${keys[el.attrs.name]++}__`}${el.attrs.name}: ` 
+
+   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
    let occurs = schemaElem ? 1 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
    
    for (let i = 0; i < occurs; i++) {
@@ -174,6 +178,7 @@ function parseAttributeGroup(el, depth) {
 
 function parseGroup(el, depth, keys) {
    let str = ""
+   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
 
    // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
    for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {
@@ -235,6 +240,7 @@ function parseAll(el, depth, keys) {
 
 function parseSequence(el, depth, keys) {
    let str = ""
+   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
 
    // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
    for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {
@@ -249,6 +255,7 @@ function parseSequence(el, depth, keys) {
 
 function parseChoice(el, depth, keys) {
    let str = ""
+   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
 
    // escolher um dos filhos um nº aleatório de vezes, entre os limites dos atributos max/minOccurs
    for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {

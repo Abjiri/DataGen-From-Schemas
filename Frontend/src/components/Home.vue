@@ -9,6 +9,10 @@
                 <div class="input-group-append">
                     <input class="btn btn-primary float-left" type="button" value="Gerar" @click="generate"/>
                 </div>
+              <div class="input-group-prepend ">
+                <span class="input-group-text" id="basic-addon1">Limite unbounded:</span>
+              </div>
+              <input type="text" class="form-control" id="unbounded_value" value="10">
             </div>
           </div>
         </div>
@@ -99,7 +103,8 @@ export default {
   methods: {
     onCmCodeChange(newCode) { this.input = newCode },
     async generate() {
-      let {data} = await axios.post('http://localhost:3000/xml_schema/', this.input, {headers: {'Content-Type': 'text/plain'}})
+      let unbounded = parseInt(document.getElementById('unbounded_value').value)
+      let {data} = await axios.post('http://localhost:3000/xml_schema/', {xsd: this.input, unbounded})
       
       if (typeof data == "string") this.output = data
       else this.output = "ERRO!!\n\n" + data.message
