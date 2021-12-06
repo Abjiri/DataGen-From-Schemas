@@ -9,6 +9,14 @@ const converter = require('../converter/converter')
 router.post('/xml_schema', (req, res) => {
   try {
     let data = parser.parse(req.body.xsd)
+
+    for (let i = 0; i < data.unbounded_min; i++) {
+      if (data.unbounded_min[i] > req.body.unbounded) {
+        let message = `Um elemento na schema tem minOccurs='${data.unbounded_min[i]}' e maxOccurs='unbounded', o que é inválido porque o máximo de repetições geráveis está definido como '${req.body.unbounded}'.`
+        return res.status(201).jsonp({message})
+      }
+    }
+
     let model = converter.convertXSD(data.xsd, data.simpleTypes, req.body.unbounded)
 
     //https://datagen.di.uminho.pt/api/datagen/xml

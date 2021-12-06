@@ -17,6 +17,8 @@
   let names = {attribute: [], attributeGroup: [], element: [], elem_constraint: [], group: [], notation: []}
   // atributos "id" de elementos da schema - têm de ser únicos
   let ids = []
+  // array com os valores dos atributos 'minOccurs' que coexistem com 'maxOccurs' = "unbounded"
+  let unbounded_min = []
   // boleanos para saber se está a ser processado um <element> (para a função validationQueue.type), um <group> ou um <redefine>
   let curr = {element: false, group: false, redefine: false}
   
@@ -222,14 +224,24 @@
   const getAttrs = objArr => objArr === null ? {} : cleanContent(objArr).reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
   // verificar se o array de atributos tem algum atributo repetido
   const check_repeatedAttrs = (arr, attrs, el_name) => (Object.keys(attrs).length == arr.length) ? attrs : error(`O elemento <${el_name}> não pode possuir atributos repetidos!`)
-  // validar os atributos de um elemento <any/all/choice/sequence>
-  const check_occursAttrs = (arr, el_name) => attrsAPI.defaultOccurs(check_repeatedAttrs(arr, getAttrs(arr), el_name), curr)
   // verificar se o atributo em questão está presente
   const check_requiredAttr = (attrs, el_name, attr_name) => attr_name in attrs ? attrs : error(`Um elemento <${el_name}> requer o atributo '${attr_name}'!`)
   // validar um elemento <element/attribute> básico - verificar que tem os atributos essenciais
   const validateLocalEl = attrs => "ref" in attrs || "name" in attrs
   // verificar se o novo id é único na schema
   const validateID = id => !ids.includes(id) ? true : error(`O valor do atributo 'id' deve ser único na schema! Existe mais do que um elemento na schema com o id '${id}'!`)
+
+  // guardar o valor do atributo 'minOccurs' na estrutura de dados, se 'maxOccurs' for "unbounded"
+  function getUnboundedMin(attrs) {
+    if ("maxOccurs" in attrs && "minOccurs" in attrs && attrs.maxOccurs == "unbounded") unbounded_min.push(attrs.minOccurs)
+  }
+
+  // validar os atributos de um elemento <any/all/choice/sequence>
+  function check_occursAttrs(arr, el_name) {
+    let attrs = check_repeatedAttrs(arr, getAttrs(arr), el_name)
+    getUnboundedMin(attrs)
+    return attrsAPI.defaultOccurs(attrs, curr)
+  }
 
   // validar o nome de um <element/attribute/notation> - deve ser único
   function validateName(name, el_name) {
@@ -340,7 +352,7 @@
   }
 }
 
-DSL_text = ws comment? XML_declaration ws comment? xsd:schema { return {xsd, simpleTypes} }
+DSL_text = ws comment? XML_declaration ws comment? xsd:schema { return {xsd, simpleTypes, unbounded_min} }
 
 ws "whitespace" = [ \t\n\r]*
 ws2 = [ \t\n\r]+
@@ -430,6 +442,7 @@ element_attrs = el:(elem_abstract / elem_block / elem_default / elem_substitutio
                 elem_final / elem_fixed / elem_form / elem_id / elem_minOccurs /
                 elem_maxOccurs / elem_name / elem_nillable / elem_ref / elem_type)* {
   let attrs = checkError(attrsAPI.check_elemAttrs(el, schema_depth, curr))
+  getUnboundedMin(attrs)
   curr.element = false
   return attrs
 }
@@ -812,8 +825,12 @@ group = prefix:open_XSD_el el_name:"group" attrs:group_attrs ws
         &{return check_elTags(el_name, prefix, close)}
         {curr.group = false; return {element: el_name, attrs, content: check_groupContent(close.content)}}
 
-group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)*
-              {let attrs = checkError(attrsAPI.check_groupAttrs(el, schema_depth, curr)); curr.group = true; return attrs}
+group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)* {
+  let attrs = checkError(attrsAPI.check_groupAttrs(el, schema_depth, curr))
+  getUnboundedMin(attrs)
+  curr.group = true
+  return attrs
+}
 
 group_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc           &{return validateName(val,"group")} {return checkQM(q1,q2,attr,val)}
 group_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc {queue.push({attr: "ref", args: [val, "group"]}); return checkQM(q1,q2,attr,val)}

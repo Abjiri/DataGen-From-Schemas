@@ -144,7 +144,7 @@ module.exports = /*
         peg$startRuleFunctions = { DSL_text: peg$parseDSL_text },
         peg$startRuleFunction  = peg$parseDSL_text,
 
-        peg$c0 = function(xsd) { return {xsd, simpleTypes} },
+        peg$c0 = function(xsd) { return {xsd, simpleTypes, unbounded_min} },
         peg$c1 = peg$otherExpectation("whitespace"),
         peg$c2 = /^[ \t\n\r]/,
         peg$c3 = peg$classExpectation([" ", "\t", "\n", "\r"], false, false),
@@ -254,6 +254,7 @@ module.exports = /*
         },
         peg$c97 = function(el) {
           let attrs = checkError(attrsAPI.check_elemAttrs(el, schema_depth, curr))
+          getUnboundedMin(attrs)
           curr.element = false
           return attrs
         },
@@ -464,7 +465,12 @@ module.exports = /*
         peg$c273 = "group",
         peg$c274 = peg$literalExpectation("group", false),
         peg$c275 = function(prefix, el_name, attrs, close) {curr.group = false; return {element: el_name, attrs, content: check_groupContent(close.content)}},
-        peg$c276 = function(el) {let attrs = checkError(attrsAPI.check_groupAttrs(el, schema_depth, curr)); curr.group = true; return attrs},
+        peg$c276 = function(el) {
+          let attrs = checkError(attrsAPI.check_groupAttrs(el, schema_depth, curr))
+          getUnboundedMin(attrs)
+          curr.group = true
+          return attrs
+        },
         peg$c277 = function(attr, q1, val, q2) {return validateName(val,"group")},
         peg$c278 = function(attr, q1, val, q2) {queue.push({attr: "ref", args: [val, "group"]}); return checkQM(q1,q2,attr,val)},
         peg$c279 = "notation",
@@ -13415,6 +13421,8 @@ module.exports = /*
       let names = {attribute: [], attributeGroup: [], element: [], elem_constraint: [], group: [], notation: []}
       // atributos "id" de elementos da schema - têm de ser únicos
       let ids = []
+      // array com os valores dos atributos 'minOccurs' que coexistem com 'maxOccurs' = "unbounded"
+      let unbounded_min = []
       // boleanos para saber se está a ser processado um <element> (para a função validationQueue.type), um <group> ou um <redefine>
       let curr = {element: false, group: false, redefine: false}
       
@@ -13466,6 +13474,7 @@ module.exports = /*
           let st = st_queue.simpleTypes.filter(x => filter_aux(x.info.base))
           st_queue.simpleTypes = st_queue.simpleTypes.filter(x => !filter_aux(x.info.base))
 
+          // dar uma mensagem de erro se estiver a ser referenciado algum tipo inválido
           if (!r.length && !st.length) {
             r = st_queue.restrictions.filter(x => x.args[0] !== undefined)
             let lists = st_queue.simpleTypes.filter(x => x.args[1][0].element == "list" && "itemType" in x.args[1][0].attrs)
@@ -13512,7 +13521,6 @@ module.exports = /*
             else x.ref.content = checkError(restrictionsAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
           })
 
-          console.log(JSON.stringify(st))
           st.map(x => {
             let name = x.args[0], content = x.args[1]
             let parsed = checkError(restrictionsAPI.restrict_simpleType(name, content, default_prefix, simpleTypes))
@@ -13620,14 +13628,24 @@ module.exports = /*
       const getAttrs = objArr => objArr === null ? {} : cleanContent(objArr).reduce(((r,c) => { r[c.attr] = c.val; return r }), {})
       // verificar se o array de atributos tem algum atributo repetido
       const check_repeatedAttrs = (arr, attrs, el_name) => (Object.keys(attrs).length == arr.length) ? attrs : error(`O elemento <${el_name}> não pode possuir atributos repetidos!`)
-      // validar os atributos de um elemento <any/all/choice/sequence>
-      const check_occursAttrs = (arr, el_name) => attrsAPI.defaultOccurs(check_repeatedAttrs(arr, getAttrs(arr), el_name), curr)
       // verificar se o atributo em questão está presente
       const check_requiredAttr = (attrs, el_name, attr_name) => attr_name in attrs ? attrs : error(`Um elemento <${el_name}> requer o atributo '${attr_name}'!`)
       // validar um elemento <element/attribute> básico - verificar que tem os atributos essenciais
       const validateLocalEl = attrs => "ref" in attrs || "name" in attrs
       // verificar se o novo id é único na schema
       const validateID = id => !ids.includes(id) ? true : error(`O valor do atributo 'id' deve ser único na schema! Existe mais do que um elemento na schema com o id '${id}'!`)
+
+      // guardar o valor do atributo 'minOccurs' na estrutura de dados, se 'maxOccurs' for "unbounded"
+      function getUnboundedMin(attrs) {
+        if ("maxOccurs" in attrs && "minOccurs" in attrs && attrs.maxOccurs == "unbounded") unbounded_min.push(attrs.minOccurs)
+      }
+
+      // validar os atributos de um elemento <any/all/choice/sequence>
+      function check_occursAttrs(arr, el_name) {
+        let attrs = check_repeatedAttrs(arr, getAttrs(arr), el_name)
+        getUnboundedMin(attrs)
+        return attrsAPI.defaultOccurs(attrs, curr)
+      }
 
       // validar o nome de um <element/attribute/notation> - deve ser único
       function validateName(name, el_name) {
