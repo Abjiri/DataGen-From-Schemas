@@ -124,21 +124,21 @@ function parseComplexType(el, depth) {
 
    parsed.attrs = parseAttributeGroup(el, depth+1)
 
-   el.content = el.content.filter(x => !x.element.includes("ttribute"))
-   for (let i = 0; i < el.content.length; i++) {
-      switch (el.content[i].element) {
-         case "group": parsed.content = parseGroup(el.content[i], depth+1, {}).str.slice(0, -2); break;
-         case "all": parsed.content = parseAll(el.content[i], depth+2, {}).str; break;
-         case "sequence": parsed.content = parseSequence(el.content[i], depth+1, {}).str.slice(0, -1); break;
-         case "choice": parsed.content = parseChoice(el.content[i], depth+1, {}).str; break;
-      }
+   switch (el.content[0].element) {
+      case "simpleContent": return parseSimpleContent(el.content[0], depth+1);
+      case "group": parsed.content = parseGroup(el.content[0], depth+1, {}).str.slice(0, -2); break;
+      case "all": parsed.content = parseAll(el.content[0], depth+2, {}).str; break;
+      case "sequence": parsed.content = parseSequence(el.content[0], depth+1, {}).str.slice(0, -1); break;
+      case "choice": parsed.content = parseChoice(el.content[0], depth+1, {}).str; break;
    }
    
    if (!parsed.attrs.length && !parsed.content.length) return "{ missing(100) {empty: true} }"
 
    let str = "{\n"
-   if (parsed.attrs.length > 0) str += parsed.attrs
-   if (parsed.content.length > 0) str += ",\n"
+   if (parsed.attrs.length > 0) {
+      str += parsed.attrs
+      if (parsed.content.length > 0) str += ",\n"
+   }
    return str + `${parsed.content}\n${indent(depth)}}`
 }
 
@@ -178,6 +178,24 @@ function parseAttributeGroup(el, depth) {
    }
 
    return str.slice(0, -2)
+}
+
+function parseSimpleContent(el, depth) {
+   if (el.content[0].element == "extension") return parseExtensionSC(el.content[0], depth)
+}
+
+function parseExtensionSC(el, depth) {
+   let parsed = {attrs: "", content: ""}
+
+   parsed.attrs = parseAttributeGroup(el, depth)
+   parsed.content = parseType(el.attrs.base)
+
+   let str = "{\n"
+   if (parsed.attrs.length > 0) {
+      str += parsed.attrs
+      if (parsed.content.length > 0) str += ",\n" + indent(depth)
+   }
+   return str + `DFS_EXTENSION__SC: ${parsed.content}\n${indent(depth-1)}}`
 }
 
 function parseGroup(el, depth, keys) {

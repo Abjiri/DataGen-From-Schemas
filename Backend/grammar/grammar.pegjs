@@ -7,6 +7,8 @@
   let queue = []
   // queue para invocações de funções relacionadas com definição e restrição de simpleTypes
   let st_queue = {simpleTypes: [], restrictions: []}
+  // queue para invocações de funções relacionadas com definição de complexTypes
+  let ct_queue = {extension: [], restriction: []}
   // prefixo definido na declaração da schema
   let default_prefix = null
   // prefixos de namespaces declarados na schema
@@ -28,8 +30,10 @@
   // verificar se o resultado de uma função invocada de uma API vem com erro ou não 
   const checkError = obj => ("error" in obj) ? error(obj.error) : obj.data
 
-  // array dos tipos embutidos da XML Schema em formato da DSL ({element, attrs, content})
-  let simpleTypes = restrictionsAPI.create_simpleTypes(default_prefix)
+  // array dos tipos embutidos da XML Schema e posteriores simpleTypes criados a partir deles, em formato da DSL ({element, attrs, content})
+  let simpleTypes = stAPI.create_simpleTypes(default_prefix)
+  // array dos complexTypes criados na schema
+  let complexTypes = {}
   // número de simple/complexTypes aninhados correntemente
   let type_depth = 0
   // nome do simple/complexType a ser processado neste momento
@@ -59,7 +63,7 @@
 
   // verificar todas as definições e restrições de simpleTypes colocadas na st_queue
   const check_stQueue = () => {
-    let parsed_types = restrictionsAPI.built_in_types(simpleTypes)
+    let parsed_types = stAPI.built_in_types(simpleTypes)
 
     let filter_aux = arr => arr.reduce((a,c) => a && parsed_types.includes(c), true)
 
@@ -102,29 +106,68 @@
           base = arg_base
           let base_st = simpleTypes[x.base]
           
-          if (restrictionsAPI.isObject(base_st.built_in_base) && "union" in base_st.built_in_base) base = base_st.built_in_base
+          if (stAPI.isObject(base_st.built_in_base) && "union" in base_st.built_in_base) base = base_st.built_in_base
           if ("union" in base_st) union = true
         }
         else {
           if ("list" in content[0]) base = {list: true}
           else if ("union" in content[0])  union = true
-          else if (restrictionsAPI.isObject(content[0].built_in_base) && "union" in content[0].built_in_base) base = content[0].built_in_base
+          else if (stAPI.isObject(content[0].built_in_base) && "union" in content[0].built_in_base) base = content[0].built_in_base
           else base = content[0].built_in_base
         }
         
         // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
         if (union) x.ref.content = content
-        else x.ref.content = checkError(restrictionsAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
+        else x.ref.content = checkError(stAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
       })
 
       st.map(x => {
         let name = x.args[0], content = x.args[1]
-        let parsed = checkError(restrictionsAPI.restrict_simpleType(name, content, default_prefix, simpleTypes))
+        let parsed = checkError(stAPI.restrict(name, content, default_prefix, simpleTypes))
         if (name !== undefined) simpleTypes[name] = JSON.parse(JSON.stringify(parsed))
         Object.assign(x.ref, parsed)
       })
       
       parsed_types = parsed_types.concat(st.map(x => x.info.name))
+    }
+
+    return true
+  }
+
+  const check_ctQueue = () => {
+    let parsed_types = Object.keys(complexTypes)
+
+    let getBase = ct => ct.content[0].content[0].attrs.base
+
+    while (ct_queue.extension.length > 0 || ct_queue.restriction.length > 0) {
+      let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
+      ct_queue.extension = ct_queue.extension.filter(x => !parsed_types.includes(getBase(x)))
+      
+      let r = ct_queue.restriction.filter(x => parsed_types.includes(getBase(x)))
+      ct_queue.restriction = ct_queue.restriction.filter(x => !parsed_types.includes(getBase(x)))
+
+      // dar uma mensagem de erro se estiver a ser referenciado algum tipo inválido
+      if (!e.length && !r.length) {
+        e = ct_queue.extension.filter(x => !parsed_types.includes(getBase(x))).map(x => getBase(x))
+        r = ct_queue.restriction.filter(x => !parsed_types.includes(getBase(x))).map(x => getBase(x))
+
+        let error_msg = (el, bases) => `\t- algum dos tipos {'${bases.join("', '")}'} referenciados no atributo "base" dos elementos <${el}> (complexType)`
+
+        let err = "Existe uma referência a um complexType inválido que é:\n"
+        if (e.length > 0) err += error_msg("extension", e)
+        if (r.length > 0) err += (err[err.length-1] == "\n" ? "" : ";\n") + error_msg("restriction", r)
+
+        return error(err + ".")
+      }
+
+      e.map(x => {
+        let parsed = checkError(ctAPI.extend(x, complexTypes))
+        if ("name" in x.attrs) {
+          complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(parsed))
+          parsed_types.push(x.attrs.name)
+        }
+        x = parsed
+      })
     }
 
     return true
@@ -142,7 +185,7 @@
         C: "complexType"
       }
 
-      if (curr_any_type != "C" && restrictionsAPI.built_in_types(simpleTypes).includes(type)) {
+      if (curr_any_type != "C" && stAPI.built_in_types(simpleTypes).includes(type)) {
         return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
                                                         ${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
       }
@@ -352,7 +395,7 @@
   }
 }
 
-DSL_text = ws comment? XML_declaration ws comment? xsd:schema { return {xsd, simpleTypes, unbounded_min} }
+DSL_text = ws comment? XML_declaration ws comment? xsd:schema { return {xsd, simpleTypes, complexTypes, unbounded_min} }
 
 ws "whitespace" = [ \t\n\r]*
 ws2 = [ \t\n\r]+
@@ -373,7 +416,7 @@ XML_standalone_value = "yes" / "no"
 // ----- <schema> -----
 
 schema = (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
-         &{return check_stQueue() && checkQueue()} {
+         &{return check_stQueue() && check_ctQueue() && checkQueue()} {
   content = complete_refs(content, content)
   return {element: el_name, prefix: default_prefix, attrs, content: content.filter(x => x.element == "element")}
 }
@@ -581,7 +624,7 @@ simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:
   if (!("name" in attrs)) simpleType.attrs.name = "" + ++noNameST
 
   st_queue.simpleTypes.push({
-    info: {name: simpleType.attrs.name, base: restrictionsAPI.get_baseST(content, default_prefix, simpleTypes)},
+    info: {name: simpleType.attrs.name, base: stAPI.get_base(content, default_prefix, simpleTypes)},
     args: [arg_name, content],
     ref: simpleType
   })
@@ -687,7 +730,7 @@ restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws
 
   st_queue.restrictions.push({
     // ou é o atributo base ou o nome do simpleType filho
-    base: restrictionsAPI.getTypeInfo(restriction.attrs.base, default_prefix, simpleTypes).type,
+    base: stAPI.getTypeInfo(restriction.attrs.base, default_prefix, simpleTypes).type,
     args: [arg_base, close.content],
     ref: restriction
   })
@@ -758,11 +801,24 @@ constrFacet_value = ws2 attr:"value" ws "=" ws val:string             {return {a
 
 complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs ws 
               close:(merged_close / (openEl {type_depth++}) content:complexType_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-              &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)}
-              {if (!--type_depth) current_type = null; return {element: el_name, attrs, content: close.content}}
+              &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)} {
+  let complexType = {element: el_name, attrs, content: close.content}
+  if (!--type_depth) current_type = null
+
+  // feito à preguiçoso, só funciona para schema local!
+  let base = close.content[0].content[0].attrs.base
+  if (base.includes(":")) base = base.split(":")[1]
+
+  // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
+  if (close.content[0].element.includes("Content") && !Object.keys(simpleTypes).includes(base)) {
+    ct_queue[close.content[0].content[0].element].push(complexType)
+  }
+  else if ("name" in attrs) complexTypes[attrs.name] = complexType
+  return complexType
+}
 
 complexType_attrs = el:(elem_abstract / complexType_block / elem_final / elem_id / complex_mixed / complexType_name)* 
-                    {return attrsAPI.check_localTypeAttrs(el, "complexType", schema_depth, curr)}
+                    {return checkError(attrsAPI.check_localTypeAttrs(el, "complexType", schema_depth, curr))}
 
 complexType_block = ws2 attr:"block" ws "=" q1:QMo val:elem_final_values q2:QMc                              {return checkQM(q1,q2,attr,val)}
 complex_mixed = ws2 attr:"mixed" ws "=" q1:QMo val:boolean q2:QMc                                            {return checkQM(q1,q2,attr,val)}

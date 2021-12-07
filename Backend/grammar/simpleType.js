@@ -124,7 +124,7 @@ function getTypeInfo(type, default_prefix, simpleTypes) {
 
   // é um tipo da schema local, logo se não for embutido, é possível encontrar a sua base embutida na estrutura simpleTypes
   if (prefix == default_prefix) {
-    // o 2º caso do if só acontece na get_baseST, porque os tipos ainda não foram parsed e colocados na simpleTypes 
+    // o 2º caso do if só acontece na get_base, porque os tipos ainda não foram parsed e colocados na simpleTypes
     if (builtin_types.includes(type) || !(type in simpleTypes)) base = type
     else base = simpleTypes[type].built_in_base
   }
@@ -188,7 +188,7 @@ function create_simpleTypes(default_prefix) {
   derivedTypes.map(x => {
     let new_content =  x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}}})
     let base_content = JSON.parse(JSON.stringify(obj[x[1]].content)) // constraining facets do tipo base
-    obj[x[0]] = {content: restrict_simpleType2(x[0], {type: x[1], prefix: default_prefix}, base_content, new_content).data}
+    obj[x[0]] = {content: restrict2(x[0], {type: x[1], prefix: default_prefix}, base_content, new_content).data}
   })
   
   // colocar os tipos derivados por lista no objeto
@@ -495,7 +495,7 @@ function check_constrFacetBase_aux(base_name, base_type, value) {
 }
 
 // retorna os tipos base de um simpleType (pode ter vários caso involva unions)
-function get_baseST(st_content, default_prefix, simpleTypes) {
+function get_base(st_content, default_prefix, simpleTypes) {
   let fst_content = st_content[0]
   let base
 
@@ -517,7 +517,7 @@ function get_baseST(st_content, default_prefix, simpleTypes) {
 }
 
 // name = nome do novo tipo, st_content = conteúdo do novo simpleType
-function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
+function restrict(name, st_content, default_prefix, simpleTypes) {
   let base, base_content, new_content, fst_content = st_content[0]
 
   // está a derivar um simpleType por união
@@ -577,14 +577,14 @@ function restrict_simpleType(name, st_content, default_prefix, simpleTypes) {
   }
   
   let type = getTypeInfo(base, default_prefix, simpleTypes) // tipo base
-  let content = restrict_simpleType2(name, type, base_content, new_content)
+  let content = restrict2(name, type, base_content, new_content)
   if ("error" in content) return content
 
   return data({built_in_base: type.base, content: content.data})
 }
 
 // name = nome do novo tipo, base = nome do tipo base, new_content = facetas do novo tipo, st = simpleTypes
-function restrict_simpleType2(name, base, base_content, new_content) {
+function restrict2(name, base, base_content, new_content) {
   let base_els = base_content.map(x => x.element) // nomes das constraining facets do tipo base
 
   for (let i = 0; i < new_content.length; i++) {
@@ -599,7 +599,7 @@ function restrict_simpleType2(name, base, base_content, new_content) {
         if (x[1] == "include") {
         }
         for (let i = 0; i < (new_facet == "enumeration" ? new_value.length : 1); i++) {
-          results.push(restrict_simpleType_aux(name, base, x[0], new_facet, base_els, base_content, new_facet == "enumeration" ? new_value[i] : new_value, x[1]))
+          results.push(restrict_aux(name, base, x[0], new_facet, base_els, base_content, new_facet == "enumeration" ? new_value[i] : new_value, x[1]))
         }
       })
 
@@ -665,7 +665,7 @@ function restrict_simpleType2(name, base, base_content, new_content) {
   return data(base_content)
 }
 
-function restrict_simpleType_aux(name, base, base_facet, new_facet, base_els, base_content, new_value, cond) {
+function restrict_aux(name, base, base_facet, new_facet, base_els, base_content, new_value, cond) {
   // tipo base para usar nas condições (enumLength)
   let base_type = base.type
   // na mensagem de erro, imprimir o nome do tipo com prefixo, se tiver um
@@ -759,7 +759,7 @@ function restrict_list(name, base, list_new_content, default_prefix, simpleTypes
   }
 
   // verificar a recursividade das facetas
-  list_new_content = restrict_simpleType2(name, type, list_base_content, list_new_content)
+  list_new_content = restrict2(name, type, list_base_content, list_new_content)
   if ("error" in list_new_content) return list_new_content
   
   return data({list: list_new_content.data, content: elem_content})
@@ -852,7 +852,7 @@ function check_unionFacets(name, types, new_facets, default_prefix, simpleTypes)
           let type = "list" in y.type ? list_type : getTypeInfo(y.type.built_in_base, default_prefix, simpleTypes)
           let fac = final_facets.filter(z => z.element != "enumeration").concat([{element: "enumeration", attrs: {value: [x]}}])
 
-          res[i] = restrict_simpleType2(name, type, "list" in y.type ? y.type.list : y.type.content, fac)
+          res[i] = restrict2(name, type, "list" in y.type ? y.type.list : y.type.content, fac)
         }
         else res[i] = false
       })
@@ -887,7 +887,7 @@ module.exports = {
   getTypeInfo,
   validate_TypeRef,
   create_simpleTypes,
-  get_baseST,
-  restrict_simpleType,
+  get_base,
+  restrict,
   check_restrictionST_facets
 }
