@@ -161,7 +161,7 @@
       }
 
       e.map(x => {
-        let parsed = checkError(ctAPI.extend(x, complexTypes))
+        let parsed = checkError(ctAPI.extend(x, simpleTypes, complexTypes))
         if ("name" in x.attrs) {
           complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(parsed))
           parsed_types.push(x.attrs.name)
@@ -805,13 +805,14 @@ complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs w
   let complexType = {element: el_name, attrs, content: close.content}
   if (!--type_depth) current_type = null
 
-  // feito à preguiçoso, só funciona para schema local!
-  let base = close.content[0].content[0].attrs.base
-  if (base.includes(":")) base = base.split(":")[1]
-
   // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
-  if (close.content[0].element.includes("Content") && !Object.keys(simpleTypes).includes(base)) {
-    ct_queue[close.content[0].content[0].element].push(complexType)
+  if (close.content[0].element.includes("Content")) {
+    // feito à preguiçoso, só funciona para schema local!
+    let base = close.content[0].content[0].attrs.base
+    if (base.includes(":")) base = base.split(":")[1]
+
+    if (!Object.keys(simpleTypes).includes(base))
+      ct_queue[close.content[0].content[0].element].push(complexType)
   }
   else if ("name" in attrs) complexTypes[attrs.name] = complexType
   return complexType

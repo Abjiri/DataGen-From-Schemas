@@ -439,13 +439,14 @@ module.exports = /*
           let complexType = {element: el_name, attrs, content: close.content}
           if (!--type_depth) current_type = null
 
-          // feito à preguiçoso, só funciona para schema local!
-          let base = close.content[0].content[0].attrs.base
-          if (base.includes(":")) base = base.split(":")[1]
-
           // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
-          if (close.content[0].element.includes("Content") && !Object.keys(simpleTypes).includes(base)) {
-            ct_queue[close.content[0].content[0].element].push(complexType)
+          if (close.content[0].element.includes("Content")) {
+            // feito à preguiçoso, só funciona para schema local!
+            let base = close.content[0].content[0].attrs.base
+            if (base.includes(":")) base = base.split(":")[1]
+
+            if (!Object.keys(simpleTypes).includes(base))
+              ct_queue[close.content[0].content[0].element].push(complexType)
           }
           else if ("name" in attrs) complexTypes[attrs.name] = complexType
           return complexType
@@ -13557,7 +13558,6 @@ module.exports = /*
         let parsed_types = Object.keys(complexTypes)
 
         let getBase = ct => ct.content[0].content[0].attrs.base
-
         while (ct_queue.extension.length > 0 || ct_queue.restriction.length > 0) {
           let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
           ct_queue.extension = ct_queue.extension.filter(x => !parsed_types.includes(getBase(x)))
@@ -13573,17 +13573,14 @@ module.exports = /*
             let error_msg = (el, bases) => `\t- algum dos tipos {'${bases.join("', '")}'} referenciados no atributo "base" dos elementos <${el}> (complexType)`
 
             let err = "Existe uma referência a um complexType inválido que é:\n"
-            console.log("oi")
             if (e.length > 0) err += error_msg("extension", e)
-            console.log("oi")
             if (r.length > 0) err += (err[err.length-1] == "\n" ? "" : ";\n") + error_msg("restriction", r)
-            console.log(err + ".")
 
             return error(err + ".")
           }
 
           e.map(x => {
-            let parsed = checkError(ctAPI.extend(x, complexTypes))
+            let parsed = checkError(ctAPI.extend(x, simpleTypes, complexTypes))
             if ("name" in x.attrs) {
               complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(parsed))
               parsed_types.push(x.attrs.name)

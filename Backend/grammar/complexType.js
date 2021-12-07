@@ -7,7 +7,10 @@ const data = x => {return {data: x}}
 
 
 // derivar um complexType por extensão de outro complexType
-function extend(new_ct, complexTypes) {
+function extend(new_ct, simpleTypes, complexTypes) {
+    let check = checkBase(new_ct, simpleTypes, complexTypes)
+    if ("error" in check) return check
+
     let new_child = new_ct.content[0]
 
     // encontrar o complexType base referenciado na derivação do novo
@@ -24,6 +27,23 @@ function extend(new_ct, complexTypes) {
     }
     
     return data(new_ct)
+}
+
+function checkBase(ct, simpleTypes, complexTypes) {
+    let name = "name" in ct.attrs ? `complexType '${ct.attrs.name}'` : "novo complexType"
+    let parent_el = ct.content[0].element
+    let base = ct.content[0].content[0].attrs.base
+
+    // feito à preguiçoso, só funciona para schema local!
+    if (base.includes(":")) base = base.split(":")[1]
+
+    if (parent_el == "simpleContent") {
+        if (base in simpleTypes) return data(true)
+        if (!(base in complexTypes && complexTypes[base].content[0].element == "simpleContent")) 
+            return error(`Na definição do ${name}, o tipo base '${base}' referenciado no elemento <simpleContent> é inválido! Deve ser um tipo embutido, simpleType ou complexType com simpleContent!`)
+    }
+
+    return true
 }
 
 module.exports = {
