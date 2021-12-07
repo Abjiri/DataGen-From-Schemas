@@ -9,7 +9,7 @@ const converter = require('../converter/converter')
 router.post('/xml_schema', (req, res) => {
   try {
     let data = parser.parse(req.body.xsd)
-    //console.log(JSON.stringify(data))
+    console.log(JSON.stringify(data))
 
     for (let i = 0; i < data.unbounded_min; i++) {
       if (data.unbounded_min[i] > req.body.unbounded) {

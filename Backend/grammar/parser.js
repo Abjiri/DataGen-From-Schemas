@@ -437,18 +437,17 @@ module.exports = /*
         peg$c244 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)},
         peg$c245 = function(prefix, el_name, attrs, close) {
           let complexType = {element: el_name, attrs, content: close.content}
-          let child_el = close.content[0].element
-        
-          // feito à preguiçoso, só funciona para schema local!
-          let base = child_el.includes("Content") ? close.content[0].content[0].attrs.base : ""
-          if (base.includes(":")) base = base.split(":")[1]
-        
+
           // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
-          if (child_el.includes("Content") && !Object.keys(simpleTypes).includes(base)) {
+          if (close.content[0].element.includes("Content")) {
+            // feito à preguiçoso, só funciona para schema local!
+            let base = close.content[0].content[0].attrs.base
+            if (base.includes(":")) base = base.split(":")[1]
+
             ct_queue[close.content[0].content[0].element].push(complexType)
           }
-          else if ("name" in attrs) complexTypes[attrs.name] = complexType
-        
+          if ("name" in attrs) complexTypes[attrs.name] = complexType
+
           if (!--type_depth) current_type = null
           return complexType
         },
@@ -13556,11 +13555,20 @@ module.exports = /*
       }
 
       const check_ctQueue = () => {
-        console.log(complexTypes)
-
-        let parsed_types = Object.keys(complexTypes)
-
         let getBase = ct => ct.content[0].content[0].attrs.base
+        let parsed_types = Object.keys(simpleTypes)
+
+        // deixar na estrutura de complexTypes apenas os que já estão finalizados
+        for (let ct in complexTypes) {
+          if (complexTypes[ct].content[0].element.includes("Content") && !parsed_types.includes(getBase(complexTypes[ct]))) delete complexTypes[ct]
+        }
+        
+        parsed_types = parsed_types.concat(Object.keys(complexTypes))
+        
+        // remover os complexType que estejam na queue que já estão finalizados
+        ct_queue.extension = ct_queue.extension.filter(x => !("name" in x.attrs) || !parsed_types.includes(x.attrs.name))
+        ct_queue.restriction = ct_queue.restriction.filter(x => !("name" in x.attrs) || !parsed_types.includes(x.attrs.name))
+
         while (ct_queue.extension.length > 0 || ct_queue.restriction.length > 0) {
           let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
           ct_queue.extension = ct_queue.extension.filter(x => !parsed_types.includes(getBase(x)))

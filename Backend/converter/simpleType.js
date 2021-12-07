@@ -484,7 +484,7 @@ function parseList(st, isGenType) {
             str += `let f${i} = ()${elem.slice(3)}\n`
             str += `str += f${i}() + " "\n\n`
          }
-         else str += `str += gen.${elem.startsWith("{{") ? elem.slice(2,-2) : elem} + " "\n\n`
+         else str += `str += ${elem.startsWith("{{") ? `gen.${elem.slice(2,-2)}` : `"${elem}"`} + " "\n\n`
       }
       
       return str + "return str.slice(0,-1)\n}"
