@@ -803,18 +803,19 @@ complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs w
               close:(merged_close / (openEl {type_depth++}) content:complexType_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
               &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)} {
   let complexType = {element: el_name, attrs, content: close.content}
-  if (!--type_depth) current_type = null
+  let child_el = close.content[0].element
+
+  // feito à preguiçoso, só funciona para schema local!
+  let base = child_el.includes("Content") ? close.content[0].content[0].attrs.base : ""
+  if (base.includes(":")) base = base.split(":")[1]
 
   // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
-  if (close.content[0].element.includes("Content")) {
-    // feito à preguiçoso, só funciona para schema local!
-    let base = close.content[0].content[0].attrs.base
-    if (base.includes(":")) base = base.split(":")[1]
-
-    if (!Object.keys(simpleTypes).includes(base))
-      ct_queue[close.content[0].content[0].element].push(complexType)
+  if (child_el.includes("Content") && !Object.keys(simpleTypes).includes(base)) {
+    ct_queue[close.content[0].content[0].element].push(complexType)
   }
   else if ("name" in attrs) complexTypes[attrs.name] = complexType
+
+  if (!--type_depth) current_type = null
   return complexType
 }
 

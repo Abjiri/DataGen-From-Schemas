@@ -43,7 +43,7 @@ function checkBase(ct, simpleTypes, complexTypes) {
             return error(`Na definição do ${name}, o tipo base '${base}' referenciado no elemento <simpleContent> é inválido! Deve ser um tipo embutido, simpleType ou complexType com simpleContent!`)
     }
 
-    return true
+    return data(true)
 }
 
 module.exports = {
