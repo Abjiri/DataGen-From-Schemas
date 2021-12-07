@@ -439,13 +439,7 @@ module.exports = /*
           let complexType = {element: el_name, attrs, content: close.content}
 
           // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
-          if (close.content[0].element.includes("Content")) {
-            // feito à preguiçoso, só funciona para schema local!
-            let base = close.content[0].content[0].attrs.base
-            if (base.includes(":")) base = base.split(":")[1]
-
-            ct_queue[close.content[0].content[0].element].push(complexType)
-          }
+          if (close.content[0].element.includes("Content")) ct_queue[close.content[0].content[0].element].push(complexType)
           if ("name" in attrs) complexTypes[attrs.name] = complexType
 
           if (!--type_depth) current_type = null
@@ -13556,18 +13550,29 @@ module.exports = /*
 
       const check_ctQueue = () => {
         let getBase = ct => ct.content[0].content[0].attrs.base
+        // feito à preguiçoso, só funciona para schema local!
+        let splitBase = base => base.includes(":") ? base.split(":")[1] : base
         let parsed_types = Object.keys(simpleTypes)
-
+    
         // deixar na estrutura de complexTypes apenas os que já estão finalizados
         for (let ct in complexTypes) {
-          if (complexTypes[ct].content[0].element.includes("Content") && !parsed_types.includes(getBase(complexTypes[ct]))) delete complexTypes[ct]
+          if (complexTypes[ct].content[0].element.includes("Content")) {
+            let base = splitBase(getBase(complexTypes[ct]))
+            if (!parsed_types.includes(base)) delete complexTypes[ct] 
+          }
         }
-        
         parsed_types = parsed_types.concat(Object.keys(complexTypes))
-        
+
         // remover os complexType que estejam na queue que já estão finalizados
-        ct_queue.extension = ct_queue.extension.filter(x => !("name" in x.attrs) || !parsed_types.includes(x.attrs.name))
-        ct_queue.restriction = ct_queue.restriction.filter(x => !("name" in x.attrs) || !parsed_types.includes(x.attrs.name))
+        let fixQueue = ct => {
+          if (!("name" in ct.attrs)) {
+            if (!parsed_types.includes(splitBase(getBase(ct)))) return ct
+          }
+          else if (!parsed_types.includes(ct.attrs.name)) return ct
+        }
+
+        ct_queue.extension = ct_queue.extension.filter(x => fixQueue(x))
+        ct_queue.restriction = ct_queue.restriction.filter(x => fixQueue(x))
 
         while (ct_queue.extension.length > 0 || ct_queue.restriction.length > 0) {
           let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
