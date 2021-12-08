@@ -30,7 +30,14 @@ function extend(new_ct, simpleTypes, complexTypes) {
             case "all": case "choice": case "group": case "sequence":
                 new_ct.content = base_ct.content.concat(new_child.content[0].content)
                 break
-            case "simpleContent": break
+            case "simpleContent":
+                let name = "name" in new_ct.attrs ? `complexType ${new_ct.attrs.name}` : "novo complexType"
+
+                let type
+                if ("mixed" in new_ct.attrs && new_ct.attrs.mixed && (!("mixed" in new_ct.content[0].attrs) || new_ct.content[0].attrs.mixed)) type = "mixed"
+                else type = ("mixed" in new_ct.content[0].attrs && new_ct.content[0].attrs.mixed) ? "mixed" : "element-only"
+
+                return error(`O tipo derivado e da sua base devem ambos ter conteúdo 'mixed' ou 'element-only'. Neste caso, o ${name} é '${type}', mas o tipo base '${base_ct.attrs.name}' não!`)
         }
     }
     
