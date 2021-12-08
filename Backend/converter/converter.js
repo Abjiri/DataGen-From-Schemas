@@ -2,6 +2,7 @@ const {parseSimpleType} = require('./simpleType')
 
 let default_prefix = null
 let simpleTypes = {}
+let complexTypes = {}
 let unbounded = 0
 
 /* nr de elementos que vão ser criados como objetos temporariamente na DSL com uma chave especial 
@@ -28,6 +29,7 @@ function getTypeInfo(type) {
    let builtin_types = built_in_types()
    let base = null // nome do tipo embutido em questão ou em qual é baseado o tipo atual
    let prefix = null
+   let complex = false
 
    if (type.includes(':')) {
      let split = type.split(':')
@@ -38,13 +40,16 @@ function getTypeInfo(type) {
    else prefix = default_prefix
 
    // é um tipo da schema local, logo se não for embutido, é possível encontrar a sua base embutida na estrutura simpleTypes
-   if (prefix == default_prefix) base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
+   if (prefix == default_prefix) {
+      if (Object.keys(complexTypes).includes(type)) complex = true
+      else base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
+   }
 
-   return {type, base, prefix}
+   return {type, complex, base, prefix}
 }
 
 
-function convertXSD(xsd, st, unbounded_value) {
+function convertXSD(xsd, st, ct, unbounded_value) {
    let str = "<!LANGUAGE pt>\n{\n"
    let depth = 1
    unbounded = unbounded_value
@@ -52,6 +57,7 @@ function convertXSD(xsd, st, unbounded_value) {
    // variáveis globais
    default_prefix = xsd.prefix
    simpleTypes = st
+   complexTypes = ct
 
    for (let i = 0; i < xsd.content.length; i++) {
       let {elem_str, _} = parseElement(xsd.content[i], depth, null)
@@ -100,7 +106,7 @@ function parseElementAux(el, depth) {
    }
    if ("fixed" in attrs) return attrs.fixed
    if ("default" in attrs) return attrs.default
-   if ("type" in attrs) return parseType(attrs.type)
+   if ("type" in attrs) return parseType(attrs.type, depth)
 
    // parsing do conteúdo -----
    let type = el.content.shift()
@@ -108,12 +114,16 @@ function parseElementAux(el, depth) {
    else return parseComplexType(type, depth)
 }
 
-function parseType(type) {
+function parseType(type, depth) {
    type = getTypeInfo(type)
-   let st = simpleTypes[type.type]
 
-   if (!["built_in_base","list","union"].some(x => x in st)) st.built_in_base = type.base
-   return parseSimpleType(st)
+   if (!type.complex) {
+      let st = simpleTypes[type.type]
+   
+      if (!["built_in_base","list","union"].some(x => x in st)) st.built_in_base = type.base
+      return parseSimpleType(st)
+   }
+   return parseComplexType(complexTypes[type.type], depth)
 }
 
 
@@ -129,7 +139,7 @@ function parseComplexType(el, depth) {
    for (let i = 0; i < content_len; i++) {
       switch (el.content[i].element) {
          case "simpleContent": return parseSimpleContent(el.content[i], depth+1);
-         case "complexContent": return parseComplexType(el.content[i], depth);
+         //case "complexContent": return parseComplexType(el.content[i], depth);
          case "group": parsed.content += parseGroup(el.content[i], depth+1, {}).str.slice(0, -2); break;
          case "all": parsed.content += parseAll(el.content[i], depth+2, {}).str; break;
          case "sequence": parsed.content += parseSequence(el.content[i], depth+1, {}).str.slice(0, -1); break;

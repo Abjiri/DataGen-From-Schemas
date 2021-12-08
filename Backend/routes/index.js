@@ -18,7 +18,7 @@ router.post('/xml_schema', (req, res) => {
       }
     }
 
-    let model = converter.convertXSD(data.xsd, data.simpleTypes, req.body.unbounded)
+    let model = converter.convertXSD(data.xsd, data.simpleTypes, data.complexTypes, req.body.unbounded)
     console.log(model)
 
     //https://datagen.di.uminho.pt/api/datagen/xml

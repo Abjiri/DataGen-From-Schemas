@@ -28,9 +28,9 @@ function extend(new_ct, simpleTypes, complexTypes) {
     else {
         switch (base_ct.content[0].element) {
             case "all": case "choice": case "group": case "sequence":
-                new_child.content = base_ct.content.concat(new_child.content[0].content)
+                new_ct.content = base_ct.content.concat(new_child.content[0].content)
                 break
-            case "simpleContent": case "complexContent": break
+            case "simpleContent": break
         }
     }
     
