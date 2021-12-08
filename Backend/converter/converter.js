@@ -121,17 +121,24 @@ function parseType(type) {
 
 function parseComplexType(el, depth) {
    let parsed = {attrs: "", content: ""}
-
    parsed.attrs = parseAttributeGroup(el, depth+1)
 
-   switch (el.content[0].element) {
-      case "simpleContent": return parseSimpleContent(el.content[0], depth+1);
-      case "group": parsed.content = parseGroup(el.content[0], depth+1, {}).str.slice(0, -2); break;
-      case "all": parsed.content = parseAll(el.content[0], depth+2, {}).str; break;
-      case "sequence": parsed.content = parseSequence(el.content[0], depth+1, {}).str.slice(0, -1); break;
-      case "choice": parsed.content = parseChoice(el.content[0], depth+1, {}).str; break;
+   el.content = el.content.filter(x => !x.element.includes("ttribute"))
+   let content_len = el.content.length
+
+   for (let i = 0; i < content_len; i++) {
+      switch (el.content[i].element) {
+         case "simpleContent": return parseSimpleContent(el.content[i], depth+1);
+         case "complexContent": return parseComplexType(el.content[i], depth);
+         case "group": parsed.content += parseGroup(el.content[i], depth+1, {}).str.slice(0, -2); break;
+         case "all": parsed.content += parseAll(el.content[i], depth+2, {}).str; break;
+         case "sequence": parsed.content += parseSequence(el.content[i], depth+1, {}).str.slice(0, -1); break;
+         case "choice": parsed.content += parseChoice(el.content[i], depth+1, {}).str; break;
+      }
+
+      if (i < content_len - 1) parsed.content += ",\n"
    }
-   
+
    if (!parsed.attrs.length && !parsed.content.length) return "{ missing(100) {empty: true} }"
 
    let str = "{\n"

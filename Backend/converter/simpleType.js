@@ -6,16 +6,16 @@ function randomize(min, max) { return Math.floor(Math.random() * ((max+1) - min)
 
 function string(base, length) {
    //[".",":","-","_"]
-   let alphabet = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","z","y","z","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
-   let alphanumerical = [...alphabet,"0","1","2","3","4","5","6","7","8","9"]
+   let alphabet = ["letter()"]
+   let alphanumerical = ["letter()","integerOfSize(1)"]
 
    let space = ["normalizedString","string","token"].includes(base) ? '," "' : ""
-   if (base == "base64Binary") alphanumerical = alphanumerical.concat(["+","/"])
+   if (base == "base64Binary") alphanumerical = alphanumerical.concat(['"+"','"/"'])
 
    let str = ""
    for (let i = 0; i < length; i++) {
       let arr = (["Name","NCName","ENTITY","ID","IDREF","NOTATION","QName"].includes(base) && !i) ? alphabet : alphanumerical
-      str += `{{random("${arr.join('","')}"${(base == "token" && (!i || i == length-1)) ? "" : space})}}`
+      str += `{{random(${arr.join(',')}${(base == "token" && (!i || i == length-1)) ? "" : space})}}`
    }
    return str
 }

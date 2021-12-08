@@ -13552,21 +13552,21 @@ module.exports = /*
         let getBase = ct => ct.content[0].content[0].attrs.base
         // feito à preguiçoso, só funciona para schema local!
         let splitBase = base => base.includes(":") ? base.split(":")[1] : base
-        let parsed_types = Object.keys(simpleTypes)
+        let simple_types = Object.keys(simpleTypes)
     
         // deixar na estrutura de complexTypes apenas os que já estão finalizados
         for (let ct in complexTypes) {
           if (complexTypes[ct].content[0].element.includes("Content")) {
             let base = splitBase(getBase(complexTypes[ct]))
-            if (!parsed_types.includes(base)) delete complexTypes[ct] 
+            if (!simple_types.includes(base)) delete complexTypes[ct] 
           }
         }
-        parsed_types = parsed_types.concat(Object.keys(complexTypes))
+        let parsed_types = simple_types.concat(Object.keys(complexTypes))
 
         // remover os complexType que estejam na queue que já estão finalizados
         let fixQueue = ct => {
           if (!("name" in ct.attrs)) {
-            if (!parsed_types.includes(splitBase(getBase(ct)))) return ct
+            if (!simple_types.includes(splitBase(getBase(ct)))) return ct
           }
           else if (!parsed_types.includes(ct.attrs.name)) return ct
         }

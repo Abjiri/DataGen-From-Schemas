@@ -25,6 +25,14 @@ function extend(new_ct, simpleTypes, complexTypes) {
         // adicionar os atributos do novo simpleContent ao base
         new_child.content[0].content = base_ext.content.concat(new_child.content[0].content)
     }
+    else {
+        switch (base_ct.content[0].element) {
+            case "all": case "choice": case "group": case "sequence":
+                new_child.content = base_ct.content.concat(new_child.content[0].content)
+                break
+            case "simpleContent": case "complexContent": break
+        }
+    }
     
     return data(new_ct)
 }
