@@ -1,0 +1,6 @@
+state of the aRT
+levantamento
+motivação
+contexto
+
+em vez de escrever regras operacionais para definir o dataset, escrever o modelo

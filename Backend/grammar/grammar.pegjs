@@ -138,27 +138,21 @@
     let getBase = ct => ct.content[0].content[0].attrs.base
     // feito à preguiçoso, só funciona para schema local!
     let splitBase = base => base.includes(":") ? base.split(":")[1] : base
-    let parsed_types = Object.keys(simpleTypes)
 
-    // deixar na estrutura de complexTypes apenas os que já estão finalizados
-    for (let ct in complexTypes) {
-      if (complexTypes[ct].content[0].element.includes("Content")) {
-        let base = splitBase(getBase(complexTypes[ct]))
-        if (!parsed_types.includes(base)) delete complexTypes[ct] 
+    let simple_types = Object.keys(simpleTypes)
+
+    // remover da queue de extensões os complexType com base em simpleTypes
+    ct_queue.extension = ct_queue.extension.filter(x => {
+      let base = splitBase(getBase(x))
+
+      if (simple_types.includes(base)) {
+        if ("name" in x.attrs) complexTypes[x.attrs.name] = x
       }
-    }
-    parsed_types = parsed_types.concat(Object.keys(complexTypes))
-
-    // remover os complexType que estejam na queue que já estão finalizados
-    let fixQueue = ct => {
-      if (!("name" in ct.attrs)) {
-        if (!parsed_types.includes(splitBase(getBase(ct)))) return ct
-      }
-      else if (!parsed_types.includes(ct.attrs.name)) return ct
-    }
-
-    ct_queue.extension = ct_queue.extension.filter(x => fixQueue(x))
-    ct_queue.restriction = ct_queue.restriction.filter(x => fixQueue(x))
+      else return x
+    })
+    //ct_queue.restriction = ct_queue.restriction.filter(x => fixQueue(x))
+    
+    let parsed_types = simple_types.concat(Object.keys(complexTypes))
 
     while (ct_queue.extension.length > 0 || ct_queue.restriction.length > 0) {
       let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
@@ -182,7 +176,7 @@
       }
 
       e.map(x => {
-        let parsed = checkError(ctAPI.extend(x, simpleTypes, complexTypes))
+        let parsed = checkError(ctAPI.extend(x, complexTypes))
         if ("name" in x.attrs) {
           complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(parsed))
           parsed_types.push(x.attrs.name)
@@ -827,7 +821,7 @@ complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs w
 
   // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
   if (close.content[0].element.includes("Content")) ct_queue[close.content[0].content[0].element].push(complexType)
-  if ("name" in attrs) complexTypes[attrs.name] = complexType
+  else if ("name" in attrs) complexTypes[attrs.name] = complexType
 
   if (!--type_depth) current_type = null
   return complexType

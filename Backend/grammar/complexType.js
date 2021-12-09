@@ -9,35 +9,32 @@ const data = x => {return {data: x}}
 
 
 // verificar se a base de um simpleContent é um tipo embutido, simpleType ou complexType com simpleContent
-function checkBaseSC(ct, simpleTypes, complexTypes) {
+// só chegam extensions com base complexTypes à função 'extend'
+function checkBaseSC(ct, base, complexTypes) {
     let name = "name" in ct.attrs ? `complexType '${ct.attrs.name}'` : "novo complexType"
-    let parent_el = ct.content[0].element
-    let base = ct.content[0].content[0].attrs.base
 
-    // feito à preguiçoso, só funciona para schema local!
-    if (base.includes(":")) base = base.split(":")[1]
-
-    if (parent_el == "simpleContent") {
-        if (base in simpleTypes) return data(true)
-        if (!(base in complexTypes && complexTypes[base].content[0].element == "simpleContent")) 
-            return error(`Na definição do ${name}, o tipo base '${base}' referenciado no elemento <simpleContent> é inválido! Deve ser um tipo embutido, simpleType ou complexType com simpleContent!`)
-    }
-
+    if (!(base in complexTypes && complexTypes[base].content[0].element == "simpleContent"))
+        return error(`Na definição do ${name}, o tipo base '${base}' referenciado no elemento <simpleContent> é inválido! Deve ser um tipo embutido, simpleType ou complexType com simpleContent!`)
     return data(true)
 }
 
 // derivar um complexType por extensão de outro complexType
-function extend(new_ct, simpleTypes, complexTypes) {
-    if (ct.content[0].element == "simpleContent") {
-        let check = checkBaseSC(new_ct, simpleTypes, complexTypes)
+function extend(new_ct, complexTypes) {
+    let new_child = new_ct.content[0]
+    let base = new_child.content[0].attrs.base
+
+    // feito à preguiçoso, só funciona para schema local!
+    if (base.includes(":")) base = base.split(":")[1]
+    
+    // só chegam aqui extensions de simpleContent que tenham por base outros complexTypes
+    if (new_ct.content[0].element == "simpleContent") {
+        let check = checkBaseSC(new_ct, base, complexTypes)
         if ("error" in check) return check
     }
-
-    let new_child = new_ct.content[0]
-
+    
     // encontrar o complexType base referenciado na derivação do novo
-    let base_ct = complexTypes[new_child.content[0].attrs.base]
-    if (base_ct === undefined) return error(`O <complexType> '${new_child.content[0].attrs.base}' referenciado na base da derivação não existe!'`)
+    let base_ct = complexTypes[base]
+    if (base_ct === undefined) return error(`O <complexType> '${base}' referenciado na base da derivação não existe!'`)
 
     if (new_child.element == "simpleContent") {
         let base_ext = base_ct.content[0].content[0]
