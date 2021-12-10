@@ -150,16 +150,15 @@
       }
       else return x
     })
-    //ct_queue.restriction = ct_queue.restriction.filter(x => fixQueue(x))
     
     let parsed_types = simple_types.concat(Object.keys(complexTypes))
 
     while (ct_queue.extension.length > 0 || ct_queue.restriction.length > 0) {
       let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
       ct_queue.extension = ct_queue.extension.filter(x => !parsed_types.includes(getBase(x)))
-      
-      let r = ct_queue.restriction.filter(x => parsed_types.includes(getBase(x)))
-      ct_queue.restriction = ct_queue.restriction.filter(x => !parsed_types.includes(getBase(x)))
+
+          let r = ct_queue.restriction.filter(x => "built_in_base" in x.content[0])
+          ct_queue.restriction = ct_queue.restriction.filter(x => !("built_in_base" in x.content[0]))
 
       // dar uma mensagem de erro se estiver a ser referenciado algum tipo inválido
       if (!e.length && !r.length) {
@@ -182,6 +181,32 @@
           parsed_types.push(x.attrs.name)
         }
         x = parsed
+      })
+
+      r.map(x => {
+        let parsed
+
+        if (!("built_in_base" in x.content[0])) parsed = checkError(ctAPI.restrict(x, simpleTypes, complexTypes, default_prefix))
+        else {
+          let sc = x.content[0]
+          delete sc.attrs.name
+          parsed = {built_in_base: sc.built_in_base, content: sc.content}
+
+          let restricted_ST = "" + ++noNameST
+          simpleTypes[restricted_ST] = parsed
+
+          delete sc.built_in_base
+          sc.content = [{
+            element: "extension",
+            attrs: {base: restricted_ST},
+            content: []
+          }]
+        }
+
+        if ("name" in x.attrs) {
+          complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(x))
+          parsed_types.push(x.attrs.name)
+        }
       })
     }
 
@@ -764,8 +789,19 @@ restrictionST_content = h1:annotation? h2:simpleType? t:constrFacet* {return cle
 
 restrictionSC = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionSC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-                &{return check_requiredBase(el_name, "simpleContent", prefix, attrs, close)}
-                {return {element: el_name, attrs, content: close.content}}
+                &{return check_requiredBase(el_name, "simpleContent", prefix, attrs, close)} {
+  let restriction = {element: el_name, attrs}, arg_base = attrs.base
+  let base
+
+  if (arg_base in complexTypes) {
+    let base_ct = complexTypes[arg_base]
+    base = simpleTypes[base_ct.content[0].content[0].attrs.base].built_in_base
+  }
+  else base = stAPI.getTypeInfo(arg_base, default_prefix, simpleTypes).type
+
+  st_queue.restrictions.push({base, args: [arg_base, close.content], ref: restriction})
+  return restriction
+}
                      
 restrictionSC_content = c:(restrictionST_content attributes) {return cleanContent(c.flat())}
 
@@ -820,7 +856,10 @@ complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs w
   let complexType = {element: el_name, attrs, content: close.content}
 
   // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
-  if (close.content[0].element.includes("Content")) ct_queue[close.content[0].content[0].element].push(complexType)
+  if (close.content[0].element.includes("Content")) {
+    if ("content" in close.content[0]) ct_queue.extension.push(complexType)
+    else ct_queue.restriction.push(complexType)
+  }
   else if ("name" in attrs) complexTypes[attrs.name] = complexType
 
   if (!--type_depth) current_type = null
@@ -840,8 +879,23 @@ complexType_content = c:(annotation? (simpleContent / complexContent / ((all / c
 // ----- <simpleContent> -----
 
 simpleContent = prefix:open_XSD_el el_name:"simpleContent" attr:elem_id? ws openEl content:simpleContent_content close_el:close_XSD_el
-                &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
-                {return {element: el_name, attrs: getAttrs(attr), content}}
+                &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} {
+  let simpleType = {element: el_name, attrs: getAttrs(attr)}
+
+  if (content[0].element == "extension") simpleType.content = content
+  else {
+    // o nome de um simpleType nunca pode começar por algarismos, logo nunca coincide com um simpleType existente
+    simpleType.attrs.name = "" + ++noNameST
+
+    st_queue.simpleTypes.push({
+      info: {name: simpleType.attrs.name, base: stAPI.get_base(content, default_prefix, simpleTypes)},
+      args: [undefined, content],
+      ref: simpleType
+    })
+  }
+
+  return simpleType
+}
 
 simpleContent_content = c:(annotation? (restrictionSC / extensionSC)) {return cleanContent(c)}
 

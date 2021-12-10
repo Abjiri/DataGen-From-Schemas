@@ -68,8 +68,7 @@ function extend(new_ct, complexTypes) {
 function getTypeInfo(type, simpleTypes, complexTypes, default_prefix) {
     let builtin_types = stAPI.built_in_types(simpleTypes)
     let base = null // nome do tipo embutido em questão ou em qual é baseado o tipo atual
-    let prefix = null
-    let complex = false
+    let prefix = null, complex = false
  
     if (type.includes(':')) {
       let split = type.split(':')
@@ -79,34 +78,49 @@ function getTypeInfo(type, simpleTypes, complexTypes, default_prefix) {
     // tipo embutido ou local desta schema
     else prefix = default_prefix
  
-    // é um tipo da schema local, logo se não for embutido, é possível encontrar a sua base embutida na estrutura simpleTypes
+    // é um tipo da schema local
     if (prefix == default_prefix) {
        if (Object.keys(complexTypes).includes(type)) complex = true
+       // se não for embutido, é possível encontrar a sua base embutida na estrutura simpleTypes
        else base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
     }
  
     return {type, complex, base, prefix}
 }
 
+// derivar um complexType por restrição
 function restrict(new_ct, simpleTypes, complexTypes, default_prefix) {
     let child = new_ct.content[0]
+    console.log("--------------")
+    console.log(new_ct)
     
     if (child.element == "simpleContent") {
         let union = false, base_st
         let base = getTypeInfo(child.content[0].attrs.base, simpleTypes, complexTypes, default_prefix)
         
         if (!base.complex) {
-            base_st = simpleTypes[base.type]        
+            base_st = JSON.parse(JSON.stringify(simpleTypes[base.type]))        
             if (!["built_in_base","list","union"].some(x => x in base_st)) base_st.built_in_base = base.base
+            base = base.base
         }
-        base = base.base
+        else {
+            let base_ct = complexTypes[base.type]
+            base_st = simpleTypes[base_ct.content[0].content[0].attrs.base]
+            base = base_st.built_in_base
+        }
         
         if (stAPI.isObject(base_st.built_in_base) && "union" in base_st.built_in_base) base = base_st.built_in_base
         if ("union" in base_st) union = true
     
         // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
-        if (!union) console.log(stAPI.check_restrictionST_facets(base, child.content[0].content, default_prefix, simpleTypes))
+        if (!union) {
+            let facets = stAPI.check_restrictionST_facets(base, child.content[0].content, default_prefix, simpleTypes)
+            if ("error" in facets) return facets
+            return data({built_in_base: base, content: facets.data})
+        }
     }
+
+    return data(new_ct)
 }
 
 module.exports = {
