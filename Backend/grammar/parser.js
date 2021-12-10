@@ -13586,6 +13586,8 @@ module.exports = /*
         let getBase = ct => ct.content[0].content[0].attrs.base
         // feito à preguiçoso, só funciona para schema local!
         let splitBase = base => base.includes(":") ? base.split(":")[1] : base
+        // verifica se o simpleType já foi processado ou não
+        let parsedST = content => ["built_in_base","list","union"].some(y => y in content)
 
         let simple_types = Object.keys(simpleTypes)
 
@@ -13606,9 +13608,10 @@ module.exports = /*
           let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
           ct_queue.extension = ct_queue.extension.filter(x => !parsed_types.includes(getBase(x)))
           
-          let r = ct_queue.restriction.filter(x => "built_in_base" in x.content[0])
-          ct_queue.restriction = ct_queue.restriction.filter(x => !("built_in_base" in x.content[0]))
+          let r = ct_queue.restriction.filter(x => parsedST(x.content[0]))
+          ct_queue.restriction = ct_queue.restriction.filter(x => !parsedST(x.content[0]))
 
+          console.log("----------")
           console.log(r)
 
           // dar uma mensagem de erro se estiver a ser referenciado algum tipo inválido
@@ -13638,11 +13641,14 @@ module.exports = /*
           r.map(x => {
             let parsed
 
-            if (!("built_in_base" in x.content[0])) parsed = checkError(ctAPI.restrict(x, simpleTypes, complexTypes, default_prefix))
+            if (!parsedST(x.content[0])) parsed = checkError(ctAPI.restrict(x, simpleTypes, complexTypes, default_prefix))
             else {
               let sc = x.content[0]
               delete sc.attrs.name
-              parsed = {built_in_base: sc.built_in_base, content: sc.content}
+
+              parsed = JSON.parse(JSON.stringify(sc))
+              delete parsed.element
+              delete parsed.attrs
 
               let restricted_ST = "" + ++noNameST
               simpleTypes[restricted_ST] = parsed
@@ -13659,7 +13665,7 @@ module.exports = /*
               complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(x))
               parsed_types.push(x.attrs.name)
             }
-            
+
             console.log(parsed)
           })
         }
