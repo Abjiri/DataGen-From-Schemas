@@ -434,7 +434,13 @@ module.exports = /*
           }
           else base = stAPI.getTypeInfo(arg_base, default_prefix, simpleTypes).type
 
-          st_queue.restrictions.push({base, args: [arg_base, close.content], ref: restriction})
+          st_queue.restrictions.push({
+            base,
+            args: [arg_base, close.content],
+            complex: true,
+            ref: restriction
+          })
+
           return restriction
         },
         peg$c235 = function(prefix, el_name, attrs, close) {return check_requiredBase(el_name, "complexContent", prefix, attrs, close)},
@@ -450,12 +456,16 @@ module.exports = /*
         peg$c245 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)},
         peg$c246 = function(prefix, el_name, attrs, close) {
           let complexType = {element: el_name, attrs, content: close.content}
-          console.log(close.content[0])
 
           // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
           if (close.content[0].element.includes("Content")) {
             if ("content" in close.content[0]) ct_queue.extension.push(complexType)
-            else ct_queue.restriction.push(complexType)
+            else {
+              // restrições de simpleContent são resolvidas na queue de simpleTypes, porque são efetivamente restrições a simpleTypes
+              if (close.content[0].element == "simpleContent") st_queue.simpleTypes[st_queue.simpleTypes.length - 1].complex = complexType
+              // restrições de complexContent são resolvidas na queue de complexTypes
+              else ct_queue.restriction.push(complexType)
+            }
           }
           else if ("name" in attrs) complexTypes[attrs.name] = complexType
 
@@ -481,6 +491,7 @@ module.exports = /*
             st_queue.simpleTypes.push({
               info: {name: simpleType.attrs.name, base: stAPI.get_base(content, default_prefix, simpleTypes)},
               args: [undefined, content],
+              complex: true,
               ref: simpleType
             })
           }
@@ -13510,9 +13521,7 @@ module.exports = /*
 
       // verificar todas as definições e restrições de simpleTypes colocadas na st_queue
       const check_stQueue = () => {
-        console.log(JSON.stringify(st_queue))
         let parsed_types = stAPI.built_in_types(simpleTypes)
-
         let filter_aux = arr => arr.reduce((a,c) => a && parsed_types.includes(c), true)
 
         while (st_queue.restrictions.length > 0 || st_queue.simpleTypes.length > 0) {
@@ -13552,7 +13561,13 @@ module.exports = /*
 
             if (arg_base !== undefined) {
               base = arg_base
-              let base_st = simpleTypes[x.base]
+              let base_st 
+              
+              if (x.base in simpleTypes) base_st = simpleTypes[x.base]
+              else if ("complex" in x) {
+                base = complexTypes[x.base].content[0].content[0].attrs.base
+                base_st = simpleTypes[base]
+              }
               
               if (stAPI.isObject(base_st.built_in_base) && "union" in base_st.built_in_base) base = base_st.built_in_base
               if ("union" in base_st) union = true
@@ -13571,9 +13586,31 @@ module.exports = /*
 
           st.map(x => {
             let name = x.args[0], content = x.args[1]
+
+            if ("complex" in x && content[0].attrs.base in complexTypes) {
+              content[0].attrs.base = complexTypes[content[0].attrs.base].content[0].content[0].attrs.base
+            }
             let parsed = checkError(stAPI.restrict(name, content, default_prefix, simpleTypes))
-            if (name !== undefined) simpleTypes[name] = JSON.parse(JSON.stringify(parsed))
-            Object.assign(x.ref, parsed)
+
+            parsed = JSON.parse(JSON.stringify(parsed))
+            if (name !== undefined) simpleTypes[name] = parsed
+
+            if (!("complex" in x)) Object.assign(x.ref, parsed)
+            else {
+              let restricted_ST = "" + ++noNameST
+              simpleTypes[restricted_ST] = parsed
+
+              x.complex.content[0].content = [{
+                element: "extension",
+                attrs: {base: restricted_ST},
+                content: []
+              }]
+
+              if ("name" in x.complex.attrs) {
+                complexTypes[x.complex.attrs.name] = JSON.parse(JSON.stringify(x.complex))
+                parsed_types.push(x.complex.attrs.name)
+              }
+            }
           })
           
           parsed_types = parsed_types.concat(st.map(x => x.info.name))
@@ -13602,17 +13639,13 @@ module.exports = /*
         })
         
         let parsed_types = simple_types.concat(Object.keys(complexTypes))
-        console.log(JSON.stringify(ct_queue))
 
         while (ct_queue.extension.length > 0 || ct_queue.restriction.length > 0) {
           let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
           ct_queue.extension = ct_queue.extension.filter(x => !parsed_types.includes(getBase(x)))
-          
+
           let r = ct_queue.restriction.filter(x => parsedST(x.content[0]))
           ct_queue.restriction = ct_queue.restriction.filter(x => !parsedST(x.content[0]))
-
-          console.log("----------")
-          console.log(r)
 
           // dar uma mensagem de erro se estiver a ser referenciado algum tipo inválido
           if (!e.length && !r.length) {
@@ -13637,36 +13670,13 @@ module.exports = /*
             x = parsed
           })
 
-          console.log(r)
           r.map(x => {
-            let parsed
-
-            if (!parsedST(x.content[0])) parsed = checkError(ctAPI.restrict(x, simpleTypes, complexTypes, default_prefix))
-            else {
-              let sc = x.content[0]
-              delete sc.attrs.name
-
-              parsed = JSON.parse(JSON.stringify(sc))
-              delete parsed.element
-              delete parsed.attrs
-
-              let restricted_ST = "" + ++noNameST
-              simpleTypes[restricted_ST] = parsed
-
-              delete sc.built_in_base
-              sc.content = [{
-                element: "extension",
-                attrs: {base: restricted_ST},
-                content: []
-              }]
-            }
+            let parsed = checkError(ctAPI.restrict(x, simpleTypes, complexTypes, default_prefix))
 
             if ("name" in x.attrs) {
-              complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(x))
+              complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(parsed))
               parsed_types.push(x.attrs.name)
             }
-
-            console.log(parsed)
           })
         }
 

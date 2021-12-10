@@ -478,7 +478,7 @@ function parseList(st, isGenType) {
 
       for (let i = 0; i < randomize(min,max); i++) {
          let type_ind = randomize(0, type_len)
-         let elem = parseRestriction(st.content[type_ind].content, st.content[type_ind].built_in_base, {max, min})
+         let elem = parseRestriction(st.content[type_ind].content, st.content[type_ind].built_in_base, {max: 1, min: 1})
 
          if (isGenType(st.content[type_ind].built_in_base)) {
             str += `let f${i} = ()${elem.slice(3)}\n`
