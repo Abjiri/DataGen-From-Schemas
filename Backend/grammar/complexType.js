@@ -38,6 +38,28 @@ function extend(new_ct, complexTypes) {
     
     if (new_child.element == "simpleContent") {
         let base_ext = base_ct.content[0].content[0]
+        let name = "name" in new_ct.attrs ? `complexType '${new_ct.attrs.name}'` : "novo complexType"
+
+        let getAttrsNames = (arr, el, prop) => arr.filter(x => x.element == el).map(x => x.attrs[prop])
+        
+        // verificar que não há atributos com o mesmo nome entre o tipo novo e o base
+        let base_attrs = getAttrsNames(base_ext.content, "attribute", "name")
+        let new_attrs = getAttrsNames(new_child.content[0].content, "attribute", "name")
+        
+        let repeated_attrs = base_attrs.filter(x => new_attrs.includes(x))
+        if (repeated_attrs.length > 0) {
+            let plural = repeated_attrs.length == 1 ? "o nome" : "os nomes"
+            return error(`A definição do ${name} é inválida, porque possui mais do que um atributo com ${plural} '${repeated_attrs.join("', '")}'!`)
+        }
+
+        let base_attrGroups = getAttrsNames(base_ext.content, "attributeGroup", "ref")
+        let new_attrGroups = getAttrsNames(new_child.content[0].content, "attributeGroup", "ref")
+        
+        let repeated_attrGroups = base_attrGroups.filter(x => new_attrGroups.includes(x))
+        if (repeated_attrGroups.length > 0) {
+            let plural = repeated_attrGroups.length == 1 ? "ao grupo" : "aos grupos"
+            return error(`A definição do ${name} é inválida, porque possui mais do que uma referência ${plural} de atributos '${repeated_attrGroups.join("', '")}'!`)
+        }
 
         // a base do novo CT passa a ser a base do CT base
         new_child.content[0].attrs.base = base_ext.attrs.base
@@ -50,7 +72,7 @@ function extend(new_ct, complexTypes) {
                 new_ct.content = base_ct.content.concat(new_child.content[0].content)
                 break
             case "simpleContent":
-                let name = "name" in new_ct.attrs ? `complexType ${new_ct.attrs.name}` : "novo complexType"
+                let name = "name" in new_ct.attrs ? `complexType '${new_ct.attrs.name}'` : "novo complexType"
 
                 let type
                 if ("mixed" in new_ct.attrs && new_ct.attrs.mixed && (!("mixed" in new_ct.content[0].attrs) || new_ct.content[0].attrs.mixed)) type = "mixed"
