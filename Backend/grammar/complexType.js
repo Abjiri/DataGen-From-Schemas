@@ -35,7 +35,7 @@ function extend(new_ct, complexTypes) {
     // encontrar o complexType base referenciado na derivação do novo
     let base_ct = complexTypes[base]
     if (base_ct === undefined) return error(`O <complexType> '${base}' referenciado na base da derivação não existe!'`)
-
+    
     if (new_child.element == "simpleContent") {
         let base_ext = base_ct.content[0].content[0]
 
@@ -91,8 +91,6 @@ function getTypeInfo(type, simpleTypes, complexTypes, default_prefix) {
 // derivar um complexType por restrição
 function restrict(new_ct, simpleTypes, complexTypes, default_prefix) {
     let child = new_ct.content[0]
-    console.log("--------------")
-    console.log(new_ct)
     
     if (child.element == "simpleContent") {
         let union = false, base_st

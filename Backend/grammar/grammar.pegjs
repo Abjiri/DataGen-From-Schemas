@@ -64,17 +64,26 @@
   // verificar todas as definições e restrições de simpleTypes colocadas na st_queue
   const check_stQueue = () => {
     let parsed_types = stAPI.built_in_types(simpleTypes)
+    let complex_types = Object.keys(complexTypes)
+
+    let complexOnlyQ = arr => arr.every(x => "complex" in x)
     let filter_aux = arr => arr.reduce((a,c) => a && parsed_types.includes(c), true)
+    let complexFilter_aux = (x, base) => "complex" in x && complex_types.includes(base)
 
     while (st_queue.restrictions.length > 0 || st_queue.simpleTypes.length > 0) {
-      let r = st_queue.restrictions.filter(x => parsed_types.includes(x.base))
-      st_queue.restrictions = st_queue.restrictions.filter(x => !parsed_types.includes(x.base))
+      let r = st_queue.restrictions.filter(x => parsed_types.includes(x.base) || complexFilter_aux(x, x.base))
+      st_queue.restrictions = st_queue.restrictions.filter(x => !(parsed_types.includes(x.base) || complexFilter_aux(x, x.base)))
 
-      let st = st_queue.simpleTypes.filter(x => filter_aux(x.info.base))
-      st_queue.simpleTypes = st_queue.simpleTypes.filter(x => !filter_aux(x.info.base))
+      let st = st_queue.simpleTypes.filter(x => filter_aux(x.info.base) || complexFilter_aux(x, x.info.base[0]))
+      st_queue.simpleTypes = st_queue.simpleTypes.filter(x => !(filter_aux(x.info.base) || complexFilter_aux(x, x.info.base[0])))
 
       // dar uma mensagem de erro se estiver a ser referenciado algum tipo inválido
       if (!r.length && !st.length) {
+        if (st_queue.restrictions.length > 0 || st_queue.simpleTypes.length > 0) {
+          // já só há complexTypes na queue que ainda precisam de ser processados na ct_queue
+          if (complexOnlyQ(st_queue.restrictions) && complexOnlyQ(st_queue.simpleTypes)) break
+        }
+
         r = st_queue.restrictions.filter(x => x.args[0] !== undefined)
         let lists = st_queue.simpleTypes.filter(x => x.args[1][0].element == "list" && "itemType" in x.args[1][0].attrs)
         let unions = st_queue.simpleTypes.filter(x => x.args[1][0].element == "union" && "memberTypes" in x.args[1][0].attrs)
@@ -96,7 +105,7 @@
 
         return error(err + ".")
       }
-
+      
       r.map(x => {
         let arg_base = x.args[0], content = x.args[1]
         let base, union = false
@@ -123,17 +132,22 @@
         
         // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
         if (union) x.ref.content = content
-        else x.ref.content = checkError(stAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
+        else {
+          x.ref.content = checkError(stAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
+        }
       })
 
       st.map(x => {
         let name = x.args[0], content = x.args[1]
+        let extension_content = []
 
         if ("complex" in x && content[0].attrs.base in complexTypes) {
-          content[0].attrs.base = complexTypes[content[0].attrs.base].content[0].content[0].attrs.base
+          let base_extension = complexTypes[content[0].attrs.base].content[0].content[0]
+          content[0].attrs.base = base_extension.attrs.base
+          extension_content = base_extension.content
         }
         let parsed = checkError(stAPI.restrict(name, content, default_prefix, simpleTypes))
-
+        
         parsed = JSON.parse(JSON.stringify(parsed))
         if (name !== undefined) simpleTypes[name] = parsed
 
@@ -141,21 +155,22 @@
         else {
           let restricted_ST = "" + ++noNameST
           simpleTypes[restricted_ST] = parsed
+          parsed_types.push(restricted_ST)
 
           x.complex.content[0].content = [{
             element: "extension",
             attrs: {base: restricted_ST},
-            content: []
+            content: extension_content
           }]
-
+          
           if ("name" in x.complex.attrs) {
             complexTypes[x.complex.attrs.name] = JSON.parse(JSON.stringify(x.complex))
-            parsed_types.push(x.complex.attrs.name)
+            complex_types.push(x.complex.attrs.name)
           }
         }
+        
+        parsed_types.push(x.info.name)
       })
-      
-      parsed_types = parsed_types.concat(st.map(x => x.info.name))
     }
 
     return true
@@ -220,6 +235,18 @@
           parsed_types.push(x.attrs.name)
         }
       })
+
+      if (st_queue.restrictions.length > 0 || st_queue.simpleTypes.length > 0) {
+        // resolver mais simpleContent restrictions cuja base já tenha sido processada nesta ct_queue
+        check_stQueue()
+        
+        // adicionar os novos complexTypes criados na st_queue à lista de parsed_types
+        let complex_types = Object.keys(complexTypes)
+        for (let i = complex_types.length-1; i >= 0; i--) {
+          if (!parsed_types.includes(complex_types[i])) parsed_types.push(complex_types[i])
+          else break
+        }
+      }
     }
 
     return true
