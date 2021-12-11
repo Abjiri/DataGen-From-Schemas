@@ -277,12 +277,22 @@
   }
       
   // copiar os atributos de um elemento referenciado para o elemento que o referencia
-  function complete_refs(content, global_elems) {
+  function complete_refs(content, global_elems, parent) {
     for (let i = 0; i < content.length; i++) {
       // verificar se é um <element> com "ref"
       if ("ref" in content[i].attrs) {
         // identificar o elemento global que referenceia
         let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
+
+        if (elem.element == "attributeGroup") {
+          let getAttrNames = arr => arr.filter(x => x.element == "attribute").map(x => x.attrs["name" in x.attrs ? "name" : "ref"])
+          let attr_names = getAttrNames(content).concat(getAttrNames(elem.content))
+          
+          // verificar se há nomes repetidos para cada tipo de elemento
+          let duplicates = attr_names.filter((item, index) => attr_names.indexOf(item) !== index)
+          if (duplicates.length > 0) return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <attribute> com o nome '${duplicates[0]}'.`)
+        }
+
         // copiar os seus atributos e o conteúdo
         content[i].attrs = {...elem.attrs, ...content[i].attrs}
         content[i].content = elem.content
@@ -293,7 +303,7 @@
       else if (["element","attribute"].includes(content[i].element) && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
 
       // repetir recursivamente para os elementos filho
-      if (content[i].element != "simpleType" && Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems)
+      if (content[i].element != "simpleType" && Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems, content[i].element)
     }
     
     return content
@@ -315,12 +325,22 @@
 
   // verificar que um elemento não tem <element/attribute> locais com o mesmo nome
   function check_repeatedNames(parent, el_name, content) {
-    // filtrar apenas os elementos <element/attribute> do conteúdo e ir buscar os respetivos atributos "name" (remover os atributos que não têm nome, mas sim ref)
-    let names = content.filter(x => x.element == el_name).map(x => x.attrs.name).filter(x => x != undefined)
+    // filtrar apenas os elementos <element/attribute> do conteúdo e ir buscar os respetivos nomes
+    let els = content.filter(x => el_name.test(x.element))
+    
+    let els_obj = {}
+    for (let i = 0; i < els.length; i++) {
+      let name = els[i].attrs["name" in els[i].attrs ? "name" : "ref"]
 
-    // verificar se há nomes repetidos no array
-    let duplicates = names.filter((item, index) => names.indexOf(item) !== index)
-    if (duplicates.length > 0) return error(`Os elementos <${el_name}> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <${el_name}> com o nome '${duplicates[0]}'.`)
+      if (!(els[i].element in els_obj)) els_obj[els[i].element] = []
+      els_obj[els[i].element].push(name)
+    }
+    
+    for (let el in els_obj) {
+      // verificar se há nomes repetidos para cada tipo de elemento
+      let duplicates = els_obj[el].filter((item, index) => els_obj[el].indexOf(item) !== index)
+      if (duplicates.length > 0) return error(`Os elementos <${el}> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <${el}> com o nome '${duplicates[0]}'.`)
+    }
     return true
   }
 
@@ -399,7 +419,7 @@
   // validar as tags e verificar se o atributo "base" está presente
   function check_requiredBase(el_name, parent_el, prefix, attrs, close) {
     if (!("base" in attrs)) return error(`O atributo 'base' é requirido num elemento <${el_name}> (${parent_el})!`)
-    return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, "attribute", close.content)
+    return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)
   }
   
   // verificar que um elemento <element> não tem o atributo "ref" e um dos elementos filhos mutualmente exclusivos com esse
@@ -496,7 +516,7 @@ XML_standalone_value = "yes" / "no"
 
 schema = (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
          &{return check_stQueue() && check_ctQueue() && checkQueue()} {
-  content = complete_refs(content, content)
+  content = complete_refs(content, content, "schema")
   return {element: el_name, prefix: default_prefix, attrs, content: content.filter(x => x.element == "element")}
 }
 
@@ -660,7 +680,7 @@ attribute_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 attributeGroup = prefix:open_XSD_el el_name:"attributeGroup" attrs:attributeGroup_attrs ws
                  close:(merged_close / openEl content:attributeGroup_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-                 &{return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)} 
+                 &{return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)} 
                  {return {element: el_name, attrs, content: close.content}}
 
 attributeGroup_attrs = el:(elem_id / attrGroup_name / attrGroup_ref)* {return checkError(attrsAPI.check_attributeElAttrs(el, "attributeGroup", schema_depth))}
@@ -897,7 +917,7 @@ constrFacet_value = ws2 attr:"value" ws "=" ws val:string             {return {a
 
 complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs ws 
               close:(merged_close / (openEl {type_depth++}) content:complexType_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-              &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)} {
+              &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)} {
   let complexType = {element: el_name, attrs, content: close.content}
 
   // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
@@ -966,7 +986,7 @@ complexContent_content = c:(annotation? (restrictionCC / extensionCC)) {any_type
 
 all = prefix:open_XSD_el el_name:"all" attrs:all_attrs ws 
       close:(merged_close / openEl content:all_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-      &{return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, "element", close.content)}
+      &{return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, /element/, close.content)}
       {return {element: el_name, attrs, content: close.content}}
 
 all_attrs = el:(elem_id / all_maxOccurs / all_minOccurs)* {return check_occursAttrs(el,"all")}
@@ -981,7 +1001,7 @@ all_content = c:(annotation? element*) {return cleanContent(c.flat())}
 
 choiceOrSequence = prefix:open_XSD_el el_name:$("choice"/"sequence") attrs:(a:choiceOrSeq_attrs {return check_occursAttrs(a, el_name)}) ws 
                    close:(merged_close / openEl content:choiceOrSeq_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-                   &{return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, "element", close.content)}
+                   &{return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, /element/, close.content)}
                    {return {element: el_name, attrs, content: close.content}}
 
 choiceOrSeq_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs)* {return el}

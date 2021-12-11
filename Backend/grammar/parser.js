@@ -197,7 +197,7 @@ module.exports = /*
         peg$c49 = peg$literalExpectation(">", false),
         peg$c50 = function(el_name, attrs, content) {return check_stQueue() && check_ctQueue() && checkQueue()},
         peg$c51 = function(el_name, attrs, content) {
-          content = complete_refs(content, content)
+          content = complete_refs(content, content, "schema")
           return {element: el_name, prefix: default_prefix, attrs, content: content.filter(x => x.element == "element")}
         },
         peg$c52 = function(prefix) {
@@ -330,7 +330,7 @@ module.exports = /*
         peg$c163 = peg$literalExpectation("use", false),
         peg$c164 = "attributeGroup",
         peg$c165 = peg$literalExpectation("attributeGroup", false),
-        peg$c166 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)},
+        peg$c166 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)},
         peg$c167 = function(el) {return checkError(attrsAPI.check_attributeElAttrs(el, "attributeGroup", schema_depth))},
         peg$c168 = function(attr, q1, val, q2) {return validateName(val,"attributeGroup")},
         peg$c169 = function(attr, q1, val, q2) {queue.push({attr: "ref", args: [val, "attributeGroup"]}); return checkQM(q1,q2,attr,val)},
@@ -453,7 +453,7 @@ module.exports = /*
         peg$c242 = peg$literalExpectation("value", false),
         peg$c243 = "complexType",
         peg$c244 = peg$literalExpectation("complexType", false),
-        peg$c245 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, "attribute", close.content)},
+        peg$c245 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)},
         peg$c246 = function(prefix, el_name, attrs, close) {
           let complexType = {element: el_name, attrs, content: close.content}
 
@@ -504,7 +504,7 @@ module.exports = /*
         peg$c259 = function(prefix, el_name, attrs, content, close_el) {return {element: el_name, attrs, content}},
         peg$c260 = "all",
         peg$c261 = peg$literalExpectation("all", false),
-        peg$c262 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, "element", close.content)},
+        peg$c262 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, /element/, close.content)},
         peg$c263 = function(el) {return check_occursAttrs(el,"all")},
         peg$c264 = "1",
         peg$c265 = peg$literalExpectation("1", false),
@@ -13735,12 +13735,22 @@ module.exports = /*
       }
           
       // copiar os atributos de um elemento referenciado para o elemento que o referencia
-      function complete_refs(content, global_elems) {
+      function complete_refs(content, global_elems, parent) {
         for (let i = 0; i < content.length; i++) {
           // verificar se é um <element> com "ref"
           if ("ref" in content[i].attrs) {
             // identificar o elemento global que referenceia
             let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
+
+            if (elem.element == "attributeGroup") {
+              let getAttrNames = arr => arr.filter(x => x.element == "attribute").map(x => x.attrs["name" in x.attrs ? "name" : "ref"])
+              let attr_names = getAttrNames(content).concat(getAttrNames(elem.content))
+              
+              // verificar se há nomes repetidos para cada tipo de elemento
+              let duplicates = attr_names.filter((item, index) => attr_names.indexOf(item) !== index)
+              if (duplicates.length > 0) return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <attribute> com o nome '${duplicates[0]}'.`)
+            }
+
             // copiar os seus atributos e o conteúdo
             content[i].attrs = {...elem.attrs, ...content[i].attrs}
             content[i].content = elem.content
@@ -13751,7 +13761,7 @@ module.exports = /*
           else if (["element","attribute"].includes(content[i].element) && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
 
           // repetir recursivamente para os elementos filho
-          if (content[i].element != "simpleType" && Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems)
+          if (content[i].element != "simpleType" && Array.isArray(content[i].content)) content[i].content = complete_refs(content[i].content, global_elems, content[i].element)
         }
         
         return content
@@ -13773,12 +13783,22 @@ module.exports = /*
 
       // verificar que um elemento não tem <element/attribute> locais com o mesmo nome
       function check_repeatedNames(parent, el_name, content) {
-        // filtrar apenas os elementos <element/attribute> do conteúdo e ir buscar os respetivos atributos "name" (remover os atributos que não têm nome, mas sim ref)
-        let names = content.filter(x => x.element == el_name).map(x => x.attrs.name).filter(x => x != undefined)
+        // filtrar apenas os elementos <element/attribute> do conteúdo e ir buscar os respetivos nomes
+        let els = content.filter(x => el_name.test(x.element))
+        
+        let els_obj = {}
+        for (let i = 0; i < els.length; i++) {
+          let name = els[i].attrs["name" in els[i].attrs ? "name" : "ref"]
 
-        // verificar se há nomes repetidos no array
-        let duplicates = names.filter((item, index) => names.indexOf(item) !== index)
-        if (duplicates.length > 0) return error(`Os elementos <${el_name}> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <${el_name}> com o nome '${duplicates[0]}'.`)
+          if (!(els[i].element in els_obj)) els_obj[els[i].element] = []
+          els_obj[els[i].element].push(name)
+        }
+        
+        for (let el in els_obj) {
+          // verificar se há nomes repetidos para cada tipo de elemento
+          let duplicates = els_obj[el].filter((item, index) => els_obj[el].indexOf(item) !== index)
+          if (duplicates.length > 0) return error(`Os elementos <${el}> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <${el}> com o nome '${duplicates[0]}'.`)
+        }
         return true
       }
 
@@ -13857,7 +13877,7 @@ module.exports = /*
       // validar as tags e verificar se o atributo "base" está presente
       function check_requiredBase(el_name, parent_el, prefix, attrs, close) {
         if (!("base" in attrs)) return error(`O atributo 'base' é requirido num elemento <${el_name}> (${parent_el})!`)
-        return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, "attribute", close.content)
+        return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)
       }
       
       // verificar que um elemento <element> não tem o atributo "ref" e um dos elementos filhos mutualmente exclusivos com esse
