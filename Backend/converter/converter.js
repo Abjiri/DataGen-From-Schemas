@@ -175,7 +175,19 @@ function parseComplexType(el, depth) {
 
 function parseAttribute(el, depth) {
    let attrs = el.attrs
-   let str = `DFS_ATTR__${attrs.name}: `, value = ""
+   let name_attr = () => {
+      let name = attrs.name
+      let prefix = "DFS_"
+
+      if (/\.|\-/.test(name)) {
+         prefix += "NORMALIZED_"
+         name = name.replace(/\./g, "__DOT__").replace(/\-/g, "__HYPHEN__")
+      }
+
+      return prefix + "ATTR__" + name + ": "
+   }
+
+   let str = name_attr(), value = ""
 
    // parsing dos atributos -----
    if (attrs.use == "prohibited") return ""
