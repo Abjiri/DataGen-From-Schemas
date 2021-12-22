@@ -75,26 +75,25 @@ function convertXSD(xsd, st, ct, unbounded_value) {
    return str
 }
 
+function normalizeName(name, end_prefix) {
+   let prefix = "DFS_"
+
+   if (/\.|\-/.test(name)) {
+      prefix += "NORMALIZED_"
+      name = name.replace(/\./g, "__DOT__").replace(/\-/g, "__HYPHEN__")
+   }
+
+   return prefix + end_prefix + name + ": "
+}
+
 // schemaElem indica se é o <element> é uma coleção ou não
 function parseElement(el, depth, keys, schemaElem) {
    let elem_str = ""
 
    // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
-   if (!(el.attrs.name in keys)) keys[el.attrs.name] = 1
-
    // numerar as suas ocorrências para não dar overwrite na geração do DataGen
    // é desnecessário para elementos de schema, que são únicos, mas é para simplificar
-   let name = () => {
-      let name = el.attrs.name
-      let prefix = "DFS_"
-
-      if (/\.|\-/.test(name)) {
-         prefix += "NORMALIZED_"
-         name = name.replace(/\./g, "__DOT__").replace(/\-/g, "__HYPHEN__")
-      }
-      
-      return `${prefix}${keys[el.attrs.name]++}__${name}: `
-   }
+   if (!(el.attrs.name in keys)) keys[el.attrs.name] = 1
 
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
    let occurs = schemaElem ? 1 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
@@ -104,7 +103,7 @@ function parseElement(el, depth, keys, schemaElem) {
       let parsed = parseElementAux(el, depth)
 
       // completa a string DSL com a chave e formatação
-      if (parsed.length > 0) elem_str += name() + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
+      if (parsed.length > 0) elem_str += normalizeName(el.attrs.name, keys[el.attrs.name]++ + "__") + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
    }
    
    return {elem_str, occurs, keys}
@@ -175,19 +174,7 @@ function parseComplexType(el, depth) {
 
 function parseAttribute(el, depth) {
    let attrs = el.attrs
-   let name_attr = () => {
-      let name = attrs.name
-      let prefix = "DFS_"
-
-      if (/\.|\-/.test(name)) {
-         prefix += "NORMALIZED_"
-         name = name.replace(/\./g, "__DOT__").replace(/\-/g, "__HYPHEN__")
-      }
-
-      return prefix + "ATTR__" + name + ": "
-   }
-
-   let str = name_attr(), value = ""
+   let str = normalizeName(attrs.name, "ATTR__"), value = ""
 
    // parsing dos atributos -----
    if (attrs.use == "prohibited") return ""
