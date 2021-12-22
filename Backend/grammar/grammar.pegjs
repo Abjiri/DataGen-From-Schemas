@@ -494,7 +494,7 @@
   }
 }
 
-DSL_text = ws comment? XML_declaration ws comment? xsd:schema { return {xsd, simpleTypes, complexTypes, unbounded_min} }
+DSL_text = ws comment* XML_declaration ws comment* xsd:schema { return {xsd, simpleTypes, complexTypes, unbounded_min} }
 
 ws "whitespace" = [ \t\n\r]*
 ws2 = [ \t\n\r]+
@@ -537,7 +537,7 @@ xmlns = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws val:string      
 schema_version = ws2 attr:"version" ws "=" ws val:string                                            {return {attr, val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
 targetNamespace = ws2 attr:"targetNamespace" ws "=" ws val:string                                   {return {attr, val}}
 
-schema_content = comment? el:((redefine / include / import / annotation)* (((simpleType / complexType / group / attributeGroup) / element / attribute / notation) annotation*)*) {return cleanContent(el.flat(3))}
+schema_content = comment* el:((redefine / include / import / annotation)* (((simpleType / complexType / group / attributeGroup) / element / attribute / notation) annotation*)*) {return cleanContent(el.flat(3))}
 
 
 // ----- <include> -----

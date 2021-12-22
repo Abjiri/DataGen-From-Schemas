@@ -48,6 +48,17 @@ function getTypeInfo(type) {
    return {type, complex, base, prefix}
 }
 
+function normalizeName(name, end_prefix) {
+   let prefix = "DFS_"
+
+   if (/\.|\-/.test(name)) {
+      prefix += "NORMALIZED_"
+      name = name.replace(/\./g, "__DOT__").replace(/\-/g, "__HYPHEN__")
+   }
+
+   return prefix + end_prefix + name + ": "
+}
+
 
 function convertXSD(xsd, st, ct, unbounded_value) {
    let str = "<!LANGUAGE pt>\n{\n"
@@ -73,17 +84,6 @@ function convertXSD(xsd, st, ct, unbounded_value) {
 
    str += "}"
    return str
-}
-
-function normalizeName(name, end_prefix) {
-   let prefix = "DFS_"
-
-   if (/\.|\-/.test(name)) {
-      prefix += "NORMALIZED_"
-      name = name.replace(/\./g, "__DOT__").replace(/\-/g, "__HYPHEN__")
-   }
-
-   return prefix + end_prefix + name + ": "
 }
 
 // schemaElem indica se é o <element> é uma coleção ou não

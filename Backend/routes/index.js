@@ -2,6 +2,9 @@ var express = require('express');
 var router = express.Router();
 var axios = require('axios');
 
+var fs = require('fs');
+const FormData = require('form-data');
+
 const parser = require('../grammar/parser')
 const converter = require('../converter/converter')
 
@@ -19,10 +22,18 @@ router.post('/xml_schema', (req, res) => {
     }
 
     let model = converter.convertXSD(data.xsd, data.simpleTypes, data.complexTypes, req.body.unbounded)
-    console.log(model)
+
+    fs.writeFileSync('./output/model.txt', model, function (err) {
+      if (err) return console.log(err)
+      console.log('Modelo DataGen guardado no ficheiro model.txt!')
+    });
+
+    const formData = new FormData()
+    let file = fs.readFileSync('./output/model.txt', "utf8")
+    formData.append('model', file, "model.txt")
 
     //https://datagen.di.uminho.pt/api/datagen/xml
-    axios.post("http://localhost:12080/api/datagen/xml", model, {headers: {'Content-Type': 'text/plain'}})
+    axios.post("http://localhost:12080/api/datagen/dfs", formData, {headers: formData.getHeaders()})
       .then(data => res.status(201).jsonp(data.data))
       .catch(err => res.status(201).jsonp(err))
 

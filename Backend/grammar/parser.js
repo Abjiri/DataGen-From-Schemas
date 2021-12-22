@@ -810,18 +810,22 @@ module.exports = /*
       s0 = peg$currPos;
       s1 = peg$parsews();
       if (s1 !== peg$FAILED) {
-        s2 = peg$parsecomment();
-        if (s2 === peg$FAILED) {
-          s2 = null;
+        s2 = [];
+        s3 = peg$parsecomment();
+        while (s3 !== peg$FAILED) {
+          s2.push(s3);
+          s3 = peg$parsecomment();
         }
         if (s2 !== peg$FAILED) {
           s3 = peg$parseXML_declaration();
           if (s3 !== peg$FAILED) {
             s4 = peg$parsews();
             if (s4 !== peg$FAILED) {
-              s5 = peg$parsecomment();
-              if (s5 === peg$FAILED) {
-                s5 = null;
+              s5 = [];
+              s6 = peg$parsecomment();
+              while (s6 !== peg$FAILED) {
+                s5.push(s6);
+                s6 = peg$parsecomment();
               }
               if (s5 !== peg$FAILED) {
                 s6 = peg$parseschema();
@@ -2067,9 +2071,11 @@ module.exports = /*
       var s0, s1, s2, s3, s4, s5, s6, s7, s8;
 
       s0 = peg$currPos;
-      s1 = peg$parsecomment();
-      if (s1 === peg$FAILED) {
-        s1 = null;
+      s1 = [];
+      s2 = peg$parsecomment();
+      while (s2 !== peg$FAILED) {
+        s1.push(s2);
+        s2 = peg$parsecomment();
       }
       if (s1 !== peg$FAILED) {
         s2 = peg$currPos;
