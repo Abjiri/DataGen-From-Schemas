@@ -33,7 +33,7 @@ function extend(new_ct, complexTypes) {
     }
     
     // encontrar o complexType base referenciado na derivação do novo
-    let base_ct = complexTypes[base]
+    let base_ct = JSON.parse(JSON.stringify(complexTypes[base]))
     if (base_ct === undefined) return error(`O <complexType> '${base}' referenciado na base da derivação não existe!'`)
     
     if (new_child.element == "simpleContent") {
@@ -69,7 +69,12 @@ function extend(new_ct, complexTypes) {
     else {
         switch (base_ct.content[0].element) {
             case "all": case "choice": case "group": case "sequence":
-                new_ct.content = base_ct.content.concat(new_child.content[0].content)
+                let new_attrs = new_child.content[0].content.filter(x => x.element.includes("attribute"))
+                new_child.content[0].content = new_child.content[0].content.filter(x => !x.element.includes("attribute"))
+                
+                base_ct.content[0].content = base_ct.content[0].content.concat(new_child.content[0].content)
+                new_ct.content = base_ct.content.concat(new_attrs)
+                
                 break
             case "simpleContent":
                 let name = "name" in new_ct.attrs ? `complexType '${new_ct.attrs.name}'` : "novo complexType"

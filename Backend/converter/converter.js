@@ -139,7 +139,6 @@ function parseComplexType(el, depth) {
    for (let i = 0; i < content_len; i++) {
       switch (el.content[i].element) {
          case "simpleContent": return parseSimpleContent(el.content[i], depth+1);
-         //case "complexContent": return parseComplexType(el.content[i], depth);
          case "group": parsed.content += parseGroup(el.content[i], depth+1, {}).str.slice(0, -2); break;
          case "all": parsed.content += parseAll(el.content[i], depth+2, {}).str; break;
          case "sequence": parsed.content += parseSequence(el.content[i], depth+1, {}).str.slice(0, -1); break;
@@ -352,6 +351,11 @@ function parseCT_child_content(parent, str, content, depth, keys) {
          parsed = parseChoice(x, depth, keys)
          if (parsed.str.length > 0) str += parsed.str + ",\n"
          choice = true
+      }
+
+      if (x.element == "all") {
+         parsed = parseAll(x, depth, keys)
+         if (parsed.str.length > 0) str += parsed.str + ",\n"
       }
 
       keys = parsed.keys
