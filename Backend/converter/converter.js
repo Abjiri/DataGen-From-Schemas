@@ -60,7 +60,7 @@ function convertXSD(xsd, st, ct, unbounded_value) {
    complexTypes = ct
 
    for (let i = 0; i < xsd.content.length; i++) {
-      let {elem_str, _} = parseElement(xsd.content[i], depth, null)
+      let {elem_str, _} = parseElement(xsd.content[i], depth, {}, true)
 
       if (elem_str.length > 0) {
          str += indent(depth) + elem_str
@@ -75,11 +75,26 @@ function convertXSD(xsd, st, ct, unbounded_value) {
    return str
 }
 
-function parseElement(el, depth, keys) {
-   // schemaElem indica se é o <element> é uma coleção ou não
-   let elem_str = "", schemaElem = keys === null
-   // se for aninhado, numerar as suas ocorrências para não dar overwrite na geração do DataGen
-   let name = () => `${schemaElem ? "" : `DFS_${keys[el.attrs.name]++}__`}${el.attrs.name}: ` 
+// schemaElem indica se é o <element> é uma coleção ou não
+function parseElement(el, depth, keys, schemaElem) {
+   let elem_str = ""
+
+   // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
+   if (!(el.attrs.name in keys)) keys[el.attrs.name] = 1
+
+   // numerar as suas ocorrências para não dar overwrite na geração do DataGen
+   // é desnecessário para elementos de schema, que são únicos, mas é para simplificar
+   let name = () => {
+      let name = el.attrs.name
+      let prefix = "DFS_"
+
+      if (/\.|\-/.test(name)) {
+         prefix += "NORMALIZED_"
+         name = name.replace(/\./g, "__DOT__").replace(/\-/g, "__HYPHEN__")
+      }
+      
+      return `${prefix}${keys[el.attrs.name]++}__${name}: `
+   }
 
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
    let occurs = schemaElem ? 1 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
@@ -91,7 +106,7 @@ function parseElement(el, depth, keys) {
       // completa a string DSL com a chave e formatação
       if (parsed.length > 0) elem_str += name() + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
    }
-
+   
    return {elem_str, occurs, keys}
 }
 
@@ -252,7 +267,7 @@ function parseAll(el, depth, keys) {
       if (!(x.attrs.name in keys)) keys[x.attrs.name] = 1
 
       // dar parse a cada elemento
-      let parsed = parseElement(x, depth, keys)
+      let parsed = parseElement(x, depth, keys, false)
 
       if (parsed.elem_str.length > 0) {
          // contar o nr de elementos total (tendo em conta max/minOccurs de cada um)
@@ -322,7 +337,7 @@ function parseCT_child_content(parent, str, content, depth, keys) {
          // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
          if (!(x.attrs.name in keys)) keys[x.attrs.name] = 1
 
-         parsed = parseElement(x, depth, keys)
+         parsed = parseElement(x, depth, keys, false)
          if (parsed.elem_str.length > 0) str += `${indent(depth)}${parsed.elem_str},\n`
       }
 
