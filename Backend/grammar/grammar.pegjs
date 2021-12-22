@@ -201,8 +201,8 @@
       let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
       ct_queue.extension = ct_queue.extension.filter(x => !parsed_types.includes(getBase(x)))
 
-      let r = ct_queue.restriction.filter(x => parsedST(x.content[0]))
-      ct_queue.restriction = ct_queue.restriction.filter(x => !parsedST(x.content[0]))
+      let r = ct_queue.restriction.filter(x => (x.content[0].element == "complexContent" && parsed_types.includes(getBase(x))) || parsedST(x.content[0]))
+      ct_queue.restriction = ct_queue.restriction.filter(x => !(x.content[0].element == "complexContent" && parsed_types.includes(getBase(x))) || parsedST(x.content[0]))
 
       // dar uma mensagem de erro se estiver a ser referenciado algum tipo inválido
       if (!e.length && !r.length) {
@@ -922,13 +922,10 @@ complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs w
 
   // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
   if (close.content[0].element.includes("Content")) {
-    if ("content" in close.content[0]) ct_queue.extension.push(complexType)
-    else {
-      // restrições de simpleContent são resolvidas na queue de simpleTypes, porque são efetivamente restrições a simpleTypes
-      if (close.content[0].element == "simpleContent") st_queue.simpleTypes[st_queue.simpleTypes.length - 1].complex = complexType
-      // restrições de complexContent são resolvidas na queue de complexTypes
-      else ct_queue.restriction.push(complexType)
-    }
+    // restrições de complexContent são resolvidas na queue de complexTypes
+    if ("content" in close.content[0]) ct_queue[close.content[0].content[0].element].push(complexType)
+    // restrições de simpleContent são resolvidas na queue de simpleTypes, porque são efetivamente restrições a simpleTypes
+    else st_queue.simpleTypes[st_queue.simpleTypes.length - 1].complex = complexType
   }
   else if ("name" in attrs) complexTypes[attrs.name] = complexType
 
