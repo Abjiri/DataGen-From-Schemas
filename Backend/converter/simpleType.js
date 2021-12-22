@@ -2,34 +2,48 @@ const RandExp = require('randexp');
 
 // Funções auxiliares ----------
 
-function randomize(min, max) { return Math.floor(Math.random() * ((max+1) - min) + min) }
+// verifica se a base é um dos tipos cujo valor é gerado por função anónima do DataGen
+// tecnicamente "ENTITY","ID","IDREF","Name","NCName","NMTOKEN" também são, mas vão ser sempre gerados a partir do pattern e não na função anónima do DataGen
+let isGenType = base => ["base64Binary","date","dateTime","duration","gMonthDay","gYearMonth","hexBinary","normalizedString","NOTATION","QName","string","token"].includes(base)
+
+let randomize = (min,max) => Math.floor(Math.random() * ((max+1) - min) + min)
 
 function string(base, length) {
-   //[".",":","-","_"]
-   let alphabet = ["letter()"]
-   let alphanumerical = ["letter()","integerOfSize(1)"]
+   return `gen => {
+      let base = "${base}", length = ${length}
 
-   let space = ["normalizedString","string","token"].includes(base) ? '," "' : ""
-   if (base == "base64Binary") alphanumerical = alphanumerical.concat(['"+"','"/"'])
+      let str = ""
+      for (let i = 0; i < length; i++) {
+         let arr = (["Name","NCName","ENTITY","ID","IDREF","NOTATION","QName"].includes(base) && !i) ? "alphabet" : "alphanumerical"
+         let space = ["normalizedString","string","token"].includes(base) && i>0 && i != length-1
 
-   let str = ""
-   for (let i = 0; i < length; i++) {
-      let arr = (["Name","NCName","ENTITY","ID","IDREF","NOTATION","QName"].includes(base) && !i) ? alphabet : alphanumerical
-      str += `{{random(${arr.join(',')}${(base == "token" && (!i || i == length-1)) ? "" : space})}}`
-   }
-   return str
-}
-
-function range(size, startAt) {
-   return [...Array(size).keys()].map(i => i + startAt);
+         if (arr == "alphabet") str += gen.random(gen.letter())
+         else {
+            if (base == "base64Binary") {
+               if (Math.random() < 1/64) str += gen.random("+", "/")
+               else str += gen.random(gen.letter(), gen.integerOfSize(1))
+            }
+            else if (space) {
+               if (Math.random() < 1/63) str += " "
+               else str += gen.random(gen.letter(), gen.integerOfSize(1))
+            }
+            else str += gen.random(gen.letter(), gen.integerOfSize(1))
+         }
+      }
+      return str
+   }`
 }
 
 function hexBinary(length) {
-   let hexChars = range(60, 20)
-   hexChars = hexChars.concat(["2","3","4","5","6","7"].map(x => ["A","B","C","D","E","F"].map(y => x+y)).flat())
-   hexChars.pop()
+   return `gen => {
+      let hexChars = [...Array(60).keys()].map(i => i + 20)
+      hexChars = hexChars.concat(["2","3","4","5","6","7"].map(x => ["A","B","C","D","E","F"].map(y => x+y)).flat())
+      hexChars.pop()
 
-   return `{{random("${hexChars.join('","')}")}}`.repeat(length)
+      let str = ""
+      for (let i = 0; i < ${length}; i++) str += gen.random(...hexChars)
+      return str
+   }`
 }
 
 
@@ -446,7 +460,7 @@ function parseRestriction(content, base, list) {
    }
 }
 
-function parseList(st, isGenType) {
+function parseList(st) {
    st.content.map((x,i) => st.content[i].content = st.content[i].content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {}))
 
    let list = st.list.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
@@ -492,11 +506,8 @@ function parseList(st, isGenType) {
 }
 
 function parseSimpleType(st) {
-   // verifica se a base é um dos tipos cujo valor é gerado por função anónima do DataGen
-   let isGenType = base => ["date","dateTime","duration","gMonthDay","gYearMonth"].includes(base)
-
    // derivação por lista
-   if ("list" in st) return parseList(st, isGenType)
+   if ("list" in st) return parseList(st)
 
    // derivação por união
    if ("union" in st) {

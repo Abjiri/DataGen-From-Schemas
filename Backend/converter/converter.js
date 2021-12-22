@@ -176,7 +176,7 @@ function parseAttribute(el, depth) {
    let attrs = el.attrs
    let str = normalizeName(attrs.name, "ATTR__"), value = ""
 
-   // parsing dos atributos -----
+   // parsing dos atributos
    if (attrs.use == "prohibited") return ""
    if ("fixed" in attrs) value = attrs.fixed
    if ("default" in attrs) value = attrs.default
