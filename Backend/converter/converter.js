@@ -109,7 +109,7 @@ function parseElementAux(el, depth) {
    if ("type" in attrs) return parseType(attrs.type, depth)
 
    // parsing do conteúdo -----
-   let type = el.content.shift()
+   let type = el.content[0]
    if (type.element == "simpleType") return `${parseSimpleType(type)}` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
    else return parseComplexType(type, depth)
 }

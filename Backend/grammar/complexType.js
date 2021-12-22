@@ -71,6 +71,8 @@ function extend(new_ct, complexTypes) {
             case "all": case "choice": case "group": case "sequence":
                 let new_attrs = new_child.content[0].content.filter(x => x.element.includes("attribute"))
                 new_child.content[0].content = new_child.content[0].content.filter(x => !x.element.includes("attribute"))
+
+                if (base_ct.content[0].element == "all" && new_child.content[0].content.length > 0) return error("Ao derivar um elemento <all> por extensão, apenas é possível adicionar atributos ao tipo!")
                 
                 base_ct.content[0].content = base_ct.content[0].content.concat(new_child.content[0].content)
                 new_ct.content = base_ct.content.concat(new_attrs)
