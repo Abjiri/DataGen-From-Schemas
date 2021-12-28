@@ -494,7 +494,7 @@
   }
 }
 
-DSL_text = ws comment* XML_declaration ws comment* xsd:schema { return {xsd, simpleTypes, complexTypes, unbounded_min} }
+DSL_text = ws XML_declaration ws xsd:schema ws comments { return {xsd, simpleTypes, complexTypes, unbounded_min} }
 
 ws "whitespace" = [ \t\n\r]*
 ws2 = [ \t\n\r]+
@@ -502,7 +502,7 @@ ws2 = [ \t\n\r]+
 
 // ----- Declaração XML -----
 
-XML_declaration = "<?xml" XML_version XML_encoding? XML_standalone? ws '?>'
+XML_declaration = comments "<?xml" XML_version XML_encoding? XML_standalone? ws '?>'
 
 XML_version = ws2 "version" ws "=" ws q1:QM "1.0" q2:QM &{return checkQM(q1,q2,null,null)}
 
@@ -514,7 +514,7 @@ XML_standalone_value = "yes" / "no"
 
 // ----- <schema> -----
 
-schema = (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
+schema = comments (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
          &{return check_stQueue() && check_ctQueue() && checkQueue()} {
   content = complete_refs(content, content, "schema")
   return {element: el_name, prefix: default_prefix, attrs, content: content.filter(x => x.element == "element")}
@@ -537,12 +537,12 @@ xmlns = ws2 "xmlns" prefix:(":" p:NCName {return p})? ws "=" ws val:string      
 schema_version = ws2 attr:"version" ws "=" ws val:string                                            {return {attr, val: val.trim().replace(/[\t\n\r]/g," ").replace(/ +/g," ")}} // o valor da versão é um xs:token, que remove todos os \t\n\r da string, colapsa os espaços e dá trim à string
 targetNamespace = ws2 attr:"targetNamespace" ws "=" ws val:string                                   {return {attr, val}}
 
-schema_content = comment* el:((redefine / include / import / annotation)* (((simpleType / complexType / group / attributeGroup) / element / attribute / notation) annotation*)*) {return cleanContent(el.flat(3))}
+schema_content = el:((redefine / include / import / annotation)* (((simpleType / complexType / group / attributeGroup) / element / attribute / notation) annotation*)*) {return cleanContent(el.flat(3))}
 
 
 // ----- <include> -----
 
-include = prefix:open_XSD_el el_name:"include" attrs:schemaLocID_attrs ws close:(merged_close / ann_content)
+include = comments prefix:open_XSD_el el_name:"include" attrs:schemaLocID_attrs ws close:(merged_close / ann_content)
           &{return check_elTags(el_name, prefix, close)}
           {return {element: el_name, attrs, content: close.content}}
 
@@ -553,7 +553,7 @@ schemaLocation = ws2 attr:"schemaLocation" ws "=" ws val:string {return {attr, v
 
 // ----- <import> -----
 
-import = prefix:open_XSD_el el_name:"import" attrs:import_attrs ws close:(merged_close / ann_content)
+import = comments prefix:open_XSD_el el_name:"import" attrs:import_attrs ws close:(merged_close / ann_content)
          &{return check_elTags(el_name, prefix, close)}
          {return {element: el_name, attrs, content: close.content}}
 
@@ -564,7 +564,7 @@ import_namespace = ws2 attr:"namespace" ws "=" ws val:string {return {attr, val}
 
 // ----- <redefine> -----
 
-redefine = prefix:open_XSD_el el_name:$("redefine" {curr.redefine = true}) attrs:schemaLocID_attrs ws 
+redefine = comments prefix:open_XSD_el el_name:$("redefine" {curr.redefine = true}) attrs:schemaLocID_attrs ws 
            close:(merged_close / openEl content:redefine_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
            &{return check_elTags(el_name, prefix, close)}
            {curr.redefine = false; return {element: el_name, attrs, content: close.content}}
@@ -574,7 +574,7 @@ redefine_content = c:(annotation / (simpleType / complexType / group / attribute
 
 // ----- <element> -----
 
-element = prefix:open_XSD_el el_name:$("element" {any_type = "BSC"; curr.element = true}) attrs:element_attrs ws
+element = comments prefix:open_XSD_el el_name:$("element" {any_type = "BSC"; curr.element = true}) attrs:element_attrs ws
           close:(merged_close / openEl content:element_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) &{
   if ((close.merged || !close.content.length) && !validateLocalEl(attrs)) return error("Um elemento local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
   return check_elTags(el_name, prefix, close) && check_elemMutex(attrs, close.content)
@@ -611,7 +611,7 @@ element_content = c:(annotation? (simpleType / complexType)? (keyOrUnique / keyr
 
 // ----- <field> -----
 
-field = prefix:open_XSD_el el_name:"field" attrs:field_attrs ws close:(merged_close / ann_content)
+field = comments prefix:open_XSD_el el_name:"field" attrs:field_attrs ws close:(merged_close / ann_content)
         &{return check_elTags(el_name, prefix, close)}
         {return {element: el_name, attrs, content: close.content}}
 
@@ -622,7 +622,7 @@ field_xpath = ws2 attr:"xpath" ws "=" q1:QMo val:fieldXPath q2:QMc {return check
 
 // ----- <selector> -----
 
-selector = prefix:open_XSD_el el_name:"selector" attrs:selector_attrs ws close:(merged_close / ann_content)
+selector = comments prefix:open_XSD_el el_name:"selector" attrs:selector_attrs ws close:(merged_close / ann_content)
            &{return check_elTags(el_name, prefix, close)}
            {return {element: el_name, attrs, content: close.content}}
 
@@ -633,7 +633,7 @@ selector_xpath = ws2 attr:"xpath" ws "=" q1:QMo val:selectorXPath q2:QMc {return
 
 // ----- <key/unique> -----
 
-keyOrUnique = prefix:open_XSD_el el_name:$("key"/"unique") 
+keyOrUnique = comments prefix:open_XSD_el el_name:$("key"/"unique") 
               attrs:(a:keyOrUnique_attrs &{return check_requiredAttr(a, el_name, "name") && validateName(a.name, el_name)} {return a}) ws
               close:(merged_close / openEl content:xpath_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
               &{return check_elTags(el_name, prefix, close)}
@@ -648,7 +648,7 @@ xpath_content = c:(annotation? (selector field+)) {return cleanContent(c.flat())
 
 // ----- <keyref> -----
 
-keyref = prefix:open_XSD_el el_name:"keyref" attrs:(a:keyref_attrs &{return validateName(a.name, el_name)} {return a}) ws
+keyref = comments prefix:open_XSD_el el_name:"keyref" attrs:(a:keyref_attrs &{return validateName(a.name, el_name)} {return a}) ws
          close:(merged_close / openEl content:xpath_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
          &{return check_elTags(el_name, prefix, close)}
          {return {element: el_name, attrs, content: close.content}}
@@ -660,7 +660,7 @@ keyref_refer = ws2 attr:"refer" ws "=" q1:QMo val:QName q2:QMc {return checkQM(q
 
 // ----- <attribute> -----
 
-attribute = prefix:open_XSD_el el_name:$("attribute" {any_type = "BS"}) attrs:attribute_attrs ws
+attribute = comments prefix:open_XSD_el el_name:$("attribute" {any_type = "BS"}) attrs:attribute_attrs ws
             close:(merged_close / openEl content:attribute_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) &{
   if ((close.merged || !close.content.length) && !validateLocalEl(attrs)) return error("Um atributo local deve ter, pelo menos, o atributo 'name' ou 'ref'!")
   return check_elTags(el_name, prefix, close) && check_attrMutex(attrs, close.content)
@@ -678,7 +678,7 @@ attribute_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 // ----- <attributeGroup> -----
 
-attributeGroup = prefix:open_XSD_el el_name:"attributeGroup" attrs:attributeGroup_attrs ws
+attributeGroup = comments prefix:open_XSD_el el_name:"attributeGroup" attrs:attributeGroup_attrs ws
                  close:(merged_close / openEl content:attributeGroup_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                  &{return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)} 
                  {return {element: el_name, attrs, content: close.content}}
@@ -693,7 +693,7 @@ attributeGroup_content = c:(annotation? attributes) {return cleanContent(c.flat(
 
 // ----- <anyAttribute> -----
 
-anyAttribute = prefix:open_XSD_el el_name:"anyAttribute" attrs:anyAttribute_attrs ws close:(merged_close / ann_content)
+anyAttribute = comments prefix:open_XSD_el el_name:"anyAttribute" attrs:anyAttribute_attrs ws close:(merged_close / ann_content)
                &{return check_elTags(el_name, prefix, close)} 
                {return {element: el_name, attrs, content: close.content}}
 
@@ -705,7 +705,7 @@ processContents = ws2 attr:"processContents" ws "=" q1:QMo val:processContents_v
 
 // ----- <any> -----
 
-any = prefix:open_XSD_el el_name:"any" attrs:any_attrs ws close:(merged_close / ann_content)
+any = comments prefix:open_XSD_el el_name:"any" attrs:any_attrs ws close:(merged_close / ann_content)
       &{return check_elTags(el_name, prefix, close)} 
       {return {element: el_name, attrs, content: close.content}}
 
@@ -714,7 +714,7 @@ any_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs / any_namespace / proc
 
 // ----- <simpleType> -----
 
-simpleType = prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:simpleType_attrs ws (openEl {type_depth++}) ws content:simpleType_content close_el:close_XSD_el
+simpleType = comments prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"}) attrs:simpleType_attrs ws (openEl {type_depth++}) ws content:simpleType_content close_el:close_XSD_el
              &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} {
   if (!--type_depth) current_type = null
 
@@ -741,7 +741,7 @@ simpleType_content = c:(annotation? (restrictionST / list / union)) {any_type = 
 
 // ----- <annotation> -----
 
-annotation = prefix:open_XSD_el el_name:"annotation" attr:elem_id? ws
+annotation = comments prefix:open_XSD_el el_name:"annotation" attr:elem_id? ws
              close:(merged_close / openEl content:annotation_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
              &{return check_elTags(el_name, prefix, close)}
              {return null} //{return {element: el_name, attrs: getAttrs(attr), content: close.content}}
@@ -751,7 +751,7 @@ annotation_content = (appinfo / documentation)*
 
 // ----- <appinfo> -----
 
-appinfo = appinfo_simple / appinfo_prefix
+appinfo = comments (appinfo_simple / appinfo_prefix) comments
 
 appinfo_simple = "<" el_name:"appinfo" attr:elem_source? ws
                  close:("/>" ws {return ""} / openEl content:appinfo_content_simple? close_appinfo_simple {schema_depth--; return content===null ? "" : content})
@@ -771,7 +771,7 @@ close_appinfo_prefix = prefix:close_XSD_prefix name:"appinfo" ws ">" ws {return 
 
 // ----- <documentation> -----
 
-documentation = doc_simple / doc_prefix
+documentation = comments (doc_simple / doc_prefix) comments
 
 documentation_attrs = attrs:(elem_source elem_lang? / elem_lang elem_source?)? {return getAttrs(attrs)}
 
@@ -793,7 +793,7 @@ close_doc_prefix = prefix:close_XSD_prefix name:"documentation" ws ">" ws {retur
 
 // ----- <union> -----
 
-union = prefix:open_XSD_el el_name:"union" attrs:union_attrs ws 
+union = comments prefix:open_XSD_el el_name:"union" attrs:union_attrs ws 
         close:(merged_close / openEl content:union_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
         &{return check_elTags(el_name, prefix, close) && validateUnion(attrs, close.content)}
         {return {element: el_name, attrs, content: close.content}}
@@ -807,7 +807,7 @@ union_content = c:(annotation? simpleType*) {return cleanContent(c.flat())}
 
 // ----- <list> -----
 
-list = prefix:open_XSD_el el_name:"list" attrs:list_attrs ws 
+list = comments prefix:open_XSD_el el_name:"list" attrs:list_attrs ws 
        close:(merged_close / openEl content:list_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
        &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "itemType", attrs, close.content)} 
        {return {element: el_name, attrs, content: close.content}}
@@ -821,7 +821,7 @@ list_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 // ----- <restriction> (simpleType) -----
 
-restrictionST = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
+restrictionST = comments prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionST_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
                 &{return check_elTags(el_name, prefix, close) && check_derivingType(el_name, "base", attrs, close.content)} {
   let restriction = {element: el_name, attrs}, arg_base = attrs.base
@@ -846,7 +846,7 @@ restrictionST_content = h1:annotation? h2:simpleType? t:constrFacet* {return cle
 
 // ----- <restriction> (simpleContent) -----
 
-restrictionSC = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
+restrictionSC = comments prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:restrictionSC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
                 &{return check_requiredBase(el_name, "simpleContent", prefix, attrs, close)} {
   let restriction = {element: el_name, attrs}, arg_base = attrs.base
@@ -873,7 +873,7 @@ restrictionSC_content = c:(restrictionST_content attributes) {return cleanConten
 
 // ----- <restriction> (complexContent) -----
 
-restrictionCC = prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
+restrictionCC = comments prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
                 &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)}
                 {return {element: el_name, attrs, content: close.content}}
@@ -883,7 +883,7 @@ CC_son_content = c:(annotation? (all / choiceOrSequence / group)? attributes) {r
 
 // ----- <extension> (simpleContent) -----
 
-extensionSC = prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws 
+extensionSC = comments prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws 
               close:(merged_close / openEl content:extensionSC_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
               &{return check_requiredBase(el_name, "simpleContent", prefix, attrs, close)}
               {return {element: el_name, attrs, content: close.content}}
@@ -893,7 +893,7 @@ extensionSC_content = c:(annotation? attributes) {return cleanContent(c.flat())}
 
 // ----- <extension> (complexContent) -----
 
-extensionCC = prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws 
+extensionCC = comments prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws 
               close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
               &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)}
               {return {element: el_name, attrs, content: close.content}}
@@ -901,7 +901,7 @@ extensionCC = prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws
 
 // ----- <minExclusive> <minInclusive> <maxExclusive> <maxInclusive> <totalDigits <fractionDigits> <length> <minLength> <maxLength> <enumeration> <whiteSpace> <pattern> -----
 
-constrFacet = prefix:open_XSD_el el_name:constrFacet_values 
+constrFacet = comments prefix:open_XSD_el el_name:constrFacet_values 
               attrs:(a:constrFacet_attrs ws {return checkError(attrsAPI.check_constrFacetAttrs(el_name, a))})
               close:(merged_close / ann_content)
               &{return check_elTags(el_name, prefix, close)}
@@ -915,7 +915,7 @@ constrFacet_value = ws2 attr:"value" ws "=" ws val:string             {return {a
 
 // ----- <complexType> -----
 
-complexType = prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs ws 
+complexType = comments prefix:open_XSD_el el_name:"complexType" attrs:complexType_attrs ws 
               close:(merged_close / (openEl {type_depth++}) content:complexType_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
               &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)} {
   let complexType = {element: el_name, attrs, content: close.content}
@@ -945,7 +945,7 @@ complexType_content = c:(annotation? (simpleContent / complexContent / ((all / c
 
 // ----- <simpleContent> -----
 
-simpleContent = prefix:open_XSD_el el_name:"simpleContent" attr:elem_id? ws openEl content:simpleContent_content close_el:close_XSD_el
+simpleContent = comments prefix:open_XSD_el el_name:"simpleContent" attr:elem_id? ws openEl content:simpleContent_content close_el:close_XSD_el
                 &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} {
   let simpleType = {element: el_name, attrs: getAttrs(attr)}
 
@@ -970,7 +970,7 @@ simpleContent_content = c:(annotation? (restrictionSC / extensionSC)) {return cl
 
 // ----- <complexContent> -----
 
-complexContent = prefix:open_XSD_el el_name:$("complexContent" {any_type = "C"}) attrs:complexContent_attrs ws openEl content:complexContent_content close_el:close_XSD_el
+complexContent = comments prefix:open_XSD_el el_name:$("complexContent" {any_type = "C"}) attrs:complexContent_attrs ws openEl content:complexContent_content close_el:close_XSD_el
                  &{return check_elTags(el_name, prefix, {merged: false, ...close_el})}
                  {return {element: el_name, attrs, content}}
 
@@ -981,7 +981,7 @@ complexContent_content = c:(annotation? (restrictionCC / extensionCC)) {any_type
 
 // ----- <all> -----
 
-all = prefix:open_XSD_el el_name:"all" attrs:all_attrs ws 
+all = comments prefix:open_XSD_el el_name:"all" attrs:all_attrs ws 
       close:(merged_close / openEl content:all_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
       &{return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, /element/, close.content)}
       {return {element: el_name, attrs, content: close.content}}
@@ -996,7 +996,7 @@ all_content = c:(annotation? element*) {return cleanContent(c.flat())}
 
 // ----- <choice/sequence> -----
 
-choiceOrSequence = prefix:open_XSD_el el_name:$("choice"/"sequence") attrs:(a:choiceOrSeq_attrs {return check_occursAttrs(a, el_name)}) ws 
+choiceOrSequence = comments prefix:open_XSD_el el_name:$("choice"/"sequence") attrs:(a:choiceOrSeq_attrs {return check_occursAttrs(a, el_name)}) ws 
                    close:(merged_close / openEl content:choiceOrSeq_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
                    &{return check_elTags(el_name, prefix, close) && check_repeatedNames(el_name, /element/, close.content)}
                    {return {element: el_name, attrs, content: close.content}}
@@ -1008,7 +1008,7 @@ choiceOrSeq_content = c:(annotation? (element / choiceOrSequence / group / any)*
 
 // ----- <group> -----
 
-group = prefix:open_XSD_el el_name:"group" attrs:group_attrs ws 
+group = comments prefix:open_XSD_el el_name:"group" attrs:group_attrs ws 
         close:(merged_close / openEl content:group_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
         &{return check_elTags(el_name, prefix, close)}
         {curr.group = false; return {element: el_name, attrs, content: check_groupContent(close.content)}}
@@ -1028,7 +1028,7 @@ group_content = c:(annotation? (all / choiceOrSequence)) {return cleanContent(c)
 
 // ----- <notation> -----
 
-notation = prefix:open_XSD_el el_name:"notation" attrs:notation_attrs ws close:(merged_close / ann_content)
+notation = comments prefix:open_XSD_el el_name:"notation" attrs:notation_attrs ws close:(merged_close / ann_content)
           &{return check_elTags(el_name, prefix, close)}
           {return {element: el_name, attrs, content: close.content}}
 
@@ -1040,6 +1040,7 @@ notation_URI_attrs = ws2 attr:("public" / "system") ws "=" ws val:string {return
 
 // ----- Comentário -----
 
+comments = comment*
 comment = "<!--" comment_content close_comment ws
 comment_content = (!close_comment). comment_content*
 close_comment = "-->"
@@ -1053,9 +1054,9 @@ closeEl = ">" ws {schema_depth--}
 open_XSD_el      = "<"  prefix:(p:NCName ":" {return p})? {return prefix}
 close_XSD_prefix = "</" prefix:(p:NCName ":" {return p})? {return prefix}
 
-merged_close = "/>" ws {return {merged: true, content: []}}
+merged_close = "/>" ws comments {return {merged: true, content: []}}
 
-close_XSD_el = prefix:close_XSD_prefix name:XSD_el_name ws closeEl {return {name, prefix}}
+close_XSD_el = prefix:close_XSD_prefix name:XSD_el_name ws closeEl comments {return {name, prefix}}
 ann_content = openEl content:annotation? close_el:close_XSD_el {return {merged: false, ...close_el, content: cleanContent(content)}}
 
 attributes = c:((attribute / attributeGroup)* anyAttribute?) {return c.flat()}

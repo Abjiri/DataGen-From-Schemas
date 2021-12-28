@@ -119,7 +119,7 @@ function parseElementAux(el, depth) {
       if (attrs.nillable && Math.random() < 0.3) return "{ DFS_ATTR__nil: true }"
    }
    if ("fixed" in attrs) return '"' + attrs.fixed + '"'
-   if ("default" in attrs) return '"' + attrs.default + '"'
+   if ("default" in attrs && Math.random() > 0.4) return '"' + attrs.default + '"'
    if ("type" in attrs) return parseType(attrs.type, depth)
 
    // parsing do conteúdo -----
