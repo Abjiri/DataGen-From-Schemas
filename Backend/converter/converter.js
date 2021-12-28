@@ -103,7 +103,8 @@ function parseElement(el, depth, keys, schemaElem) {
       let parsed = parseElementAux(el, depth)
 
       // completa a string DSL com a chave e formatação
-      if (parsed.length > 0) elem_str += normalizeName(el.attrs.name, keys[el.attrs.name]++ + "__") + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
+      if (parsed.length > 0) parsed = "{ DFS_EMPTY_XML: true }"
+      elem_str += normalizeName(el.attrs.name, keys[el.attrs.name]++ + "__") + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
    }
    
    return {elem_str, occurs, keys}
