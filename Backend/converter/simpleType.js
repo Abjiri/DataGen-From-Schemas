@@ -6,6 +6,8 @@ const RandExp = require('randexp');
 // tecnicamente "ENTITY","ID","IDREF","Name","NCName","NMTOKEN" também são, mas vão ser sempre gerados a partir do pattern e não na função anónima do DataGen
 let isGenType = base => ["base64Binary","date","dateTime","duration","gMonthDay","gYearMonth","hexBinary","normalizedString","NOTATION","QName","string","token"].includes(base)
 
+let isEnumerated = st => st.content.filter(x => x.element == "enumeration").length > 0
+
 let randomize = (min,max) => Math.floor(Math.random() * ((max+1) - min) + min)
 
 function string(base, length) {
@@ -480,7 +482,7 @@ function parseList(st) {
    if (st.content.length == 1) {
       let elem = parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min})
 
-      if (isGenType(st.content[0].built_in_base)) return elem
+      if (isGenType(st.content[0].built_in_base) && !isEnumerated(st.content[0])) return elem
       else {
          for (let i = 0; i < randomize(min,max); i++) str += elem + " "
          return "'" + str.slice(0,-1) + "'"
@@ -494,7 +496,7 @@ function parseList(st) {
          let type_ind = randomize(0, type_len)
          let elem = parseRestriction(st.content[type_ind].content, st.content[type_ind].built_in_base, {max: 1, min: 1})
 
-         if (isGenType(st.content[type_ind].built_in_base)) {
+         if (isGenType(st.content[type_ind].built_in_base) && !isEnumerated(st.content[type_ind])) {
             str += `let f${i} = ()${elem.slice(3)}\n`
             str += `str += f${i}() + " "\n\n`
          }
@@ -518,7 +520,7 @@ function parseSimpleType(st) {
    // derivação por restrição
    let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
    let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1})
-   return isGenType(st.built_in_base) ? parsed : ("'" + parsed + "'")
+   return (isGenType(st.built_in_base) && !isEnumerated(st)) ? parsed : ("'" + parsed + "'")
 }
 
 

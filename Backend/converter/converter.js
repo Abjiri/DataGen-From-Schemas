@@ -147,16 +147,16 @@ function parseComplexType(el, depth) {
    let parsed = {attrs: "", content: ""}
    parsed.attrs = parseAttributeGroup(el, depth+1)
 
-   el.content = el.content.filter(x => !x.element.includes("ttribute"))
-   let content_len = el.content.length
+   let content = el.content.filter(x => !x.element.includes("ttribute"))
+   let content_len = content.length
 
    for (let i = 0; i < content_len; i++) {
-      switch (el.content[i].element) {
-         case "simpleContent": return parseSimpleContent(el.content[i], depth+1);
-         case "group": parsed.content += parseGroup(el.content[i], depth+1, {}).str.slice(0, -2); break;
-         case "all": parsed.content += parseAll(el.content[i], depth+2, {}).str; break;
-         case "sequence": parsed.content += parseSequence(el.content[i], depth+1, {}).str.slice(0, -1); break;
-         case "choice": parsed.content += parseChoice(el.content[i], depth+1, {}).str; break;
+      switch (content[i].element) {
+         case "simpleContent": return parseSimpleContent(content[i], depth+1);
+         case "group": parsed.content += parseGroup(content[i], depth+1, {}).str.slice(0, -2); break;
+         case "all": parsed.content += parseAll(content[i], depth+2, {}).str; break;
+         case "sequence": parsed.content += parseSequence(content[i], depth+1, {}).str.slice(0, -1); break;
+         case "choice": parsed.content += parseChoice(content[i], depth+1, {}).str; break;
       }
 
       if (i < content_len - 1) parsed.content += ",\n"
@@ -179,7 +179,7 @@ function parseAttribute(el, depth) {
    // parsing dos atributos
    if (attrs.use == "prohibited") return ""
    if ("fixed" in attrs) value = attrs.fixed
-   if ("default" in attrs) value = attrs.default
+   if ("default" in attrs && Math.random() > 0.4) value = attrs.default
 
    // se tiver um valor predefinido, verifica se tem "/' dentro para encapsular com o outro
    if (value.length > 0) {

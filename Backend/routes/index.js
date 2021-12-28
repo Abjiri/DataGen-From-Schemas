@@ -29,13 +29,15 @@ router.post('/xml_schema', (req, res) => {
     });
 
     const formData = new FormData()
-    let file = fs.readFileSync('./output/model.txt', "utf8")
-    formData.append('model', file, "model.txt")
+    formData.append('model', fs.readFileSync('./output/model.txt', "utf8"), {
+      filename: "model.txt",
+      contentType: "text/plain"
+    })
 
     //https://datagen.di.uminho.pt/api/datagen/xml
     axios.post("http://localhost:12080/api/datagen/dfs", formData, {headers: formData.getHeaders()})
       .then(data => res.status(201).jsonp(data.data))
-      .catch(err => res.status(201).jsonp(err))
+      .catch(err => {console.log("catch"); res.status(201).jsonp(err)})
 
   } catch (err) {res.status(201).jsonp(err)}
 });
