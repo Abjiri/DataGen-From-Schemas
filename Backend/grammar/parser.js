@@ -429,8 +429,12 @@ module.exports = /*
           let base
 
           if (arg_base in complexTypes) {
-            let base_ct = complexTypes[arg_base]
-            base = simpleTypes[base_ct.content[0].content[0].attrs.base].built_in_base
+            // se for referência a um complexType que não seja por derivação, o seu conteúdo deve ser mixed e emptiable
+            checkError(ctAPI.validateBaseRestrictionSC(complexTypes[arg_base]))
+
+            // texto que aparece entre partículas por causa de ser mixed
+            base = "string" 
+            arg_base = "xs:string"
           }
           else base = stAPI.getTypeInfo(arg_base, default_prefix, simpleTypes).type
 
@@ -13808,7 +13812,7 @@ module.exports = /*
                 base_st = simpleTypes[base]
               }
               
-              if (stAPI.isObject(base_st.built_in_base) && "union" in base_st.built_in_base) base = base_st.built_in_base
+              if ("built_in_base" in base_st && stAPI.isObject(base_st.built_in_base) && "union" in base_st.built_in_base) base = base_st.built_in_base
               if ("union" in base_st) union = true
             }
             else {
@@ -13820,9 +13824,7 @@ module.exports = /*
             
             // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
             if (union) x.ref.content = content
-            else {
-              x.ref.content = checkError(stAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
-            }
+            else x.ref.content = checkError(stAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
           })
 
           st.map(x => {
