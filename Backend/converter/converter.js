@@ -103,7 +103,7 @@ function parseElement(el, depth, keys, schemaElem) {
       let parsed = parseElementAux(el, depth)
 
       // completa a string DSL com a chave e formatação
-      if (parsed.length > 0) parsed = "{ DFS_EMPTY_XML: true }"
+      if (!parsed.length) parsed = "{ DFS_EMPTY_XML: true }"
       elem_str += normalizeName(el.attrs.name, keys[el.attrs.name]++ + "__") + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
    }
    
@@ -163,9 +163,12 @@ function parseComplexType(el, depth) {
       if (i < content_len - 1) parsed.content += ",\n"
    }
 
-   if (!parsed.attrs.length && !parsed.content.length) return "{ missing(100) {empty: true} }"
-
    let str = "{\n"
+   let empty = !parsed.attrs.length && !parsed.content.length
+
+   if ("mixed" in el.attrs && el.attrs.mixed) str += `${indent(depth+1)}DFS_MIXED_CONTENT: true${empty ? "" : ",\n"}`
+   else if (empty) return "{ missing(100) {empty: true} }"
+
    if (parsed.attrs.length > 0) {
       str += parsed.attrs
       if (parsed.content.length > 0) str += ",\n"
