@@ -323,6 +323,29 @@ function unorderedPreservation(b, r, err_msg) {
     return data(true)
 }
 
+/* function isEmptiable(content) {
+    for (let i = 0; i < content.length; i++) {
+        if (!("mixed" in content[i].attrs && content[i].attrs.minOccurs == 0)) {
+            if (!isEmptiable(content[i])) return false
+        }
+    }
+    return true
+}
+
+function validateBaseRestrictionSC(base) {
+    let error_msg = "A definição do novo complexType é inválida. Quando <simpleContent> é usado, o tipo base deve ser um complexType cujo tipo do conteúdo seja simples, ou, apenas se for especificada uma restrição, um complexType com conteúdo 'mixed' e partículas esvaziáveis, ou, apenas se for especificada uma extensão, um simpleType. O novo complexType não satisfaz nenhuma destas condições!"
+
+    if (base in complexTypes) {
+        let base_ct = complexTypes[arg_base]
+
+        if (base_ct.content[0].element == "simpleContent") return true
+        if ("mixed" in base_ct.attrs && base_ct.attrs.mixed && isEmptiable(base_ct.content)) return true
+        return error(error_msg)
+    }
+    return error(error_msg)
+    //else base = stAPI.getTypeInfo(arg_base, default_prefix, simpleTypes).type
+} */
+
 module.exports = {
     extend,
     restrict
