@@ -166,6 +166,8 @@ function check_groupAttrs(arr, schema_depth, curr) {
   // restrições relativas à profundidade dos elementos
   if (!schema_depth) { // elementos da schema
     if ("ref" in attrs) return error("O atributo 'ref' é proibido num elemento <group> de schema!")
+    if ("minOccurs" in attrs) return error("O atributo 'minOccurs' é proibido num elemento <group> de schema!")
+    if ("maxOccurs" in attrs) return error("O atributo 'maxOccurs' é proibido num elemento <group> de schema!")
     if (!("name" in attrs)) return error("O atributo 'name' é requirido num elemento <group> de schema!")
   }
   else {
@@ -174,7 +176,7 @@ function check_groupAttrs(arr, schema_depth, curr) {
   }
 
   // atributos com valores predefinidos
-  return data(defaultOccurs(attrs, curr))
+  return data(!schema_depth ? attrs : defaultOccurs(attrs, curr))
 }
 
 // validar os atributos de um elemento <notation>
