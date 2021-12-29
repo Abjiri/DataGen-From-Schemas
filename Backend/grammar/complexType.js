@@ -1,3 +1,4 @@
+const e = require("express")
 const stAPI = require("./simpleType")
 
 // Funções auxiliares ----------
@@ -183,8 +184,39 @@ function restrictCC(new_ct, complexTypes) {
     if ("error" in check) return check
     else restriction.content[0] = check.data
 
+    let checkAttrs = validateRestrictionAttrsCC(base_ct.content, restriction.content, name_ct)
+    if ("error" in checkAttrs) return checkAttrs
+    else restriction.content = checkAttrs.data
+
     new_ct.content = restriction.content
     return data(new_ct)
+}
+
+function validateRestrictionAttrsCC(b, r, name_ct) {
+    let match = [], new_r = [r[0]]
+
+    for (let i = 1; i < b.length; i++) {
+        let prop = "name" in b[i].attrs ? "name" : "ref"
+
+        // índice deste atributo na restrição
+        let index = r.findIndex(x => x.element == "attribute" && prop in x.attrs && x.attrs[prop] == b[i].attrs[prop])
+        if (index != -1) {
+            match.push(index)
+            if ("fixed" in b[i].attrs && !("fixed" in r[index].attrs)) return error(`A definição do ${name_ct} é inválida. O valor do atributo '${b[i].attrs[prop]}' neste novo tipo não é fixado, o que contradiz o tipo base que está a derivar, cujo valor do respetivo atributo é fixado a '${b[i].attrs.fixed}'!`)
+            if ("fixed" in b[i].attrs && r[index].attrs.fixed != b[i].attrs.fixed) return error(`A definição do ${name_ct} é inválida. O valor do atributo '${b[i].attrs[prop]}' neste novo tipo é fixado a '${r[index].attrs.fixed}', o que contradiz o tipo base que está a derivar, cujo valor do respetivo atributo é fixado a '${b[i].attrs.fixed}'!`)
+
+            new_r.push(r[index])
+        }
+        else new_r.push(b[i])
+    }
+
+    if (r.length-1 > match.length) {
+        match.push(0)
+        let attrs = r.filter((x,i) => !match.includes(i)).map(x => "name" in x.attrs ? x.attrs.name : x.attrs.ref)
+        return error(`A definição do ${name_ct} é inválida. Os atributos '${attrs.join("', '")}' da restrição não correspondem a atributos do tipo base!`)
+    }
+
+    return data(new_r)
 }
 
 function validateRestrictionCC(base_el, new_el, err_msg) {
