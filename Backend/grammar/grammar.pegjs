@@ -852,20 +852,34 @@ restrictionSC = comments prefix:open_XSD_el el_name:"restriction" attrs:base_att
 
   if (arg_base in complexTypes) {
     // se for referência a um complexType que não seja por derivação, o seu conteúdo deve ser mixed e emptiable
-    checkError(ctAPI.validateBaseRestrictionSC(complexTypes[arg_base]))
+    let base_ct = JSON.parse(JSON.stringify(complexTypes[arg_base]))
+    checkError(ctAPI.validateBaseRestrictionSC(base_ct))
+
+    base_ct.content[0].attrs.minOccurs = 0
+    base_ct.content[0].attrs.maxOccurs = 0
+    base_ct.mixed_type = {}
 
     // texto que aparece entre partículas por causa de ser mixed
-    base = "string" 
-    arg_base = "xs:string"
-  }
-  else base = stAPI.getTypeInfo(arg_base, default_prefix, simpleTypes).type
+    st_queue.restrictions.push({
+      base: "string",
+      args: ["xs:string", close.content],
+      complex: true,
+      ref: base_ct.mixed_type
+    })
 
-  st_queue.restrictions.push({
-    base,
-    args: [arg_base, close.content],
-    complex: true,
-    ref: restriction
-  })
+    restriction.element = "mixed_restriction"
+    restriction.content = base_ct
+  }
+  else {
+    base = stAPI.getTypeInfo(arg_base, default_prefix, simpleTypes).type
+
+    st_queue.restrictions.push({
+      base,
+      args: [arg_base, close.content],
+      complex: true,
+      ref: restriction
+    })
+  }
 
   return restriction
 }
@@ -922,6 +936,13 @@ complexType = comments prefix:open_XSD_el el_name:"complexType" attrs:complexTyp
               &{return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)} {
   let complexType = {element: el_name, attrs, content: close.content}
 
+  if (close.content[0].element == "mixed_restriction") {
+    let new_complexType = close.content[0].element.content
+    new_complexType.attrs.name = attrs.name
+    complexTypes[attrs.name] = new_complexType
+    return new_complexType
+  }
+
   // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
   if (close.content[0].element.includes("Content")) {
     // restrições de complexContent são resolvidas na queue de complexTypes
@@ -951,6 +972,7 @@ simpleContent = comments prefix:open_XSD_el el_name:"simpleContent" attr:elem_id
                 &{return check_elTags(el_name, prefix, {merged: false, ...close_el})} {
   let simpleType = {element: el_name, attrs: getAttrs(attr)}
 
+  if (content[0].element == "mixed_restriction") return content
   if (content[0].element == "extension") simpleType.content = content
   else {
     // o nome de um simpleType nunca pode começar por algarismos, logo nunca coincide com um simpleType existente

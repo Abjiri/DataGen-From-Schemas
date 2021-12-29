@@ -166,7 +166,14 @@ function parseComplexType(el, depth) {
    let str = "{\n"
    let empty = !parsed.attrs.length && !parsed.content.length
 
-   if ("mixed" in el.attrs && el.attrs.mixed) str += `${indent(depth+1)}DFS_MIXED_CONTENT: true${empty ? "" : ",\n"}`
+   if ("mixed" in el.attrs && el.attrs.mixed) {
+      if (!("mixed_type" in el)) str += `${indent(depth+1)}DFS_MIXED_DEFAULT: true${empty ? "" : ",\n"}`
+      else {
+         let base_st = el.mixed_type.content[0]
+         let mixed_content = parseSimpleType({built_in_base: base_st.built_in_base, content: base_st.content})
+         str += `${indent(depth+1)}DFS_MIXED_RESTRICTED: ${mixed_content}${empty ? "" : ",\n"}`
+      }
+   }
    else if (empty) return "{ missing(100) {empty: true} }"
 
    if (parsed.attrs.length > 0) {
