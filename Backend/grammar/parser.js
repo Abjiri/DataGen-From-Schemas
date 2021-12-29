@@ -13991,10 +13991,13 @@ module.exports = /*
             C: "complexType"
           }
 
+          if (curr_any_type == "BS" && type in complexTypes) return error(`Neste local, só pode referenciar um ${error_msg[curr_any_type]}, mas está a tentar referenciar o complexType '${type}'!`)
+
           if (curr_any_type != "C" && stAPI.built_in_types(simpleTypes).includes(type)) {
             return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
                                                             ${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
           }
+          
           if (prefix == null || prefix == default_prefix) {
             if (!existsLocalType(type)) return error(`Tem de referenciar um ${error_msg[curr_any_type]} válido!`)
             if (!curr_el && type === curr_type) return error(`Definições circulares detetadas para o tipo '${type}'! Isto significa que o '${type}' está contido na sua própria hierarquia, o que é um erro.`)
