@@ -325,7 +325,7 @@ function unorderedPreservation(b, r, err_msg) {
 
 function emptiable(content) {
     for (let i = 0; i < content.length; i++) {
-        if (content[i].attrs.minOccurs != 0) {
+        if (!content[i].element.includes("ttribute") && content[i].attrs.minOccurs != 0) {
             if (content[i].element == "element") return false
             if (!emptiable(content[i].content)) return false
         }

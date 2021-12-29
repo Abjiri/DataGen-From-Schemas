@@ -440,8 +440,14 @@ module.exports = /*
             checkError(ctAPI.validateBaseRestrictionSC(base_ct))
 
             if (base_ct.content.length > 0) {
-              base_ct.content[0].attrs.minOccurs = 0
-              base_ct.content[0].attrs.maxOccurs = 0
+              if (["all","choice","sequence"].includes(base_ct.content[0].element)) {
+                base_ct.content[0].attrs.minOccurs = 0
+                base_ct.content[0].attrs.maxOccurs = 0
+              }
+        
+              for (let i = 0; i < base_ct.content.length; i++) {
+                if (base_ct.content[i].element.includes("ttribute")) base_ct.content[i] = complexTypes[arg_base].content[i]
+              }
             }
             base_ct.mixed_type = {}
 
@@ -466,7 +472,7 @@ module.exports = /*
               ref: restriction
             })
           }
-
+          
           return restriction
         },
         peg$c235 = function(prefix, el_name, attrs, close) {return check_requiredBase(el_name, "complexContent", prefix, attrs, close)},
