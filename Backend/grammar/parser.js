@@ -433,8 +433,10 @@ module.exports = /*
             let base_ct = JSON.parse(JSON.stringify(complexTypes[arg_base]))
             checkError(ctAPI.validateBaseRestrictionSC(base_ct))
 
-            base_ct.content[0].attrs.minOccurs = 0
-            base_ct.content[0].attrs.maxOccurs = 0
+            if (base_ct.content.length > 0) {
+              base_ct.content[0].attrs.minOccurs = 0
+              base_ct.content[0].attrs.maxOccurs = 0
+            }
             base_ct.mixed_type = {}
 
             // texto que aparece entre partículas por causa de ser mixed
@@ -474,20 +476,22 @@ module.exports = /*
         peg$c245 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)},
         peg$c246 = function(prefix, el_name, attrs, close) {
           let complexType = {element: el_name, attrs, content: close.content}
+          
+          if (complexType.content.length > 0) {
+            if (close.content[0].element == "mixed_restriction") {
+              let new_complexType = close.content[0].content
+              new_complexType.attrs.name = attrs.name
+              complexTypes[attrs.name] = new_complexType
+              return new_complexType
+            }
 
-          if (close.content[0].element == "mixed_restriction") {
-            let new_complexType = close.content[0].content
-            new_complexType.attrs.name = attrs.name
-            complexTypes[attrs.name] = new_complexType
-            return new_complexType
-          }
-
-          // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
-          if (close.content[0].element.includes("Content")) {
-            // restrições de complexContent são resolvidas na queue de complexTypes
-            if ("content" in close.content[0]) ct_queue[close.content[0].content[0].element].push(complexType)
-            // restrições de simpleContent são resolvidas na queue de simpleTypes, porque são efetivamente restrições a simpleTypes
-            else st_queue.simpleTypes[st_queue.simpleTypes.length - 1].complex = complexType
+            // só é uma referência a resolver se o conteúdo for simple/complexType e tiver uma base complexType
+            if (close.content[0].element.includes("Content")) {
+              // restrições de complexContent são resolvidas na queue de complexTypes
+              if ("content" in close.content[0]) ct_queue[close.content[0].content[0].element].push(complexType)
+              // restrições de simpleContent são resolvidas na queue de simpleTypes, porque são efetivamente restrições a simpleTypes
+              else st_queue.simpleTypes[st_queue.simpleTypes.length - 1].complex = complexType
+            }
           }
           else if ("name" in attrs) complexTypes[attrs.name] = complexType
 
