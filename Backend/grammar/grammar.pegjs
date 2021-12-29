@@ -953,6 +953,7 @@ complexType = comments prefix:open_XSD_el el_name:"complexType" attrs:complexTyp
       // restrições de simpleContent são resolvidas na queue de simpleTypes, porque são efetivamente restrições a simpleTypes
       else st_queue.simpleTypes[st_queue.simpleTypes.length - 1].complex = complexType
     }
+    else if ("name" in attrs) complexTypes[attrs.name] = complexType
   }
   else if ("name" in attrs) complexTypes[attrs.name] = complexType
 

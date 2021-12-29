@@ -497,7 +497,7 @@ function check_constrFacetBase_aux(base_name, base_type, value) {
 // retorna os tipos base de um simpleType (pode ter vários caso involva unions)
 function get_base(st_content, default_prefix, simpleTypes) {
   let fst_content = st_content[0]
-  let base
+  let base = []
 
   if (fst_content.element == "union") {
     if ("memberTypes" in fst_content.attrs) base = fst_content.attrs.memberTypes.map(x => getTypeInfo(x, default_prefix, simpleTypes).type)
