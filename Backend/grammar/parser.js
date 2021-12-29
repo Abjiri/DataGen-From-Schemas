@@ -198,13 +198,13 @@ module.exports = /*
         peg$c50 = function(el_name, attrs, content) {return check_stQueue() && check_ctQueue() && checkQueue()},
         peg$c51 = function(el_name, attrs, content) {
           content = complete_refs(content, content, "schema")
-        
+
           let complexKeys = Object.keys(complexTypes)
           for (let i = 0; i < complexKeys.length; i++) {
             complexTypes[complexKeys[i]].content = complete_refs(complexTypes[complexKeys[i]].content, complexTypes[complexKeys[i]].content, "schema")
           }
-        
-          return {element: el_name, prefix: default_prefix, attrs, content: content.filter(x => x.element == "element")}
+
+          return {element: el_name, prefix: default_prefix, attrs, content}
         },
         peg$c52 = function(prefix) {
           if (!noSchemaPrefix() && prefix === null) return error("Precisa de prefixar o elemento de fecho da schema!")
@@ -470,7 +470,7 @@ module.exports = /*
               ref: restriction
             })
           }
-          
+
           return restriction
         },
         peg$c235 = function(prefix, el_name, attrs, close) {return check_requiredBase(el_name, "complexContent", prefix, attrs, close)},
@@ -486,10 +486,10 @@ module.exports = /*
         peg$c245 = function(prefix, el_name, attrs, close) {return check_elTags(el_name, prefix, close) && check_complexTypeMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)},
         peg$c246 = function(prefix, el_name, attrs, close) {
           let complexType = {element: el_name, attrs, content: close.content}
-          
+
           if (complexType.content.length > 0) {
             if (close.content[0].element == "mixed_restriction") {
-              let new_complexType = close.content[0].content
+              let new_complexType = close.content[0].element.content
               new_complexType.attrs.name = attrs.name
               complexTypes[attrs.name] = new_complexType
               return new_complexType
@@ -13997,7 +13997,7 @@ module.exports = /*
             return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
                                                             ${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
           }
-          
+              
           if (prefix == null || prefix == default_prefix) {
             if (!existsLocalType(type)) return error(`Tem de referenciar um ${error_msg[curr_any_type]} válido!`)
             if (!curr_el && type === curr_type) return error(`Definições circulares detetadas para o tipo '${type}'! Isto significa que o '${type}' está contido na sua própria hierarquia, o que é um erro.`)
@@ -14005,29 +14005,42 @@ module.exports = /*
           return true
         }
       }
+
+      // verificar se um elemento se referencia a si mesmo recursivamente
+      function recursiveElement(name, element, content) {
+        for (let i = 0; i < content.length; i++) {
+          if (content[i].element == element && "ref" in content[i].attrs && content[i].attrs.ref == name) return true
+          if (content[i].element != "simpleType" && Array.isArray(content[i].content)) {
+            if (recursiveElement(name, element, content[i].content)) return true
+          }
+        }
+        return false
+      }
           
       // copiar os atributos de um elemento referenciado para o elemento que o referencia
       function complete_refs(content, global_elems, parent) {
         for (let i = 0; i < content.length; i++) {
           // verificar se é um <element> com "ref"
           if ("ref" in content[i].attrs) {
-            // identificar o elemento global que referenceia
+            // identificar o elemento global que referencia
             let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
-
-            if (elem.element == "attributeGroup") {
-              let getAttrNames = arr => arr.filter(x => x.element == "attribute").map(x => x.attrs["name" in x.attrs ? "name" : "ref"])
-              let attr_names = getAttrNames(content).concat(getAttrNames(elem.content))
-              
-              // verificar se há nomes repetidos para cada tipo de elemento
-              let duplicates = attr_names.filter((item, index) => attr_names.indexOf(item) !== index)
-              if (duplicates.length > 0) return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <attribute> com o nome '${duplicates[0]}'.`)
+                
+            // não entrar em loop infinito se for uma ref recursiva
+            if (!recursiveElement(elem.attrs.name, elem.element, elem.content)) {
+              if (elem.element == "attributeGroup") {
+                let getAttrNames = arr => arr.filter(x => x.element == "attribute").map(x => x.attrs["name" in x.attrs ? "name" : "ref"])
+                let attr_names = getAttrNames(content).concat(getAttrNames(elem.content))
+                
+                // verificar se há nomes repetidos para cada tipo de elemento
+                let duplicates = attr_names.filter((item, index) => attr_names.indexOf(item) !== index)
+                if (duplicates.length > 0) return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <attribute> com o nome '${duplicates[0]}'.`)
+              }
+              // copiar os seus atributos e o conteúdo
+              content[i].attrs = {...elem.attrs, ...content[i].attrs}
+              content[i].content = elem.content
+              // apagar o atributo "ref", que já não é relevante
+              delete content[i].attrs.ref
             }
-
-            // copiar os seus atributos e o conteúdo
-            content[i].attrs = {...elem.attrs, ...content[i].attrs}
-            content[i].content = elem.content
-            // apagar o atributo "ref", que já não é relevante
-            delete content[i].attrs.ref
           }
           // se for um elemento básico (sem "ref" nem filhos) e não tiver "type", assume-se que é string
           else if (["element","attribute"].includes(content[i].element) && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"

@@ -1,6 +1,7 @@
 const {parseSimpleType} = require('./simpleType')
 
 let default_prefix = null
+let xsd_content = []
 let simpleTypes = {}
 let complexTypes = {}
 let unbounded = 0
@@ -67,20 +68,22 @@ function convertXSD(xsd, st, ct, unbounded_value) {
    
    // variáveis globais
    default_prefix = xsd.prefix
+   xsd_content = xsd.content
    simpleTypes = st
    complexTypes = ct
 
-   for (let i = 0; i < xsd.content.length; i++) {
-      let {elem_str, _} = parseElement(xsd.content[i], depth, {}, true)
+   let elements = xsd.content.filter(x => x.element == "element")
+   //for (let i = 0; i < elements.length; i++) {
+      let {elem_str, _} = parseElement(elements[0], depth, {}, true)
 
       if (elem_str.length > 0) {
          str += indent(depth) + elem_str
-         if (i < xsd.content.length-1) str += ","
+         //if (i < elements.length-1) str += ","
          str += "\n"
       }
-   }
+   //}
 
-   if (!xsd.content.length) str += indent(depth) + "DFS_EMPTY_XML: true\n"
+   if (!elements.length) str += indent(depth) + "DFS_EMPTY_XML: true\n"
 
    str += "}"
    return str
@@ -100,17 +103,24 @@ function parseElement(el, depth, keys, schemaElem) {
    
    for (let i = 0; i < occurs; i++) {
       // converte o valor do elemento para string DSL
-      let parsed = parseElementAux(el, depth)
+      let parsed = parseElementAux(el, depth, keys)
 
-      // completa a string DSL com a chave e formatação
-      if (!parsed.length) parsed = "{ DFS_EMPTY_XML: true }"
-      elem_str += normalizeName(el.attrs.name, keys[el.attrs.name]++ + "__") + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
+      if (!("ref" in el.attrs)) {
+         // completa a string DSL com a chave e formatação
+         if (!parsed.length) parsed = "{ DFS_EMPTY_XML: true }"
+         elem_str += normalizeName(el.attrs.name, keys[el.attrs.name]++ + "__") + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
+      }
+      else {
+         //console.log(parsed.elem_str)
+         elem_str = parsed.elem_str
+         keys = parsed.keys
+      }
    }
    
    return {elem_str, occurs, keys}
 }
 
-function parseElementAux(el, depth) {
+function parseElementAux(el, depth, keys) {
    let attrs = el.attrs
 
    // parsing dos atributos -----
@@ -122,6 +132,14 @@ function parseElementAux(el, depth) {
    if ("fixed" in attrs) return '"' + attrs.fixed + '"'
    if ("default" in attrs && Math.random() > 0.4) return '"' + attrs.default + '"'
    if ("type" in attrs) return parseType(attrs.type, depth)
+   if ("ref" in attrs) {
+      let ref_el = xsd_content.filter(x => x.element == "element" && x.attrs.name == attrs.ref)[0]
+
+      ref_el.attrs = {...ref_el.attrs, ...attrs}
+      delete ref_el.attrs.ref
+
+      return parseElement(ref_el, depth, keys, false)
+   }
 
    // parsing do conteúdo -----
    let type = el.content[0]

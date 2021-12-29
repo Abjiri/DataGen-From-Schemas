@@ -276,29 +276,42 @@
       return true
     }
   }
+
+  // verificar se um elemento se referencia a si mesmo recursivamente
+  function recursiveElement(name, element, content) {
+    for (let i = 0; i < content.length; i++) {
+      if (content[i].element == element && "ref" in content[i].attrs && content[i].attrs.ref == name) return true
+      if (content[i].element != "simpleType" && Array.isArray(content[i].content)) {
+        if (recursiveElement(name, element, content[i].content)) return true
+      }
+    }
+    return false
+  }
       
   // copiar os atributos de um elemento referenciado para o elemento que o referencia
   function complete_refs(content, global_elems, parent) {
     for (let i = 0; i < content.length; i++) {
       // verificar se é um <element> com "ref"
       if ("ref" in content[i].attrs) {
-        // identificar o elemento global que referenceia
+        // identificar o elemento global que referencia
         let elem = global_elems.filter(x => x.attrs.name == content[i].attrs.ref)[0]
-
-        if (elem.element == "attributeGroup") {
-          let getAttrNames = arr => arr.filter(x => x.element == "attribute").map(x => x.attrs["name" in x.attrs ? "name" : "ref"])
-          let attr_names = getAttrNames(content).concat(getAttrNames(elem.content))
-          
-          // verificar se há nomes repetidos para cada tipo de elemento
-          let duplicates = attr_names.filter((item, index) => attr_names.indexOf(item) !== index)
-          if (duplicates.length > 0) return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <attribute> com o nome '${duplicates[0]}'.`)
+            
+        // não entrar em loop infinito se for uma ref recursiva
+        if (!recursiveElement(elem.attrs.name, elem.element, elem.content)) {
+          if (elem.element == "attributeGroup") {
+            let getAttrNames = arr => arr.filter(x => x.element == "attribute").map(x => x.attrs["name" in x.attrs ? "name" : "ref"])
+            let attr_names = getAttrNames(content).concat(getAttrNames(elem.content))
+            
+            // verificar se há nomes repetidos para cada tipo de elemento
+            let duplicates = attr_names.filter((item, index) => attr_names.indexOf(item) !== index)
+            if (duplicates.length > 0) return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <attribute> com o nome '${duplicates[0]}'.`)
+          }
+          // copiar os seus atributos e o conteúdo
+          content[i].attrs = {...elem.attrs, ...content[i].attrs}
+          content[i].content = elem.content
+          // apagar o atributo "ref", que já não é relevante
+          delete content[i].attrs.ref
         }
-
-        // copiar os seus atributos e o conteúdo
-        content[i].attrs = {...elem.attrs, ...content[i].attrs}
-        content[i].content = elem.content
-        // apagar o atributo "ref", que já não é relevante
-        delete content[i].attrs.ref
       }
       // se for um elemento básico (sem "ref" nem filhos) e não tiver "type", assume-se que é string
       else if (["element","attribute"].includes(content[i].element) && !("type" in content[i].attrs) && !content[i].content.length) content[i].attrs.type = default_prefix + ":string"
@@ -524,7 +537,7 @@ schema = comments (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:sc
     complexTypes[complexKeys[i]].content = complete_refs(complexTypes[complexKeys[i]].content, complexTypes[complexKeys[i]].content, "schema")
   }
 
-  return {element: el_name, prefix: default_prefix, attrs, content: content.filter(x => x.element == "element")}
+  return {element: el_name, prefix: default_prefix, attrs, content}
 }
 
 close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
