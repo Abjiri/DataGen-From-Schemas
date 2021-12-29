@@ -181,8 +181,9 @@ function restrictCC(new_ct, complexTypes) {
 
     let check = validateRestrictionCC(base_ct.content[0], restriction.content[0], err_msg)
     if ("error" in check) return check
+    else restriction.content[0] = check.data
 
-    new_ct.content = new_ct.content[0].content[0].content
+    new_ct.content = restriction.content
     return data(new_ct)
 }
 
@@ -198,6 +199,9 @@ function validateRestrictionCC(base_el, new_el, err_msg) {
 
         let eltRest = checkEltRestriction(base_el, new_el, err_msg)
         if ("error" in eltRest) return eltRest
+
+        if ("type" in base_el.attrs && !("type" in new_el.attrs)) new_el.attrs.type = base_el.attrs.type
+        if (base_el.content.length > 0 && !new_el.content.length) new_el.content = base_el.content
     }
 
     if (base_el.element == "all") {
@@ -207,10 +211,12 @@ function validateRestrictionCC(base_el, new_el, err_msg) {
         if (new_el.element == "all") {
             let check = orderedPreservationBtoR(base_el.content, new_el.content, err_msg)
             if ("error" in check) return check
+            else new_el.content = check.data
         }
         else if (new_el.element == "sequence") {
             let check = unorderedPreservation(base_el.content, new_el.content, err_msg)
             if ("error" in check) return check
+            else new_el.content = check.data
         }
         else return prohib("all", ["all", "sequence"])
     }
@@ -222,6 +228,7 @@ function validateRestrictionCC(base_el, new_el, err_msg) {
         if (new_el.element == "sequence") {
             let check = orderedPreservationBtoR(base_el.content, new_el.content, err_msg)
             if ("error" in check) return check
+            else new_el.content = check.data
         }
         else return prohib("sequence", ["sequence"])
     }
@@ -230,6 +237,7 @@ function validateRestrictionCC(base_el, new_el, err_msg) {
         if (new_el.element == "choice" || new_el.element == "sequence") {
             let check = orderedPreservationRtoB(base_el.content, new_el.content, err_msg)
             if ("error" in check) return check
+            else new_el.content = check.data
             
             if (new_el.element == "choice") {
                 let occurRange = ocurrenceRange(base_el, new_el, null, null)
@@ -247,7 +255,7 @@ function validateRestrictionCC(base_el, new_el, err_msg) {
         else return prohib("choice", ["choice", "sequence"])
     }
 
-    return data(true)
+    return data(new_el)
 }
 
 function particlesLength(el, len) {
@@ -285,9 +293,10 @@ function orderedPreservationBtoR(b, r, err_msg) {
         
         let check = validateRestrictionCC(b[i], r[i], err_msg)
         if ("error" in check) return check
+        else r[i] = check.data
     }
 
-    return data(true)
+    return data(r)
 }
 
 function orderedPreservationRtoB(b, r, err_msg) {
@@ -302,25 +311,27 @@ function orderedPreservationRtoB(b, r, err_msg) {
             if (b[i].element == "element" || i == b.length-1) return check
             else j--
         }
+        else r[j] = check.data
 
         i++
     }
 
-    return data(true)
+    return data(r)
 }
 
 function unorderedPreservation(b, r, err_msg) {
     if (b.length != r.length) return err_msg
 
     for (let i = 0; i < b.length; i++) {
-        let r_el = r.filter(x => x.attrs.name == b[i].attrs.name)
-        if (!r_el.length) return err_msg
+        let index = r.findIndex(x => x.attrs.name == b[i].attrs.name)
+        if (index == -1) return err_msg
         
-        let check = validateRestrictionCC(b[i], r_el[0], err_msg)
+        let check = validateRestrictionCC(b[i], r[index], err_msg)
         if ("error" in check) return check
+        else r[index] = check.data
     }
 
-    return data(true)
+    return data(r)
 }
 
 function emptiable(content) {
@@ -340,8 +351,19 @@ function validateBaseRestrictionSC(base_ct) {
     return error(error_msg)
 }
 
+function copyRefs(base_ct, original) {
+    for (let i = 0; i < base_ct.content.length; i++) {
+        if (["all","choice","sequence","group"].includes(base_ct.content[i].element)) base_ct.content[i] = copyRefs(base_ct.content[i], original.content[i])
+        if (base_ct.content[i].element == "element") base_ct.content[i] = original.content[i]
+        if (base_ct.content[i].element.includes("ttribute")) base_ct.content[i] = original.content[i]
+    }
+
+    return base_ct
+}
+
 module.exports = {
     extend,
     restrict,
-    validateBaseRestrictionSC
+    validateBaseRestrictionSC,
+    copyRefs
 }

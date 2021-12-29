@@ -444,10 +444,8 @@ module.exports = /*
                 base_ct.content[0].attrs.minOccurs = 0
                 base_ct.content[0].attrs.maxOccurs = 0
               }
-        
-              for (let i = 0; i < base_ct.content.length; i++) {
-                if (base_ct.content[i].element.includes("ttribute")) base_ct.content[i] = complexTypes[arg_base].content[i]
-              }
+              
+              base_ct = ctAPI.copyRefs(base_ct, complexTypes[arg_base])
             }
             base_ct.mixed_type = {}
 
