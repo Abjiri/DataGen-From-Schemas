@@ -515,6 +515,12 @@ XML_standalone_value = "yes" / "no"
 schema = comments (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
          &{return check_stQueue() && check_ctQueue() && checkQueue()} {
   content = complete_refs(content, content, "schema")
+
+  let complexKeys = Object.keys(complexTypes)
+  for (let i = 0; i < complexKeys.length; i++) {
+    complexTypes[complexKeys[i]].content = complete_refs(complexTypes[complexKeys[i]].content, complexTypes[complexKeys[i]].content, "schema")
+  }
+
   return {element: el_name, prefix: default_prefix, attrs, content: content.filter(x => x.element == "element")}
 }
 

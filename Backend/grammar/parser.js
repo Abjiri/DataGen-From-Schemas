@@ -198,6 +198,12 @@ module.exports = /*
         peg$c50 = function(el_name, attrs, content) {return check_stQueue() && check_ctQueue() && checkQueue()},
         peg$c51 = function(el_name, attrs, content) {
           content = complete_refs(content, content, "schema")
+        
+          let complexKeys = Object.keys(complexTypes)
+          for (let i = 0; i < complexKeys.length; i++) {
+            complexTypes[complexKeys[i]].content = complete_refs(complexTypes[complexKeys[i]].content, complexTypes[complexKeys[i]].content, "schema")
+          }
+        
           return {element: el_name, prefix: default_prefix, attrs, content: content.filter(x => x.element == "element")}
         },
         peg$c52 = function(prefix) {
