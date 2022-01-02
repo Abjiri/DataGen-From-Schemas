@@ -11,6 +11,8 @@
   let ct_queue = {extension: [], restriction: []}
   // prefixo definido na declaração da schema
   let default_prefix = null
+  // prefixos associados ao targetNamespace (declarações locais da schema) - teoricamente é só um, mas isto é para lidar com o erro, caso o user declare 2+ prefixos para este namespace
+  let target_prefixes = []
   // prefixos de namespaces declarados na schema
 	let prefixes = []
   // número de elementos aninhados dentro do <schema> correntemente
@@ -53,7 +55,7 @@
   // verificar se não foi definido um prefixo para a schema
   const noSchemaPrefix = () => default_prefix === null
   // verificar se o prefixo usado foi declarado na definição da schema
-  const existsPrefix = p => prefixes.includes(p) ? true : error("Este prefixo não foi declarado no início da schema!")
+  const existsPrefix = p => prefixes.includes(p) ? p : error("Este prefixo não foi declarado no início da schema!")
   // verificar se as aspas/apóstrofes são fechados consistentemente - se sim, retorna o objeto {attr,val} em que foram usadas (ou apenas true, para as invocações da declaração XML)
   const checkQM = (q1,q2,attr,val) => q1 === q2 ? (attr===null ? true : {attr,val}) : error("Deve encapsular o valor em aspas ou em apóstrofes. Não pode usar um de cada!")
   // executar todas as invocações guardadas na queue para ver se são válidas
@@ -359,11 +361,14 @@
   }
 
   // verificar que o filho de um <group> não tem os atributos 'max/minOccurs'
-  function check_groupContent(content) {
+  function check_groupContent(attrs, content) {
     if (!atRoot() && content.length > 0) return error("Os elementos <group> devem ser definidos globalmente e referenciados dentro de outros elementos!")
 
     if (content.some(x => "maxOccurs" in x.attrs || "minOccurs" in x.attrs))
       return error(`O elemento filho de um <group> não podem possuir os atributos 'maxOccurs' ou 'minOccurs'! Só o elemento <group> em si.`)
+
+    if ("ref" in attrs) { if (content.length > 0) return error("Um elemento <group> com o atributo 'ref' não pode ter nenhum elemento filho!") }
+    else if (!content.length) return error("Um elemento <group> sem o atributo 'ref' não pode ter conteúdo vazio!")
       
     if (content.length > 0) {
       content[0].attrs.maxOccurs = 1
@@ -464,7 +469,7 @@
 
     if (atRoot() && content.some(x => x.element == "attributeGroup" && "ref" in x.attrs && x.attrs.ref == attrs.name))
       return error(`Definições circulares detetadas para o grupo de atributos '${attrs.name}'! Um <attributeGroup> não se pode incluir recursivamente na sua própria hierarquia!`)
-      
+
     return true
   }
 
@@ -552,7 +557,11 @@ close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
 }
 
 schema_attrs = attrs:(formDefault / blockDefault / finalDefault / xmlns / elem_id / elem_lang / schema_version / targetNamespace)+
-              &{return checkError(attrsAPI.check_schemaAttrs(attrs, default_prefix))} {return attrs}
+              &{return checkError(attrsAPI.check_schemaAttrs(attrs, default_prefix))} {
+  let targetIndex = attrs.indexOf(x => x.attr == "targetNamespace")
+  if (targetIndex > -1) target_prefixes = attrs.filter(x => x.attr == "namespace" && x.val == attrs[targetIndex].val).map(x => x.prefix)
+  return attrs
+}
 
 formDefault = ws2 attr:$(("attribute"/"element")"FormDefault") ws "=" q1:QMo val:form_values q2:QMc {return checkQM(q1,q2,attr,val)}
 blockDefault = ws2 attr:"blockDefault" ws "=" q1:QMo val:block_values q2:QMc                        {return checkQM(q1,q2,attr,val)}
@@ -1070,7 +1079,7 @@ choiceOrSeq_content = c:(annotation? (element / choiceOrSequence / group / any)*
 group = comments prefix:open_XSD_el el_name:"group" attrs:group_attrs ws 
         close:(merged_close / openEl content:group_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
         &{return check_elTags(el_name, prefix, close)}
-        {curr.group = false; return {element: el_name, attrs, content: check_groupContent(close.content)}}
+        {curr.group = false; return {element: el_name, attrs, content: check_groupContent(attrs, close.content)}}
 
 group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group_ref)* {
   let attrs = checkError(attrsAPI.check_groupAttrs(el, schema_depth, curr))
@@ -1082,7 +1091,7 @@ group_attrs = el:(group_name / elem_id / elem_maxOccurs / elem_minOccurs / group
 group_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc           &{return validateName(val,"group")} {return checkQM(q1,q2,attr,val)}
 group_ref = ws2 attr:"ref" ws "=" q1:QMo val:QName q2:QMc {queue.push({attr: "ref", args: [val, "group"]}); return checkQM(q1,q2,attr,val)}
 
-group_content = c:(annotation? (all / choiceOrSequence)) {return cleanContent(c)}
+group_content = c:(annotation? (all / choiceOrSequence)?) {return cleanContent(c)}
 
 
 // ----- <notation> -----
@@ -1139,7 +1148,11 @@ letter1_8 = $(letter letter? letter? letter? letter? letter? letter? letter?)
 string = ('"'[^"]*'"' / "'"[^']*"'") {return text().slice(1,-1)}
 
 NCName = $(([a-zA-Z_]/[^\x00-\x7F])([a-zA-Z0-9.\-_]/[^\x00-\x7F])*)
-QName = $((p:NCName ":" &{return existsPrefix(p)})? NCName)
+QName = prefix:(p:NCName ":" {return existsPrefix(p)})? name:NCName {
+  if (prefix === null || target_prefixes.includes(prefix)) return name
+  return prefix + ":" + name
+}
+
 ID = id:NCName &{return validateID(id)} {ids.push(id); return id}
 language = $((letter letter / [iI]"-"letter+ / [xX]"-"letter1_8)("-"letter1_8)?)
 
@@ -1160,6 +1173,12 @@ constrFacet_values = $("length" / ("max"/"min")"Length" / ("max"/"min")("Ex"/"In
 // um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
 type_value = $(p:NCName ":" name:NCName &{return existsPrefix(p)} {queue.push({attr: "type", args: [name, p, any_type, current_type, Object.values(curr).some(x=>x)]})} // se for o prefixo desta schema, verifica-se que o tipo existe; se não for, assume-se que sim
              / name:NCName {queue.push({attr: "type", args: [name, null, any_type, current_type, Object.values(curr).some(x=>x)]})})
+             
+type_value2 = type:(p:NCName ":" name:NCName &{return existsPrefix(p)} {return {p: target_prefixes.includes(p) ? null : p, name}}
+                  / name:NCName {return {p: null, name}}) {
+  queue.push({attr: "type", args: [type.name, type.p, any_type, current_type, Object.values(curr).some(x=>x)]})
+  return ((type.p === null || target_prefixes.includes(type.p)) ? "" : (type.prefix + ":")) + type.name
+}
 
 
 // ----- Listas de valores de atributos -----

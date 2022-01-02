@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://xml.di.uminho.pt/report2007" xmlns:report="http://xml.di.uminho.pt/report2007" xmlns:p="http://xml.di.uminho.pt/paragraph2007">
+    <xs:import namespace="http://xml.di.uminho.pt/paragraph2007" schemaLocation="paragraph.xsd"/>
+    <xs:element name="report">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="frontmatter">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="title" type="xs:string"> </xs:element>
+                            <xs:element name="subtitle" type="xs:string" minOccurs="0"> </xs:element>
+                            <xs:element name="authors">
+                                <xs:complexType>
+                                    <xs:sequence maxOccurs="1">
+                                        <xs:element name="author" maxOccurs="unbounded">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="name" type="xs:string"> </xs:element>
+                                                    <xs:element name="nident" type="xs:string" minOccurs="0"> </xs:element>
+                                                    <xs:element name="email" type="xs:string" minOccurs="0"> </xs:element>
+                                                    <xs:element name="url" minOccurs="0" type="xs:string"> </xs:element>
+                                                    <xs:element name="affil" minOccurs="0" type="xs:string"> </xs:element>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="dates">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="date" maxOccurs="unbounded">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="value" type="xs:date"> </xs:element>
+                                                    <xs:element name="description" type="xs:string"> </xs:element>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="instituition" type="xs:string" minOccurs="0"> </xs:element>
+                            <xs:element name="keywords">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="kw" maxOccurs="unbounded" type="xs:string"> </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="abstract">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element maxOccurs="unbounded" ref="p:p"> </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="acknowledgements" minOccurs="0">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element maxOccurs="unbounded" ref="p:p"> </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="toc" minOccurs="0"> </xs:element>
+                            <xs:element name="lof" minOccurs="0"> </xs:element>
+                            <xs:element minOccurs="0" name="lot"> </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+                <xs:element name="body">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="chapter" maxOccurs="unbounded">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="title"> </xs:element>
+                                        <xs:choice maxOccurs="unbounded">
+                                            <xs:element ref="p:p"> </xs:element>
+                                            <xs:group ref="report:float"> </xs:group>
+                                            <xs:group ref="report:list"> </xs:group>
+                                            <xs:element name="codeblock"> </xs:element>
+                                            <xs:element name="section">
+                                                <xs:complexType>
+                                                    <xs:sequence>
+                                                        <xs:element name="title"> </xs:element>
+                                                        <xs:choice maxOccurs="unbounded">
+                                                            <xs:element ref="p:p"> </xs:element>
+                                                            <xs:group ref="report:float"> </xs:group>
+                                                            <xs:group ref="report:list"> </xs:group>
+                                                            <xs:element name="codeblock"> </xs:element>
+                                                            <xs:element name="subsection">
+                                                                <xs:complexType>
+                                                                    <xs:sequence>
+                                                                        <xs:element name="title"> </xs:element>
+                                                                        <xs:choice maxOccurs="unbounded">
+                                                                            <xs:element ref="p:p"> </xs:element>
+                                                                            <xs:group ref="report:float"> </xs:group>
+                                                                            <xs:group ref="report:list"> </xs:group>
+                                                                            <xs:element name="codeblock"> </xs:element>
+                                                                            <xs:element name="subsubsection">
+                                                                                <xs:complexType>
+                                                                                    <xs:sequence>
+                                                                                        <xs:element name="title"> </xs:element>
+                                                                                        <xs:choice maxOccurs="unbounded">
+                                                                                            <xs:element ref="p:p"> </xs:element>
+                                                                                            <xs:group ref="report:float"> </xs:group>
+                                                                                            <xs:group ref="report:list"> </xs:group>
+                                                                                            <xs:element name="codeblock"> </xs:element>
+                                                                                            <xs:element name="summary" type="report:Tsummary"> </xs:element>
+                                                                                        </xs:choice>
+                                                                                    </xs:sequence>
+                                                                                    <xs:attribute name="id" type="xs:ID"> </xs:attribute>
+                                                                                </xs:complexType>
+                                                                            </xs:element>
+                                                                            <xs:element name="summary" type="report:Tsummary"> </xs:element>
+                                                                        </xs:choice>
+                                                                    </xs:sequence>
+                                                                    <xs:attribute name="id" type="xs:ID"> </xs:attribute>
+                                                                </xs:complexType>
+                                                            </xs:element>
+                                                            <xs:element name="summary" type="report:Tsummary"> </xs:element>
+                                                        </xs:choice>
+                                                    </xs:sequence>
+                                                    <xs:attribute name="id" type="xs:ID"> </xs:attribute>
+                                                </xs:complexType>
+                                            </xs:element>
+                                            <xs:element name="summary" type="report:Tsummary"> </xs:element>
+                                        </xs:choice>
+                                    </xs:sequence>
+                                    <xs:attribute name="id" type="xs:ID"> </xs:attribute>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+                <xs:element name="backmatter">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="bibliography" minOccurs="0">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element maxOccurs="unbounded" name="bibitem">
+                                            <xs:complexType>
+                                                <xs:sequence>
+
+                                                    <xs:element name="citkey" type="xs:string"> </xs:element>
+                                                    <xs:element name="citation" type="xs:string"> </xs:element>
+                                                </xs:sequence>
+                                                <xs:attribute name="type" use="required"> </xs:attribute>
+                                                <xs:attribute name="id" type="xs:ID" use="required"> </xs:attribute>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="glossary" minOccurs="0"> </xs:element>
+                            <xs:element name="appendix" minOccurs="0" maxOccurs="unbounded"> </xs:element>
+                            <xs:element name="index" minOccurs="0"> </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:group name="list">
+        <xs:choice>
+            <xs:element name="ulist">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="item" minOccurs="1" maxOccurs="unbounded">
+                            <xs:complexType mixed="true">
+                                <xs:choice maxOccurs="unbounded" minOccurs="0">
+                                    <xs:element ref="p:p"> </xs:element>
+                                    <xs:group ref="report:float"> </xs:group>
+                                    <xs:group ref="report:list"> </xs:group>
+                                    <xs:element name="codeblock" type="xs:string"> </xs:element>
+                                    <xs:group ref="p:free"> </xs:group>
+                                </xs:choice>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="olist">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="item" maxOccurs="unbounded" minOccurs="1">
+                            <xs:complexType mixed="true">
+                                <xs:choice maxOccurs="unbounded" minOccurs="0">
+                                    <xs:element ref="p:p"> </xs:element>
+                                    <xs:group ref="report:float"> </xs:group>
+                                    <xs:group ref="report:list"> </xs:group>
+                                    <xs:element name="codeblock" type="xs:string"> </xs:element>
+                                    <xs:group ref="p:free"> </xs:group>
+                                </xs:choice>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="dlist">
+                <xs:complexType>
+                    <xs:sequence maxOccurs="unbounded">
+                        <xs:element name="dt" type="xs:string"> </xs:element>
+                        <xs:element name="dd">
+                            <xs:complexType mixed="true">
+                                <xs:choice maxOccurs="unbounded" minOccurs="0">
+                                    <xs:element ref="p:p"> </xs:element>
+                                    <xs:group ref="report:float"> </xs:group>
+                                    <xs:group ref="report:list"> </xs:group>
+                                    <xs:element name="codeblock" type="xs:string"> </xs:element>
+                                    <xs:group ref="p:free"> </xs:group>
+                                </xs:choice>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:choice>
+    </xs:group>
+    <xs:group name="float" id="float">
+        <xs:choice>
+            <xs:element name="table">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="caption" type="xs:string"> </xs:element>
+                        <xs:element name="line" maxOccurs="unbounded">
+                            <xs:complexType>
+                                <xs:sequence>
+                                    <xs:element name="cell" maxOccurs="unbounded">
+                                        <xs:complexType mixed="true">
+                                            <xs:choice minOccurs="0" maxOccurs="unbounded">
+                                                <xs:group ref="report:float"> </xs:group>
+                                                <xs:element ref="p:p"> </xs:element>
+                                                <xs:group ref="report:list"> </xs:group>
+                                                <xs:group ref="p:free"> </xs:group>
+                                                <xs:element name="codeblock"> </xs:element>
+                                            </xs:choice>
+                                        </xs:complexType>
+                                    </xs:element>
+                                </xs:sequence>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                    <xs:attribute name="id" type="xs:ID"> </xs:attribute>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="figure">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="caption" type="xs:string"> </xs:element>
+                        <xs:element name="graphic">
+                            <xs:complexType>
+                                <xs:attribute name="path" use="required" type="xs:string"> </xs:attribute>
+                                <xs:attribute name="format" use="optional" type="report:Tformat"> </xs:attribute>
+                                <xs:attribute name="width" type="xs:string"> </xs:attribute>
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                    <xs:attribute name="id" type="xs:ID"> </xs:attribute>
+                </xs:complexType>
+            </xs:element>
+        </xs:choice>
+    </xs:group>
+    <xs:simpleType name="Tformat">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="gif"> </xs:enumeration>
+            <xs:enumeration value="jpg"> </xs:enumeration>
+            <xs:enumeration value="png"> </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:complexType name="Tsummary">
+        <xs:choice maxOccurs="unbounded" minOccurs="0">
+            <xs:element ref="p:p"> </xs:element>
+            <xs:group ref="report:list"> </xs:group>
+            <xs:group ref="report:float"> </xs:group>
+        </xs:choice>
+    </xs:complexType>
+    <xs:annotation>
+        <xs:documentation>
+            Created: 12-11-2007 by PED2007
+            Updated: 19-11-2007
+                - added support for tables
+            Updated: 09-12-2007
+                - corrected minor bugs in table model
+        </xs:documentation>
+    </xs:annotation>
+</xs:schema>

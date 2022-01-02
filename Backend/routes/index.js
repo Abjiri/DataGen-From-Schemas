@@ -23,20 +23,24 @@ router.post('/xml_schema', (req, res) => {
 
     let model = converter.convertXSD(data.xsd, data.simpleTypes, data.complexTypes, req.body.settings)
 
-    fs.writeFileSync('./output/model.txt', model, function (err) {
-      if (err) return console.log(err)
+    try {
+      fs.writeFileSync('./output/model.txt', model)
       console.log('Modelo DataGen guardado no ficheiro model.txt!')
-    });
+    }
+    catch(err) { console.log(err) }
 
     const formData = new FormData()
     formData.append('xml_declaration', data.xml_declaration)
-    formData.append('model', fs.readFileSync('./output/model.txt', "utf8"), {
+    formData.append('model', fs.createReadStream('./output/model.txt'), {
       filename: "model.txt",
       contentType: "text/plain"
     })
-
-    //https://datagen.di.uminho.pt/api/datagen/xml
-    axios.post("http://localhost:12080/api/datagen/dfs", formData, {headers: formData.getHeaders()})
+    
+    axios.post("http://localhost:12080/api/datagen/dfs", formData, {
+      headers: formData.getHeaders(),
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
+    })
       .then(data => res.status(201).jsonp(data.data))
       .catch(err => {console.log("catch"); res.status(201).jsonp(err)})
 
