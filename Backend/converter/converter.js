@@ -112,7 +112,7 @@ function parseElement(el, depth, keys, schemaElem) {
    
    for (let i = 0; i < (recursiv.element[name] <= 4 ? occurs : 0); i++) {
       // converte o valor do elemento para string DSL
-      let parsed = parseElementAux(el, depth, keys)
+      let parsed = parseElementAux(el, depth)
 
       if (!("ref" in el.attrs)) {
          // completa a string DSL com a chave e formatação
@@ -129,7 +129,7 @@ function parseElement(el, depth, keys, schemaElem) {
    return {elem_str, occurs, keys}
 }
 
-function parseElementAux(el, depth, keys) {
+function parseElementAux(el, depth) {
    let attrs = el.attrs
 
    // parsing dos atributos -----
@@ -351,12 +351,15 @@ function parseChoice(el, depth, keys) {
    // escolher um dos filhos um nº aleatório de vezes, entre os limites dos atributos max/minOccurs
    for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {
       // usar a primitiva or para fazer exclusividade mútua
-      str += `${indent(depth++)}or() {\n`
+      let new_str = `${indent(depth++)}or() {\n`
 
-      let parsed = parseCT_child_content(el.element, str, el.content, depth, keys)
+      let parsed = parseCT_child_content(el.element, new_str, el.content, depth, keys)
       keys = parsed.keys
 
-      str = parsed.str.slice(0, -2) + `\n${indent(--depth)}},\n`
+      if (parsed.str != new_str) {
+         new_str = parsed.str.slice(0, -2) + `\n${indent(--depth)}},\n`
+         str += new_str
+      }
    }
 
    return {str: str.slice(0, -2), keys}
