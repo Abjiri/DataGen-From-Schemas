@@ -29,6 +29,7 @@ router.post('/xml_schema', (req, res) => {
     });
 
     const formData = new FormData()
+    formData.append('xml_declaration', data.xml_declaration)
     formData.append('model', fs.readFileSync('./output/model.txt', "utf8"), {
       filename: "model.txt",
       contentType: "text/plain"

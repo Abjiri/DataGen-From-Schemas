@@ -508,7 +508,7 @@
   }
 }
 
-DSL_text = ws XML_declaration ws xsd:schema ws comments { return {xsd, simpleTypes, complexTypes, unbounded_min} }
+DSL_text = ws dec:XML_declaration ws xsd:schema ws comments { return {xml_declaration: dec, xsd, simpleTypes, complexTypes, unbounded_min} }
 
 ws "whitespace" = [ \t\n\r]*
 ws2 = [ \t\n\r]+
@@ -516,7 +516,7 @@ ws2 = [ \t\n\r]+
 
 // ----- Declaração XML -----
 
-XML_declaration = comments "<?xml" XML_version XML_encoding? XML_standalone? ws '?>'
+XML_declaration = comments dec:$("<?xml" XML_version XML_encoding? XML_standalone? ws '?>') {return dec}
 
 XML_version = ws2 "version" ws "=" ws q1:QM "1.0" q2:QM &{return checkQM(q1,q2,null,null)}
 
