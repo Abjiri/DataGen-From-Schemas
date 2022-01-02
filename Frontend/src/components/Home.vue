@@ -10,9 +10,14 @@
                     <input class="btn btn-primary float-left" type="button" value="Gerar" @click="generate"/>
                 </div>
               <div class="input-group-prepend ">
-                <span class="input-group-text" id="basic-addon1">Limite unbounded:</span>
+                <span class="input-group-text" id="basic-addon1">Unbounded:</span>
               </div>
               <input type="text" class="form-control" id="unbounded_value" value="10">
+              &nbsp;&nbsp;&nbsp;
+              <div class="input-group-prepend ">
+                <span class="input-group-text" id="basic-addon1">Recursividade:</span>
+              </div>
+              <input type="text" class="form-control" id="recursiv_value" value="3">
             </div>
           </div>
         </div>
@@ -103,8 +108,11 @@ export default {
   methods: {
     onCmCodeChange(newCode) { this.input = newCode },
     async generate() {
-      let unbounded = parseInt(document.getElementById('unbounded_value').value)
-      let {data} = await axios.post('http://localhost:3000/xml_schema/', {xsd: this.input, unbounded})
+      let UNBOUNDED = parseInt(document.getElementById('unbounded_value').value)
+      let RECURSIV = parseInt(document.getElementById('recursiv_value').value)
+
+      let settings = {UNBOUNDED, RECURSIV}
+      let {data} = await axios.post('http://localhost:3000/xml_schema/', {xsd: this.input, settings})
       
       if (typeof data == "string") this.output = data
       else this.output = "ERRO!!\n\n" + data.message

@@ -15,13 +15,13 @@ router.post('/xml_schema', (req, res) => {
     //console.log(JSON.stringify(data))
     
     for (let i = 0; i < data.unbounded_min; i++) {
-      if (data.unbounded_min[i] > req.body.unbounded) {
+      if (data.unbounded_min[i] > req.body.settings.UNBOUNDED) {
         let message = `Um elemento na schema tem minOccurs='${data.unbounded_min[i]}' e maxOccurs='unbounded', o que é inválido porque o máximo de repetições geráveis está definido como '${req.body.unbounded}'.`
         return res.status(201).jsonp({message})
       }
     }
 
-    let model = converter.convertXSD(data.xsd, data.simpleTypes, data.complexTypes, req.body.unbounded)
+    let model = converter.convertXSD(data.xsd, data.simpleTypes, data.complexTypes, req.body.settings)
 
     fs.writeFileSync('./output/model.txt', model, function (err) {
       if (err) return console.log(err)

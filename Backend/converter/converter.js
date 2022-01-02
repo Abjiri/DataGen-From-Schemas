@@ -4,10 +4,8 @@ let default_prefix = null
 let xsd_content = []
 let simpleTypes = {}
 let complexTypes = {}
-let unbounded = 0
-
 let recursiv = {element: {}, complexType: {}, group: {}}
-let MAX_RECURSIV = 5
+let settings = {}
 
 /* nr de elementos que vão ser criados como objetos temporariamente na DSL com uma chave especial 
 e convertidos posteriormente para a forma original na tradução JSON-XML do DataGen */
@@ -64,10 +62,10 @@ function normalizeName(name, end_prefix) {
 }
 
 
-function convertXSD(xsd, st, ct, unbounded_value) {
+function convertXSD(xsd, st, ct, max_settings) {
    let str = "<!LANGUAGE pt>\n{\n"
    let depth = 1
-   unbounded = unbounded_value
+   settings = max_settings
    
    // variáveis globais
    default_prefix = xsd.prefix
@@ -107,7 +105,7 @@ function parseElement(el, depth, keys, schemaElem) {
    // é desnecessário para elementos de schema, que são únicos, mas é para simplificar
    if (!(name in keys)) keys[name] = 1
 
-   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
+   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = settings.UNBOUNDED
    let occurs = schemaElem ? 1 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
 
    // atualizar o mapa de recursividade deste elemento
@@ -119,10 +117,10 @@ function parseElement(el, depth, keys, schemaElem) {
       if (el.attrs.type in recursiv.complexType) recursiv.complexType[el.attrs.type]++
       else recursiv.complexType[el.attrs.type] = 1
 
-      if (recursiv.complexType[el.attrs.type] > MAX_RECURSIV) occurs = 0
+      if (recursiv.complexType[el.attrs.type] > settings.RECURSIV) occurs = 0
    }
    
-   for (let i = 0; i < (recursiv.element[name] > MAX_RECURSIV ? 0 : occurs); i++) {
+   for (let i = 0; i < (recursiv.element[name] > settings.RECURSIV ? 0 : occurs); i++) {
       // converte o valor do elemento para string DSL
       let parsed = parseElementAux(el, depth)
 
@@ -288,13 +286,13 @@ function parseGroup(el, depth, keys) {
    if ("ref" in el.attrs) return parseRef(el, depth, keys)
 
    let str = ""
-   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
+   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = settings.UNBOUNDED
 
    // atualizar o mapa de recursividade deste grupo
    if (el.attrs.name in recursiv.group) recursiv.group[el.attrs.name]++
    else recursiv.group[el.attrs.name] = 1
 
-   let occurs = recursiv.group[el.attrs.name] > MAX_RECURSIV ? 0 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
+   let occurs = recursiv.group[el.attrs.name] > settings.RECURSIV ? 0 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
 
    // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
    for (let i = 0; i < occurs; i++) {
@@ -357,7 +355,7 @@ function parseAll(el, depth, keys) {
 
 function parseSequence(el, depth, keys) {
    let str = ""
-   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
+   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = settings.UNBOUNDED
 
    // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
    for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {
@@ -372,7 +370,7 @@ function parseSequence(el, depth, keys) {
 
 function parseChoice(el, depth, keys) {
    let str = ""
-   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
+   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = settings.UNBOUNDED
 
    // escolher um dos filhos um nº aleatório de vezes, entre os limites dos atributos max/minOccurs
    for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {
