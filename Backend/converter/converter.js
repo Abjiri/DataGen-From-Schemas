@@ -99,6 +99,9 @@ function parseElement(el, depth, keys, schemaElem) {
    let elem_str = ""
    let name = el.attrs.name
 
+   // função auxiliar para verificar se o elemento referencia um tipo complexo
+   let complexTypeRef = attrs => "type" in attrs && xsd_content.some(x => x.element == "complexType" && x.attrs.name == attrs.type)
+
    // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
    // numerar as suas ocorrências para não dar overwrite na geração do DataGen
    // é desnecessário para elementos de schema, que são únicos, mas é para simplificar
@@ -110,6 +113,14 @@ function parseElement(el, depth, keys, schemaElem) {
    // atualizar o mapa de recursividade deste elemento
    if (name in recursiv.element) recursiv.element[name]++
    else recursiv.element[name] = 1
+
+   // se o elemento tiver um tipo complexo por referência
+   if (complexTypeRef(el.attrs)) {
+      if (el.attrs.type in recursiv.complexType) recursiv.complexType[el.attrs.type]++
+      else recursiv.complexType[el.attrs.type] = 1
+
+      if (recursiv.complexType[el.attrs.type] > MAX_RECURSIV) occurs = 0
+   }
    
    for (let i = 0; i < (recursiv.element[name] > MAX_RECURSIV ? 0 : occurs); i++) {
       // converte o valor do elemento para string DSL
@@ -127,6 +138,8 @@ function parseElement(el, depth, keys, schemaElem) {
    }
 
    recursiv.element[name]--
+   if (complexTypeRef(el.attrs)) recursiv.complexType[el.attrs.type]--
+   
    return {elem_str, occurs, keys}
 }
 
