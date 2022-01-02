@@ -6,7 +6,8 @@ let simpleTypes = {}
 let complexTypes = {}
 let unbounded = 0
 
-let recursiv = {element: {}, complexType: {}}
+let recursiv = {element: {}, complexType: {}, group: {}}
+let MAX_RECURSIV = 5
 
 /* nr de elementos que vão ser criados como objetos temporariamente na DSL com uma chave especial 
 e convertidos posteriormente para a forma original na tradução JSON-XML do DataGen */
@@ -93,7 +94,7 @@ function convertXSD(xsd, st, ct, unbounded_value) {
 
 // schemaElem indica se é o <element> é uma coleção ou não
 function parseElement(el, depth, keys, schemaElem) {
-   if ("ref" in el.attrs) return parseElementRef(el, depth, keys)
+   if ("ref" in el.attrs) return parseRef(el, depth, keys)
 
    let elem_str = ""
    let name = el.attrs.name
@@ -110,7 +111,7 @@ function parseElement(el, depth, keys, schemaElem) {
    if (name in recursiv.element) recursiv.element[name]++
    else recursiv.element[name] = 1
    
-   for (let i = 0; i < (recursiv.element[name] <= 4 ? occurs : 0); i++) {
+   for (let i = 0; i < (recursiv.element[name] > MAX_RECURSIV ? 0 : occurs); i++) {
       // converte o valor do elemento para string DSL
       let parsed = parseElementAux(el, depth)
 
@@ -148,13 +149,16 @@ function parseElementAux(el, depth) {
    else return parseComplexType(type, depth)
 }
 
-function parseElementRef(el, depth, keys) {
-   let ref_el = xsd_content.filter(x => x.element == "element" && x.attrs.name == el.attrs.ref)[0]
+function parseRef(el, depth, keys) {
+   let ref_el = xsd_content.filter(x => x.element == el.element && x.attrs.name == el.attrs.ref)[0]
 
    ref_el.attrs = {...ref_el.attrs, ...el.attrs}
    delete ref_el.attrs.ref
 
-   return parseElement(ref_el, depth, keys, false)
+   switch (el.element) {
+      case "element": return parseElement(ref_el, depth, keys, false)
+      case "group": return parseGroup(ref_el, depth, keys)
+   }
 }
 
 function parseType(type, depth) {
@@ -268,11 +272,19 @@ function parseExtensionSC(el, depth) {
 }
 
 function parseGroup(el, depth, keys) {
+   if ("ref" in el.attrs) return parseRef(el, depth, keys)
+
    let str = ""
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
 
+   // atualizar o mapa de recursividade deste grupo
+   if (el.attrs.name in recursiv.group) recursiv.group[el.attrs.name]++
+   else recursiv.group[el.attrs.name] = 1
+
+   let occurs = recursiv.group[el.attrs.name] > MAX_RECURSIV ? 0 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
+
    // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
-   for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {
+   for (let i = 0; i < occurs; i++) {
       let parsed
 
       switch (el.content[0].element) {
@@ -293,6 +305,7 @@ function parseGroup(el, depth, keys) {
       keys = parsed.keys
    }
    
+   recursiv.group[el.attrs.name]--
    return {str, keys}
 }
 
