@@ -6,6 +6,8 @@ let simpleTypes = {}
 let complexTypes = {}
 let unbounded = 0
 
+let recursiv = {element: {}, complexType: {}}
+
 /* nr de elementos que vão ser criados como objetos temporariamente na DSL com uma chave especial 
 e convertidos posteriormente para a forma original na tradução JSON-XML do DataGen */
 let temp_structs = 0
@@ -91,32 +93,39 @@ function convertXSD(xsd, st, ct, unbounded_value) {
 
 // schemaElem indica se é o <element> é uma coleção ou não
 function parseElement(el, depth, keys, schemaElem) {
+   if ("ref" in el.attrs) return parseElementRef(el, depth, keys)
+
    let elem_str = ""
+   let name = el.attrs.name
 
    // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
    // numerar as suas ocorrências para não dar overwrite na geração do DataGen
    // é desnecessário para elementos de schema, que são únicos, mas é para simplificar
-   if (!(el.attrs.name in keys)) keys[el.attrs.name] = 1
+   if (!(name in keys)) keys[name] = 1
 
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = unbounded
    let occurs = schemaElem ? 1 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
+
+   // atualizar o mapa de recursividade deste elemento
+   if (name in recursiv.element) recursiv.element[name]++
+   else recursiv.element[name] = 1
    
-   for (let i = 0; i < occurs; i++) {
+   for (let i = 0; i < (recursiv.element[name] <= 4 ? occurs : 0); i++) {
       // converte o valor do elemento para string DSL
       let parsed = parseElementAux(el, depth, keys)
 
       if (!("ref" in el.attrs)) {
          // completa a string DSL com a chave e formatação
          if (!parsed.length) parsed = "{ DFS_EMPTY_XML: true }"
-         elem_str += normalizeName(el.attrs.name, keys[el.attrs.name]++ + "__") + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
+         elem_str += normalizeName(name, keys[name]++ + "__") + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
       }
       else {
-         //console.log(parsed.elem_str)
          elem_str = parsed.elem_str
          keys = parsed.keys
       }
    }
-   
+
+   recursiv.element[name]--
    return {elem_str, occurs, keys}
 }
 
@@ -132,19 +141,20 @@ function parseElementAux(el, depth, keys) {
    if ("fixed" in attrs) return '"' + attrs.fixed + '"'
    if ("default" in attrs && Math.random() > 0.4) return '"' + attrs.default + '"'
    if ("type" in attrs) return parseType(attrs.type, depth)
-   if ("ref" in attrs) {
-      let ref_el = xsd_content.filter(x => x.element == "element" && x.attrs.name == attrs.ref)[0]
-
-      ref_el.attrs = {...ref_el.attrs, ...attrs}
-      delete ref_el.attrs.ref
-
-      return parseElement(ref_el, depth, keys, false)
-   }
 
    // parsing do conteúdo -----
    let type = el.content[0]
    if (type.element == "simpleType") return `${parseSimpleType(type)}` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
    else return parseComplexType(type, depth)
+}
+
+function parseElementRef(el, depth, keys) {
+   let ref_el = xsd_content.filter(x => x.element == "element" && x.attrs.name == el.attrs.ref)[0]
+
+   ref_el.attrs = {...ref_el.attrs, ...el.attrs}
+   delete ref_el.attrs.ref
+
+   return parseElement(ref_el, depth, keys, false)
 }
 
 function parseType(type, depth) {
