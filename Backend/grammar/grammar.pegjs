@@ -461,6 +461,10 @@
 
     if ("ref" in attrs && content.some(x => x.element != "annotation"))
       return error("Se um elemento <attributeGroup> tiver o atributo 'ref' especificado, o seu conteúdo só pode ser, no máximo, um elemento <annotation>!")
+
+    if (atRoot() && content.some(x => x.element == "attributeGroup" && "ref" in x.attrs && x.attrs.ref == attrs.name))
+      return error(`Definições circulares detetadas para o grupo de atributos '${attrs.name}'! Um <attributeGroup> não se pode incluir recursivamente na sua própria hierarquia!`)
+      
     return true
   }
 
