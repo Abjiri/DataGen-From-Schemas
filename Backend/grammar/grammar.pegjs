@@ -25,6 +25,8 @@
   let unbounded_min = []
   // boleanos para saber se está a ser processado um <element> (para a função validationQueue.type), um <group> ou um <redefine>
   let curr = {element: false, group: false, redefine: false}
+  // nomes dos atributos presentes dentro de cada attributeGroup correspondente
+  let attrGroups = {}
   
   
   // Variáveis relacionadas com tipos ------------------------------
@@ -550,7 +552,7 @@ XML_standalone_value = "yes" / "no"
 // ----- <schema> -----
 
 schema = comments (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
-         &{return check_stQueue() && check_ctQueue() && checkQueue()} {
+         &{return checkError(attrsAPI.check_repeatedAttributes(attrGroups)) && check_stQueue() && check_ctQueue() && checkQueue()} {
   content = complete_refs(content, content, "schema")
 
   let complexKeys = Object.keys(complexTypes)
@@ -725,8 +727,10 @@ attribute_content = c:(annotation? simpleType?) {return cleanContent(c)}
 
 attributeGroup = comments prefix:open_XSD_el el_name:"attributeGroup" attrs:attributeGroup_attrs ws
                  close:(merged_close / openEl content:attributeGroup_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
-                 &{return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)} 
-                 {return {element: el_name, attrs, content: close.content}}
+                 &{return check_elTags(el_name, prefix, close) && check_attrGroupMutex(attrs, close.content) && check_repeatedNames(el_name, /attribute(Group)?/, close.content)} {
+  if ("name" in attrs) attrGroups = attrsAPI.addAttrGroup(attrGroups, attrs.name, el_name, close.content)
+  return {element: el_name, attrs, content: close.content}
+}
 
 attributeGroup_attrs = el:(elem_id / attrGroup_name / attrGroup_ref)* {return checkError(attrsAPI.check_attributeElAttrs(el, "attributeGroup", schema_depth))}
 
@@ -1009,6 +1013,7 @@ complexType = comments prefix:open_XSD_el el_name:"complexType" attrs:complexTyp
   else if ("name" in attrs) complexTypes[attrs.name] = complexType
 
   if (!--type_depth) current_type = null
+  attrGroups = attrsAPI.addAttrGroup(attrGroups, "name" in attrs ? attrs.name : null, el_name, complexType.content)
   return complexType
 }
 

@@ -243,6 +243,52 @@ function check_constrFacetAttrs(name, arr) {
     return data(attrs)
 }
 
+// adicionar um grupo novo à estrutura attrGroups
+function addAttrGroup(attrGroups, name, el, content) {
+  if (name === null) {
+    let i = 1
+    while (i in attrGroups) {i++}
+    name = i
+  }
+
+  attrGroups[name] = {element: el, attrs: [], groups: []}
+  content.forEach(x => {
+    if (x.element == "attribute") attrGroups[name].attrs.push(x.attrs["name" in x.attrs ? "name" : "ref"])
+    if (x.element == "attributeGroup") attrGroups[name].groups.push(x.attrs.ref)
+  })
+
+  return attrGroups
+}
+
+// verificar que um elemento com atributos não tem atributos repetidos
+function check_repeatedAttributes(attrGroups) {
+  let parsed_groups = {}
+
+  while (Object.keys(attrGroups).length > 0) {
+    let next_groups = {}
+    for (let x in attrGroups) {
+      if (attrGroups[x].groups.every(g => g in parsed_groups)) next_groups[x] = attrGroups[x]
+    }
+    
+    for (let x in next_groups) {
+      let new_attrs = next_groups[x].groups.map(g => parsed_groups[g]).flat()
+      let repeated = next_groups[x].attrs.filter(v => new_attrs.includes(v))
+      
+      if (repeated.length > 0) {
+        let name = parseInt(x) === NaN ? `'${x}'` : "novo"
+        return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o <${attrGroups[x].element}> ${name} tem atributos repetidos com os nomes '${repeated.join("', '")}'.`)
+      }
+      else {
+        next_groups[x].attrs = next_groups[x].attrs.concat(new_attrs)
+        parsed_groups[x] = next_groups[x].attrs
+        delete attrGroups[x]
+      }
+    }
+  }
+
+  return data(true)
+}
+
 module.exports = {
   defaultOccurs,
   check_schemaAttrs,
@@ -252,5 +298,7 @@ module.exports = {
   check_groupAttrs,
   check_notationAttrs,
   check_localTypeAttrs,
-  check_constrFacetAttrs
+  check_constrFacetAttrs,
+  addAttrGroup,
+  check_repeatedAttributes
 }
