@@ -11,6 +11,9 @@ const getAttrs = objArr => objArr === null ? {} : cleanContent(objArr).reduce(((
 // verificar se o array de atributos tem algum atributo repetido
 const check_repeatedAttrs = (arr, attrs, el_name) => (Object.keys(attrs).length == arr.length) ? attrs : error(`O elemento <${el_name}> não pode possuir atributos repetidos!`)
 
+// mensagem de erro para quando o atributo 'name'/'ref' é obrigatório
+let required_err = (attr, el, kind) => `O atributo 'name' é requirido num elemento <${el}>${kind}! O nome do elemento deve obeceder à expressão regular [a-zA-Z_][a-zA-Z0-9.\-_]*, podendo também conter caracteres não-ASCII${attr=="ref" ? ", e pode ter ainda um prefixo de schema (que deve ter a mesma semântica)" : ""}.`
+
 // adicionar os valores default dos atributos "max/minOccurs"
 function defaultOccurs(attrs, curr) {
   // os filhos de um group (all/choice/sequence) não podem possuir estes atributos, logo não colocar por default
@@ -82,7 +85,7 @@ function check_elemAttrs(arr, schema_depth, curr) {
     if ("ref" in attrs) return error("O atributo 'ref' é proibido num elemento <element> de schema!")
     if ("maxOccurs" in attrs) return error("O atributo 'maxOccurs' é proibido num elemento <element> de schema!")
     if ("minOccurs" in attrs) return error("O atributo 'minOccurs' é proibido num elemento <element> de schema!")
-    if (!("name" in attrs)) return error("O atributo 'name' é requirido num elemento <element> de schema!")
+    if (!("name" in attrs)) return error(required_err("name", "element", " de schema"))
   }
   // elementos aninhados
   else if ("final" in attrs) return error("O atributo 'final' é proibido num elemento <element> local!")
@@ -118,8 +121,8 @@ function check_keyrefAttrs(arr) {
   if ("error" in attrs) return attrs
 
   // atributos requiridos
-  if (!("name" in attrs)) return error(`No elemento <keyref> é requirido o atributo 'name'!`)
-  if (!("refer" in attrs) && !("system" in attrs)) return error(`No elemento <keyref> é requirido o atributo 'refer'!`)
+  if (!("name" in attrs)) return error(required_err("name", "keyref", ""))
+  if (!("refer" in attrs)) return error(`No elemento <keyref> é requirido o atributo 'refer'!`)
 
   return data(attrs)
 }
@@ -132,11 +135,11 @@ function check_attributeElAttrs(arr, el_name, schema_depth) {
   // restrições relativas à profundidade dos elementos
   if (!schema_depth) { // elementos da schema
     if ("ref" in attrs) return error(`O atributo 'ref' é proibido num elemento <${el_name}> de schema!`)
-    if (!("name" in attrs)) return error(`O atributo 'name' é requirido num elemento <${el_name}> de schema!`)
+    if (!("name" in attrs)) return error(required_err("name", el_name, " de schema"))
   }
   else {
     if (el_name == "attributeGroup") {
-      if (!("ref" in attrs)) return error(`O atributo 'ref' é requirido num elemento <${el_name}> local!`)
+      if (!("ref" in attrs)) return error(required_err("ref", el_name, " local"))
       if ("name" in attrs) return error(`O atributo 'name' é proibido num elemento <${el_name}> local!`)
     }
   }
@@ -168,10 +171,10 @@ function check_groupAttrs(arr, schema_depth, curr) {
     if ("ref" in attrs) return error("O atributo 'ref' é proibido num elemento <group> de schema!")
     if ("minOccurs" in attrs) return error("O atributo 'minOccurs' é proibido num elemento <group> de schema!")
     if ("maxOccurs" in attrs) return error("O atributo 'maxOccurs' é proibido num elemento <group> de schema!")
-    if (!("name" in attrs)) return error("O atributo 'name' é requirido num elemento <group> de schema!")
+    if (!("name" in attrs)) return error(required_err("name", "group", " de schema"))
   }
   else {
-    if (!("ref" in attrs)) return error("O atributo 'ref' é requirido num elemento <group> local!")
+    if (!("ref" in attrs)) return error(required_err("ref", "group", " local"))
     if ("name" in attrs) return error("O atributo 'name' é proibido num elemento <group> local!")
   }
 
@@ -185,7 +188,7 @@ function check_notationAttrs(arr) {
   if ("error" in attrs) return attrs
 
   // atributos requiridos
-  if (!("name" in attrs)) return error(`No elemento <notation> é requirido o atributo 'name'!`)
+  if (!("name" in attrs)) return error(required_err("name", "notation", ""))
   if (!("public" in attrs) && !("system" in attrs)) return error(`No elemento <notation> é requirido pelo menos um dos atributos 'public' e 'system'!`)
 
   return data(attrs)
@@ -197,7 +200,7 @@ function check_localTypeAttrs(arr, el_name, schema_depth, curr) {
   if ("error" in attrs) return attrs
   
   // restrições relativas à profundidade dos elementos
-  if (!schema_depth && !("name" in attrs)) return error(`O atributo 'name' é requirido se o pai do elemento <${el_name}> for o <schema>!`)
+  if (!schema_depth && !("name" in attrs)) return error(required_err("name", el_name, " de schema"))
   if (schema_depth && !curr.redefine && "name" in attrs) return error(`O atributo 'name' é proibido se o pai do elemento <${el_name}> não for o <schema>!`)
 
   if (el_name == "complexType") {
