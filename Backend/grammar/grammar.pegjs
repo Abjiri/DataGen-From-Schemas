@@ -55,7 +55,7 @@
   // verificar se não foi definido um prefixo para a schema
   const noSchemaPrefix = () => default_prefix === null
   // verificar se o prefixo usado foi declarado na definição da schema
-  const existsPrefix = p => prefixes.includes(p) ? p : error("Este prefixo não foi declarado no início da schema!")
+  const existsPrefix = p => prefixes.includes(p) ? p : error(`O prefixo '${p}' não foi declarado no início da schema!`)
   // verificar se as aspas/apóstrofes são fechados consistentemente - se sim, retorna o objeto {attr,val} em que foram usadas (ou apenas true, para as invocações da declaração XML)
   const checkQM = (q1,q2,attr,val) => q1 === q2 ? (attr===null ? true : {attr,val}) : error("Deve encapsular o valor em aspas ou em apóstrofes. Não pode usar um de cada!")
   // executar todas as invocações guardadas na queue para ver se são válidas
@@ -1149,8 +1149,12 @@ string = ('"'[^"]*'"' / "'"[^']*"'") {return text().slice(1,-1)}
 
 NCName = $(([a-zA-Z_]/[^\x00-\x7F])([a-zA-Z0-9.\-_]/[^\x00-\x7F])*)
 QName = prefix:(p:NCName ":" {return existsPrefix(p)})? name:NCName {
-  if (prefix === null || target_prefixes.includes(prefix)) return name
-  return prefix + ":" + name
+  if (prefix === null) return name
+  else {
+    if (target_prefixes.includes(prefix)) return name
+    else if (prefix == default_prefix) return error(`'${`${prefix}:${name}`}' não é um elemento válido da XMLSchema! Não estará a tentar referenciar um elemento local?`)
+    else return error(`Esta aplicação suporta apenas referências à XMLSchema (prefixo '${default_prefix}') e à schema local${target_prefixes.length>0 ? ` (prefixo '${target_prefixes[0]}', opcional)` : ""}, por isso não consegue resolver a referência '${`${prefix}:${name}`}'!`)
+  }
 }
 
 ID = id:NCName &{return validateID(id)} {ids.push(id); return id}
@@ -1171,13 +1175,13 @@ processContents_values = "lax" / "skip" / "strict"
 constrFacet_values = $("length" / ("max"/"min")"Length" / ("max"/"min")("Ex"/"In")"clusive" / ("total"/"fraction")"Digits" / "whiteSpace" / "pattern" / "enumeration")
 
 // um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
-type_value = $(p:NCName ":" name:NCName &{return existsPrefix(p)} {queue.push({attr: "type", args: [name, p, any_type, current_type, Object.values(curr).some(x=>x)]})} // se for o prefixo desta schema, verifica-se que o tipo existe; se não for, assume-se que sim
-             / name:NCName {queue.push({attr: "type", args: [name, null, any_type, current_type, Object.values(curr).some(x=>x)]})})
-             
-type_value2 = type:(p:NCName ":" name:NCName &{return existsPrefix(p)} {return {p: target_prefixes.includes(p) ? null : p, name}}
-                  / name:NCName {return {p: null, name}}) {
+type_value = type:(p:NCName ":" name:NCName &{return existsPrefix(p)} {
+  if (!target_prefixes.includes(p) && p != default_prefix) return error(`Esta aplicação suporta apenas referências à XMLSchema (prefixo '${default_prefix}') e à schema local${target_prefixes.length>0 ? ` (prefixo '${target_prefixes[0]}', opcional)` : ""}, por isso não consegue resolver a referência '${`${p}:${name}`}'!`)
+  return {p: target_prefixes.includes(p) ? null : p, name}
+}
+              / name:NCName {return {p: null, name}}) {
   queue.push({attr: "type", args: [type.name, type.p, any_type, current_type, Object.values(curr).some(x=>x)]})
-  return ((type.p === null || target_prefixes.includes(type.p)) ? "" : (type.prefix + ":")) + type.name
+  return ((type.p === null || target_prefixes.includes(type.p)) ? "" : (type.p + ":")) + type.name
 }
 
 
