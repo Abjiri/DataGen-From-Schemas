@@ -272,7 +272,7 @@
       }
           
       if (prefix == null || prefix == default_prefix) {
-        if (!existsLocalType(type)) return error(`Tem de referenciar um ${error_msg[curr_any_type]} válido!`)
+        if (!existsLocalType(type)) return error(`O tipo '${prefix===null ? "" : prefix+":"}${type}' não existe! Tem de referenciar um ${error_msg[curr_any_type]} válido!`)
         if (!curr_el && type === curr_type) return error(`Definições circulares detetadas para o tipo '${type}'! Isto significa que o '${type}' está contido na sua própria hierarquia, o que é um erro.`)
       }
       return true
