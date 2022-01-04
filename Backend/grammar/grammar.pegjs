@@ -186,18 +186,21 @@
     let parsedST = content => ["built_in_base","list","union"].some(y => y in content)
 
     let simple_types = Object.keys(simpleTypes)
+    let init_extensions = ct_queue.extension.length
 
     // remover da queue de extensões os complexType com base em simpleTypes
     ct_queue.extension = ct_queue.extension.filter(x => {
       let base = splitBase(getBase(x))
 
       if (simple_types.includes(base)) {
+        x.content[0].content[0].attrs.base = base
         if ("name" in x.attrs) complexTypes[x.attrs.name] = x
       }
       else return x
     })
     
     let parsed_types = simple_types.concat(Object.keys(complexTypes))
+    if (init_extensions > 0 && !ct_queue.extension.length) check_stQueue()
 
     while (ct_queue.extension.length > 0 || ct_queue.restriction.length > 0) {
       let e = ct_queue.extension.filter(x => parsed_types.includes(getBase(x)))
