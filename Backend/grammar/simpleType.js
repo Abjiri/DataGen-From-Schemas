@@ -21,12 +21,7 @@ let isObject = x => typeof x === 'object' && !Array.isArray(x) && x !== null
 
 // criar array com os nomes do tipos embutidos da XML Schema
 const built_in_types = simpleTypes => {
-  let types = []
-  for (let p in simpleTypes) {
-    if (["ENTITIES","IDREFS","NMTOKENS"].includes(p)) types.push(p)
-    else if (!["built_in_base","list","union"].some(x => x in simpleTypes[p])) types.push(p)
-  }
-  return types
+  return Object.keys(simpleTypes).filter(p => "XMLSchema" in simpleTypes[p])
 }
 
 // verificar se 2 strings são adjacentes em termos ASCII
@@ -145,12 +140,14 @@ function create_simpleTypes(default_prefix) {
   for (let i = 0; i < primitive_types.length; i++) {
     let x = primitive_types[i]
 
-    obj[x] = {content: [{
-      element: "whiteSpace",
-      attrs: {
-        value: x == "string" ? "preserve" : "collapse",
-        fixed: true
-      }
+    obj[x] = {
+      XMLSchema: true,
+      content: [{
+        element: "whiteSpace",
+        attrs: {
+          value: x == "string" ? "preserve" : "collapse",
+          fixed: true
+        }
     }]}
 
     if (x == "string") obj[x].content[0].attrs.fixed = false
@@ -188,12 +185,13 @@ function create_simpleTypes(default_prefix) {
   derivedTypes.map(x => {
     let new_content =  x[2].map(r => {return {element: r[0], attrs: {value: r[1], fixed: r[2]}}})
     let base_content = JSON.parse(JSON.stringify(obj[x[1]].content)) // constraining facets do tipo base
-    obj[x[0]] = {content: restrict2(x[0], {type: x[1], prefix: default_prefix}, base_content, new_content).data}
+    obj[x[0]] = {XMLSchema: true, content: restrict2(x[0], {type: x[1], prefix: default_prefix}, base_content, new_content).data}
   })
   
   // colocar os tipos derivados por lista no objeto
   let list_types = [["ENTITIES","ENTITY"],["IDREFS","IDREF"],["NMTOKENS","NMTOKEN"]]
   list_types.forEach(x => {
+    obj[x[0]].XMLSchema = true
     obj[x[0]].content = [{built_in_base: x[1], content: obj[x[0]].content}]
     obj[x[0]].list = [{ element: "minLength", attrs: {value: 1} }]
   })

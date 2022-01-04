@@ -46,6 +46,8 @@
   let any_type = "BSC"
   // número de simpleTypes sem nome criados na schema, para guardar referência na st_queue
   let noNameST = 0
+  // correspondência entre o nome que o user dá a tipos locais com o mesmo nome de tipos embutidos e os nomes com que são guardados em execução
+  let modTypeNames = {}
 
   
   // Funções auxiliares gerais ------------------------------
@@ -267,12 +269,12 @@
       if (curr_any_type == "BS" && type in complexTypes) return error(`Neste local, só pode referenciar um ${error_msg[curr_any_type]}, mas está a tentar referenciar o complexType '${type}'!`)
 
       if (curr_any_type != "C" && stAPI.built_in_types(simpleTypes).includes(type)) {
-        return prefix === default_prefix ? true : error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.
-                                                        ${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
+        if (prefix === default_prefix || (prefix === null && existsLocalType(curr_any_type, type))) return true
+        return error(`Para especificar um dos tipos embutidos de schemas XML, tem de o prefixar com o prefixo do namespace desta schema.${(noSchemaPrefix() && prefix !== null) ? " Neste caso, como não declarou um prefixo para o namespace da schema, não deve prefixar o tipo também." : ""}`)
       }
           
       if (prefix == null || prefix == default_prefix) {
-        if (!existsLocalType(type)) return error(`O tipo '${prefix===null ? "" : prefix+":"}${type}' não existe! Tem de referenciar um ${error_msg[curr_any_type]} válido!`)
+        if (!existsLocalType(curr_any_type, type)) return error(`O tipo '${prefix===null ? "" : prefix+":"}${type}' não existe! Tem de referenciar um ${error_msg[curr_any_type]} válido!`)
         if (!curr_el && type === curr_type) return error(`Definições circulares detetadas para o tipo '${type}'! Isto significa que o '${type}' está contido na sua própria hierarquia, o que é um erro.`)
       }
       return true
@@ -489,22 +491,29 @@
   // Funções auxiliares relacionadas com tipos ------------------------------
   
   // verificar se já existe algum tipo local com este nome
-  const existsLocalType = type => (any_type == "BSC" && Object.values(local_types).flat().includes(type)) || 
-                                  (any_type == "BS" && local_types.simpleType.includes(type)) || 
-                                  (any_type == "C" && local_types.complexType.includes(type))
+  const existsLocalType = (curr_any_type, type) => (curr_any_type == "BSC" && Object.values(local_types).flat().includes(type)) || 
+                                                   (curr_any_type == "BS" && local_types.simpleType.includes(type)) || 
+                                                   (curr_any_type == "C" && local_types.complexType.includes(type))
   // validar um elemento <union> - verificar que referencia algum tipo
   const validateUnion = (attrs,content) => ("memberTypes" in attrs ? attrs.memberTypes.length : 0) + content.filter(e => e.element === "simpleType").length > 0 ? true : 
                                            error(`Um elemento <union> deve ter o atributo 'memberTypes' não vazio e/ou pelo menos um elemento filho <simpleType>!`)
-  // validar o atributo base de um elemento <restriction> (simpleContent)
-  const validateBaseSC = base => (!local_types.complexType.includes(base) || local_types.simpleContent.includes(base)) ? true :
-                                  error("Num elemento <restriction> (simpleContent), para o atributo 'base' poder referenciar um <complexType>, o tipo desse elemento deve ser um tipo embutido, <simpleType> ou <simpleContent>!")
 
   // verificar se o nome do novo tipo já existe e adicioná-lo à lista de nomes respetiva caso seja único
   function newLocalType(name, kind) {
-    if (Object.values(local_types).flat().includes(name)) return error("Já existe um simpleType/complexType com este nome nesta schema!")
+    let local_names = Object.values(local_types).flat()
+    if (local_names.includes(name)) return error(`Já existe um simpleType/complexType com o nome '${name}' nesta schema!`)
     local_types[kind].push(name)
+
+    if (stAPI.built_in_types(simpleTypes).includes(name) || Object.values(modTypeNames).includes(name)) {
+      let i = 2
+      while (local_names.includes(name+i)) {i++}
+
+      modTypeNames[name] = name + i
+      name = name + i
+    }
+
     current_type = name
-    return true
+    return name
   }
 
   // validar o tipo de um elemento de derivação - tem de ter ou o atributo de referência ou um elemento filho <simpleType>
@@ -767,7 +776,7 @@ simpleType = comments prefix:open_XSD_el el_name:$("simpleType" {any_type = "BS"
 simpleType_attrs = el:(simpleType_final / elem_id / simpleType_name)* {return checkError(attrsAPI.check_localTypeAttrs(el, "simpleType", schema_depth, curr))}
 
 simpleType_final = ws2 attr:"final" ws "=" q1:QMo val:simpleType_final_values q2:QMc                       {return checkQM(q1,q2,attr,val)}
-simpleType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return newLocalType(val,"simpleType")} {return checkQM(q1,q2,attr,val)}
+simpleType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc    {val = newLocalType(val,"simpleType"); return checkQM(q1,q2,attr,val)}
 
 simpleType_content = c:(annotation? (restrictionST / list / union)) {any_type = "BSC"; return cleanContent(c)}
 
@@ -1005,7 +1014,7 @@ complexType_attrs = el:(elem_abstract / complexType_block / elem_final / elem_id
 
 complexType_block = ws2 attr:"block" ws "=" q1:QMo val:elem_final_values q2:QMc                              {return checkQM(q1,q2,attr,val)}
 complex_mixed = ws2 attr:"mixed" ws "=" q1:QMo val:boolean q2:QMc                                            {return checkQM(q1,q2,attr,val)}
-complexType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc &{return newLocalType(val,"complexType")} {return checkQM(q1,q2,attr,val)}
+complexType_name = ws2 attr:"name" ws "=" q1:QMo val:NCName q2:QMc    {val = newLocalType(val,"complexType"); return checkQM(q1,q2,attr,val)}
 
 complexType_content = c:(annotation? (simpleContent / complexContent / ((all / choiceOrSequence / group)? attributes))) {return cleanContent(c.flat(2))}
 
@@ -1177,10 +1186,13 @@ constrFacet_values = $("length" / ("max"/"min")"Length" / ("max"/"min")("Ex"/"In
 // um tipo válido tem de ser um dos seguintes: tipo built-in (com ou sem prefixo da schema); tipo de outra schema importada, com o prefixo respetivo; simple/complexType local
 type_value = type:(p:NCName ":" name:NCName &{return existsPrefix(p)} {
   if (!target_prefixes.includes(p) && p != default_prefix) return error(`Esta aplicação suporta apenas referências à XMLSchema (prefixo '${default_prefix}') e à schema local${target_prefixes.length>0 ? ` (prefixo '${target_prefixes[0]}', opcional)` : ""}, por isso não consegue resolver a referência '${`${p}:${name}`}'!`)
+  queue.push({attr: "type", args: [name, p, any_type, current_type, Object.values(curr).some(x=>x)]})
   return {p: target_prefixes.includes(p) ? null : p, name}
-}
-              / name:NCName {return {p: null, name}}) {
-  queue.push({attr: "type", args: [type.name, type.p, any_type, current_type, Object.values(curr).some(x=>x)]})
+} / name:NCName {
+  queue.push({attr: "type", args: [name, null, any_type, current_type, Object.values(curr).some(x=>x)]})
+  if (name in modTypeNames) name = modTypeNames[name]
+  return {p: null, name}
+}) {
   return ((type.p === null || target_prefixes.includes(type.p)) ? "" : (type.p + ":")) + type.name
 }
 
