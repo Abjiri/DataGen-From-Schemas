@@ -215,7 +215,7 @@ module.exports = /*
         },
         peg$c54 = function(attrs) {return checkError(attrsAPI.check_schemaAttrs(attrs, default_prefix))},
         peg$c55 = function(attrs) {
-          let targetIndex = attrs.indexOf(x => x.attr == "targetNamespace")
+          let targetIndex = attrs.findIndex(x => x.attr == "targetNamespace")
           if (targetIndex > -1) target_prefixes = attrs.filter(x => x.attr == "namespace" && x.val == attrs[targetIndex].val).map(x => x.prefix)
           return attrs
         },

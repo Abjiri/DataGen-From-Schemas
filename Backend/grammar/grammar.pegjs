@@ -558,7 +558,7 @@ close_schema = prefix:close_XSD_prefix "schema" ws ">" ws &{
 
 schema_attrs = attrs:(formDefault / blockDefault / finalDefault / xmlns / elem_id / elem_lang / schema_version / targetNamespace)+
               &{return checkError(attrsAPI.check_schemaAttrs(attrs, default_prefix))} {
-  let targetIndex = attrs.indexOf(x => x.attr == "targetNamespace")
+  let targetIndex = attrs.findIndex(x => x.attr == "targetNamespace")
   if (targetIndex > -1) target_prefixes = attrs.filter(x => x.attr == "namespace" && x.val == attrs[targetIndex].val).map(x => x.prefix)
   return attrs
 }
