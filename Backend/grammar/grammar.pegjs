@@ -307,14 +307,6 @@
             
         // não entrar em loop infinito se for uma ref recursiva
         if (!recursiveElement(elem.attrs.name, elem.element, elem.content)) {
-          if (elem.element == "attributeGroup") {
-            let getAttrNames = arr => arr.filter(x => x.element == "attribute").map(x => x.attrs["name" in x.attrs ? "name" : "ref"])
-            let attr_names = getAttrNames(content).concat(getAttrNames(elem.content))
-            
-            // verificar se há nomes repetidos para cada tipo de elemento
-            let duplicates = attr_names.filter((item, index) => attr_names.indexOf(item) !== index)
-            if (duplicates.length > 0) return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o elemento <${parent}> tem mais do que um <attribute> com o nome '${duplicates[0]}'.`)
-          }
           // copiar os seus atributos e o conteúdo
           content[i].attrs = {...elem.attrs, ...content[i].attrs}
           content[i].content = elem.content
@@ -948,8 +940,10 @@ restrictionSC_content = c:(restrictionST_content attributes) {return cleanConten
 
 restrictionCC = comments prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-                &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)}
-                {return {element: el_name, attrs, content: close.content}}
+                &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)} {
+  attrGroups = attrsAPI.addAttrGroup(attrGroups, null, "restriction (complexContent)", close.content)
+  return {element: el_name, attrs, content: close.content}
+}
                      
 CC_son_content = c:(annotation? (all / choiceOrSequence / group)? attributes) {return cleanContent(c.flat())}
 
@@ -968,8 +962,10 @@ extensionSC_content = c:(annotation? attributes) {return cleanContent(c.flat())}
 
 extensionCC = comments prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws 
               close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-              &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)}
-              {return {element: el_name, attrs, content: close.content}}
+              &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)} {
+  attrGroups = attrsAPI.addAttrGroup(attrGroups, null, "extension (complexContent)", close.content)
+  return {element: el_name, attrs, content: close.content}
+}
 
 
 // ----- <minExclusive> <minInclusive> <maxExclusive> <maxInclusive> <totalDigits <fractionDigits> <length> <minLength> <maxLength> <enumeration> <whiteSpace> <pattern> -----
