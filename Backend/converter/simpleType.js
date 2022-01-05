@@ -5,53 +5,47 @@ const RandExp = require('randexp');
 // verifica se a base é um dos tipos cujo valor é gerado por função anónima do DataGen
 // tecnicamente "ENTITY","ID","IDREF","Name","NCName","NMTOKEN" também são, mas vão ser sempre gerados a partir do pattern e não na função anónima do DataGen
 let isGenType = base => ["base64Binary","date","dateTime","duration","gMonthDay","gYearMonth","hexBinary","normalizedString","NOTATION","QName","string","token"].includes(base)
-
 let isPredetermined = content => "enumeration" in content || "pattern" in content
-
 let randomize = (min,max) => Math.floor(Math.random() * ((max+1) - min) + min)
+let indent = depth => '\t'.repeat(depth)
 
-function string(base, length) {
+function string(base, length, depth) {
    return `gen => {
-      let base = "${base}", length = ${length}
-
-      let str = ""
-      for (let i = 0; i < length; i++) {
-         let arr = (["Name","NCName","ENTITY","ID","IDREF","NOTATION","QName"].includes(base) && !i) ? "alphabet" : "alphanumerical"
-         let space = ["normalizedString","string","token"].includes(base) && i>0 && i != length-1
-
-         if (arr == "alphabet") str += gen.random(gen.letter())
-         else {
-            if (base == "base64Binary") {
-               if (Math.random() < 1/64) str += gen.random("+", "/")
-               else str += gen.random(gen.letter(), gen.integerOfSize(1))
-            }
-            else if (space) {
-               if (Math.random() < 1/63) str += " "
-               else str += gen.random(gen.letter(), gen.integerOfSize(1))
-            }
-            else str += gen.random(gen.letter(), gen.integerOfSize(1))
-         }
-      }
-      return str
-   }`
+${indent(depth)}let str = "", base = "${base}", length = ${length}
+${indent(depth)}for (let i = 0; i < length; i++) {
+${indent(depth+1)}let arr = (["Name","NCName","ENTITY","ID","IDREF","NOTATION","QName"].includes(base) && !i) ? "alphabet" : "alphanumerical"
+${indent(depth+1)}let space = ["normalizedString","string","token"].includes(base) && i>0 && i != length-1
+${indent(depth+1)}if (arr == "alphabet") str += gen.random(gen.letter())
+${indent(depth+1)}else {
+${indent(depth+2)}if (base == "base64Binary") {
+${indent(depth+3)}if (Math.random() < 1/64) str += gen.random("+", "/")
+${indent(depth+3)}else str += gen.random(gen.letter(), gen.integerOfSize(1))
+${indent(depth+2)}}
+${indent(depth+2)}else if (space) {
+${indent(depth+3)}if (Math.random() < 1/63) str += " "
+${indent(depth+3)}else str += gen.random(gen.letter(), gen.integerOfSize(1))
+${indent(depth+2)}}
+${indent(depth+2)}else str += gen.random(gen.letter(), gen.integerOfSize(1))
+${indent(depth+1)}}
+${indent(depth)}}
+${indent(depth)}return str
+${indent(depth-1)}}`
 }
 
-function hexBinary(length) {
+function hexBinary(length, depth) {
    return `gen => {
-      let hexChars = [...Array(60).keys()].map(i => i + 20)
-      hexChars = hexChars.concat(["2","3","4","5","6","7"].map(x => ["A","B","C","D","E","F"].map(y => x+y)).flat())
-      hexChars.pop()
-
-      let str = ""
-      for (let i = 0; i < ${length}; i++) str += gen.random(...hexChars)
-      return str
-   }`
+${indent(depth)}let str = "", hexChars = [...Array(60).keys()].map(i => i + 20)
+${indent(depth)}hexChars = hexChars.concat(["2","3","4","5","6","7"].map(x => ["A","B","C","D","E","F"].map(y => x+y)).flat())
+${indent(depth)}hexChars.pop()
+${indent(depth)}for (let i = 0; i < ${length}; i++) str += gen.random(...hexChars)
+${indent(depth)}return str
+${indent(depth-1)}}`
 }
 
 
 // Funções de tradução de tipos embutidos ----------
 
-function parseStringType(c, base, has) { 
+function parseStringType(c, base, has, depth) { 
    let length = 0
 
    if (has("length")) length = c.length
@@ -68,7 +62,7 @@ function parseStringType(c, base, has) {
       length = randomize(min, max)
    }
    
-   return (base == "hexBinary" ? hexBinary(length) : string(base, length))
+   return (base == "hexBinary" ? hexBinary(length, depth) : string(base, length, depth))
 }
  
 function parseNumberType(c, base, has) {
@@ -131,7 +125,7 @@ function parseSimpleGType(c, base, has) {
     return `${"-".repeat(hyphens[base])}{{formattedInteger(${min},${max},${pad},"")}}`
 }
  
-function parseComplexGType(c, base, list, has) {
+function parseComplexGType(c, base, list, has, depth) {
    let aux = {
       gMonthDay: (x,offset) => {
          let day = parseInt(x.substring(5,7)), month = parseInt(x.substring(2,4))
@@ -184,40 +178,32 @@ function parseComplexGType(c, base, list, has) {
    else if (min == null) min = base == "gMonthDay" ? {month: 1, day: 1} : {year: max.year - 100, month: 1}
 
    return `gen => {
-      let str = ""
-      let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
-
-      let base = "${base}", max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
-
-      let left = base == "gMonthDay" ? "month" : "year"
-      let right = base == "gMonthDay" ? "day" : "month"
-      
-      let right_lower_bound = {
-         month: x => 12,
-         day: x => {
-            if ([1,3,5,7,8,10,12].includes(x)) return 31
-            if ([4,6,9,11].includes(x)) return 30
-            return 29
-         }
-      }
-
-      for (let i = 0; i < randomize(${list.max},${list.min}); i++) {
-         let right_val, left_val = randomize(max[left], min[left])
-         
-         if (left_val == max[left]) right_val = randomize(max[right], 1)
-         else if (left_val == min[left]) right_val = randomize(min[right], right_lower_bound[right](left_val))
-         else right_val = randomize(1, right_lower_bound[right](left_val))
-
-         let hyphens = {gMonthDay: 2, gYearMonth: 0}
-         let pad = base == "gMonthDay" ? [2,2] : [4,2]
-         str += "-".repeat(hyphens[base]) + left_val.toString().padStart(pad[0],"0") + "-" + right_val.toString().padStart(pad[1],"0") + " "
-      }
-
-      return str.slice(0,-1)
-   }`
+${indent(depth)}let str = "", base = "${base}", max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
+${indent(depth)}let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
+${indent(depth)}let left = base == "gMonthDay" ? "month" : "year"
+${indent(depth)}let right = base == "gMonthDay" ? "day" : "month"
+${indent(depth)}let right_lower_bound = {
+${indent(depth+1)}month: x => 12,
+${indent(depth+1)}day: x => {
+${indent(depth+2)}if ([1,3,5,7,8,10,12].includes(x)) return 31
+${indent(depth+2)}if ([4,6,9,11].includes(x)) return 30
+${indent(depth+2)}return 29
+${indent(depth+1)}}
+${indent(depth)}}
+${indent(depth)}for (let i = 0; i < randomize(${list.max},${list.min}); i++) {
+${indent(depth+1)}let right_val, left_val = randomize(max[left], min[left])
+${indent(depth+1)}if (left_val == max[left]) right_val = randomize(max[right], 1)
+${indent(depth+1)}else if (left_val == min[left]) right_val = randomize(min[right], right_lower_bound[right](left_val))
+${indent(depth+1)}else right_val = randomize(1, right_lower_bound[right](left_val))
+${indent(depth+1)}let hyphens = {gMonthDay: 2, gYearMonth: 0}
+${indent(depth+1)}let pad = base == "gMonthDay" ? [2,2] : [4,2]
+${indent(depth+1)}str += "-".repeat(hyphens[base]) + left_val.toString().padStart(pad[0],"0") + "-" + right_val.toString().padStart(pad[1],"0") + " "
+${indent(depth)}}
+${indent(depth)}return str.slice(0,-1)
+${indent(depth-1)}}`
 }
  
-function parseDateTimeType(c, base, list, has) {
+function parseDateTimeType(c, base, list, has, depth) {
    let aux = {
       date: (str, offset) => {
          let neg = str[0] == "-"
@@ -311,30 +297,30 @@ function parseDateTimeType(c, base, list, has) {
          let year = parseInt(maxDate[2])
          min = {date: [`${maxDate[0]}/${maxDate[1]}/${year > 1000 ? (year-1000).toString().padStart(4,"0") : "0000"}`, "00:00:00"], neg: false}
       }
- 
+
       return `gen => {
-         let str = ""
-         let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
+${indent(depth)}let str = ""
+${indent(depth)}let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
          
-         for (let i = 0; i < randomize(${list.max},${list.min}); i++) {
-            let base = "${base}", max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
-            let time, date = max !== null ? gen.date(min.date[0], max.date[0], "YYYY-MM-DD") : gen.date(min.date[0], "YYYY-MM-DD")
+${indent(depth)}for (let i = 0; i < randomize(${list.max},${list.min}); i++) {
+${indent(depth+2)}let base = "${base}", max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
+${indent(depth+2)}let time, date = max !== null ? gen.date(min.date[0], max.date[0], "YYYY-MM-DD") : gen.date(min.date[0], "YYYY-MM-DD")
             
-            if (max !== null) max.date[0] = max.date[0].split("/").reverse().join("-")
-            min.date[0] = min.date[0].split("/").reverse().join("-")
+${indent(depth+2)}if (max !== null) max.date[0] = max.date[0].split("/").reverse().join("-")
+${indent(depth+2)}min.date[0] = min.date[0].split("/").reverse().join("-")
             
-            if (base == "dateTime") {             
-               if (max !== null && date == max.date[0]) time = gen.time("hh:mm:ss", 24, false, max.date[1], "23:59:59")
-               else if (date == min.date[0]) time = gen.time("hh:mm:ss", 24, false, "00:00:00", min.date[1])
-               else time = gen.time("hh:mm:ss", 24, false)
-            }
+${indent(depth+2)}if (base == "dateTime") {             
+${indent(depth+3)}if (max !== null && date == max.date[0]) time = gen.time("hh:mm:ss", 24, false, max.date[1], "23:59:59")
+${indent(depth+3)}else if (date == min.date[0]) time = gen.time("hh:mm:ss", 24, false, "00:00:00", min.date[1])
+${indent(depth+3)}else time = gen.time("hh:mm:ss", 24, false)
+${indent(depth+2)}}
 
-            if ((max !== null && date > max.date[0]) || date < min.date[0]) date = "-" + date
-            str += date + (base == "dateTime" ? ("T" + time) : "") + " "
-         }
+${indent(depth+2)}if ((max !== null && date > max.date[0]) || date < min.date[0]) date = "-" + date
+${indent(depth+2)}str += date + (base == "dateTime" ? ("T" + time) : "") + " "
+${indent(depth)}}
 
-         return str.slice(0,-1)
-      }`
+${indent(depth)}return str.slice(0,-1)
+${indent(depth-1)}}`
    }
  
    if (base == "time") {
@@ -355,47 +341,37 @@ function parseDateTimeType(c, base, list, has) {
       }
       
       return `gen => {
-         let str = ""
-         let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
-
-         let max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
-
-         for (let i = 0; i < randomize(${list.max},${list.min}); i++) {
-            let duration = "P", units = ["Y","M","D","H","M",".","S"], maxPossible = [0, 12, 30, 24, 59, 59, 999]
-            let fstEq = false, rand
-
-            for (let i = 0; i < max.length; i++) {
-               if (!fstEq) {
-                  if (max[i] == min[i]) {
-                     if (max[i] != 0) duration += max[i] + units[i]
-                     else if (units[i] == ".") duration += units[i]
-                  }
-                  else {
-                     fstEq = true
-                     rand = {new: randomize(max[i], min[i]), inf: min[i], sup: max[i]}
-
-                     let sum = arr => arr.reduce((c,a) => c+a, 0)
-                     if (max[0] == 1 && !min[0] && !sum(max.slice(1)) && !sum(min.slice(1))) rand.new = 0
-                     if (rand.new != 0) duration += rand.new + units[i]
-                  }
-               }
-               else {
-                  let next_part
-
-                  if (rand.new == rand.inf) next_part = randomize(maxPossible[i], min[i])
-                  else if (rand.new == rand.sup) next_part = randomize(max[i], 0)
-                  else next_part = randomize(maxPossible[i], 0)
-
-                  if (next_part > 0) duration += next_part + units[i]
-               }
-               if (i == 2) duration += "T"
-            }
-
-            str += duration + " "
-         }
-
-         return str.slice(0,-1)
-      }`
+${indent(depth)}let str = "", max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
+${indent(depth)}let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
+${indent(depth)}for (let i = 0; i < randomize(${list.max},${list.min}); i++) {
+${indent(depth+1)}let fstEq = false, rand, duration = "P", units = ["Y","M","D","H","M",".","S"], maxPossible = [0, 12, 30, 24, 59, 59, 999]
+${indent(depth+1)}for (let i = 0; i < max.length; i++) {
+${indent(depth+2)}if (!fstEq) {
+${indent(depth+3)}if (max[i] == min[i]) {
+${indent(depth+4)}if (max[i] != 0) duration += max[i] + units[i]
+${indent(depth+4)}else if (units[i] == ".") duration += units[i]
+${indent(depth+3)}}
+${indent(depth+3)}else {
+${indent(depth+4)}fstEq = true
+${indent(depth+4)}rand = {new: randomize(max[i], min[i]), inf: min[i], sup: max[i]}
+${indent(depth+4)}let sum = arr => arr.reduce((c,a) => c+a, 0)
+${indent(depth+4)}if (max[0] == 1 && !min[0] && !sum(max.slice(1)) && !sum(min.slice(1))) rand.new = 0
+${indent(depth+4)}if (rand.new != 0) duration += rand.new + units[i]
+${indent(depth+3)}}
+${indent(depth+2)}}
+${indent(depth+2)}else {
+${indent(depth+3)}let next_part
+${indent(depth+3)}if (rand.new == rand.inf) next_part = randomize(maxPossible[i], min[i])
+${indent(depth+3)}else if (rand.new == rand.sup) next_part = randomize(max[i], 0)
+${indent(depth+3)}else next_part = randomize(maxPossible[i], 0)
+${indent(depth+3)}if (next_part > 0) duration += next_part + units[i]
+${indent(depth+2)}}
+${indent(depth+2)}if (i == 2) duration += "T"
+${indent(depth+1)}}
+${indent(depth+1)}str += duration + " "
+${indent(depth)}}
+${indent(depth)}return str.slice(0,-1)
+${indent(depth-1)}}`
    }
 }
  
@@ -426,7 +402,7 @@ function parseLanguage(c, has) {
     return `{{random("${langs.join('","')}")}}`
 }
 
-function parseRestriction(content, base, list) {
+function parseRestriction(content, base, list, depth) {
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in content
 
@@ -445,24 +421,24 @@ function parseRestriction(content, base, list) {
 
       case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "Name": case "NCName": 
       case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
-         return parseStringType(content, base, has)
+         return parseStringType(content, base, has, depth)
 
       case "byte": case "decimal": case "double": case "float": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger":
       case "nonPositiveInteger": case "positiveInteger": case "short": case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
          return parseNumberType(content, base, has)
 
       case "date": case "dateTime": case "duration": case "time":
-         return parseDateTimeType(content, base, list, has)
+         return parseDateTimeType(content, base, list, has, depth)
 
       case "gDay": case "gMonth": case "gYear":
          return parseSimpleGType(content, base, has)
 
       case "gMonthDay": case "gYearMonth":
-         return parseComplexGType(content, base, list, has)
+         return parseComplexGType(content, base, list, has, depth)
    }
 }
 
-function parseList(st) {
+function parseList(st, depth) {
    st.content.map((x,i) => st.content[i].content = st.content[i].content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {}))
 
    let list = st.list.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
@@ -480,7 +456,7 @@ function parseList(st) {
    else if (min === null) min = min-5 > 0 ? min-5 : 0
 
    if (st.content.length == 1) {
-      let elem = parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min})
+      let elem = parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min}, depth)
 
       if (isGenType(st.content[0].built_in_base) && !isPredetermined(st.content[0].content)) return elem
       else {
@@ -489,37 +465,37 @@ function parseList(st) {
       }
    }
    else {
-      str = "gen => {\nlet str = ''\n\n"
+      str = `gen => {\n${indent(depth)}let str = ''\n`
       let type_len = st.content.length - 1
 
       for (let i = 0; i < randomize(min,max); i++) {
          let type_ind = randomize(0, type_len)
-         let elem = parseRestriction(st.content[type_ind].content, st.content[type_ind].built_in_base, {max: 1, min: 1})
+         let elem = parseRestriction(st.content[type_ind].content, st.content[type_ind].built_in_base, {max: 1, min: 1}, depth+1)
 
          if (isGenType(st.content[type_ind].built_in_base) && !isPredetermined(st.content[type_ind].content)) {
-            str += `let f${i} = ()${elem.slice(3)}\n`
-            str += `str += f${i}() + " "\n\n`
+            str += `${indent(depth)}let f${i} = ()${elem.slice(3)}\n`
+            str += `${indent(depth)}str += f${i}() + " "\n`
          }
-         else str += `str += ${elem.startsWith("{{") ? `gen.${elem.slice(2,-2)}` : `"${elem}"`} + " "\n\n`
+         else str += `${indent(depth)}str += ${elem.startsWith("{{") ? `gen.${elem.slice(2,-2)}` : `"${elem}"`} + " "\n`
       }
       
-      return str + "return str.slice(0,-1)\n}"
+      return str + `${indent(depth)}return str.slice(0,-1)\n${indent(depth-1)}}`
    }
 }
 
-function parseSimpleType(st) {
+function parseSimpleType(st, depth) {
    // derivação por lista
-   if ("list" in st) return parseList(st)
+   if ("list" in st) return parseList(st, depth+1)
 
    // derivação por união
    if ("union" in st) {
-      st.union = st.union.map(x => parseSimpleType(x))
+      st.union = st.union.map(x => parseSimpleType(x, depth))
       return st.union[randomize(0, st.union.length-1)]
    }
 
    // derivação por restrição
    let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
-   let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1})
+   let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1}, depth+1)
    return (isGenType(st.built_in_base) && !isPredetermined(content)) ? parsed : ("'" + parsed + "'")
 }
 

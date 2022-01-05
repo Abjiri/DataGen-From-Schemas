@@ -158,7 +158,7 @@ function parseElementAux(el, depth) {
 
    // parsing do conteúdo -----
    let type = el.content[0]
-   if (type.element == "simpleType") return `${parseSimpleType(type)}` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
+   if (type.element == "simpleType") return `${parseSimpleType(type, depth)}` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
    else return parseComplexType(type, depth)
 }
 
@@ -181,7 +181,7 @@ function parseType(type, depth) {
       let st = simpleTypes[type.type]
    
       if (!["built_in_base","list","union"].some(x => x in st)) st.built_in_base = type.base
-      return parseSimpleType(st)
+      return parseSimpleType(st, depth)
    }
    return parseComplexType(complexTypes[type.type], depth)
 }
@@ -215,7 +215,7 @@ function parseComplexType(el, depth) {
       if (!("mixed_type" in el)) str += `${indent(depth+1)}DFS_MIXED_DEFAULT: true${empty ? "" : ",\n"}`
       else {
          let base_st = el.mixed_type.content[0]
-         let mixed_content = parseSimpleType({built_in_base: base_st.built_in_base, content: base_st.content})
+         let mixed_content = parseSimpleType({built_in_base: base_st.built_in_base, content: base_st.content}, depth)
          str += `${indent(depth+1)}DFS_MIXED_RESTRICTED: ${mixed_content}${empty ? "" : ",\n"}`
       }
    }
@@ -243,8 +243,8 @@ function parseAttribute(el, depth) {
       return indent(depth) + str + qm + value + qm
    }
 
-   if ("type" in attrs) value = parseType(attrs.type)
-   else value = parseSimpleType(el.content[0])
+   if ("type" in attrs) value = parseType(attrs.type, depth)
+   else value = parseSimpleType(el.content[0], depth)
 
    return indent(depth) + str + value
 }
@@ -274,7 +274,7 @@ function parseExtensionSC(el, depth) {
    let parsed = {attrs: "", content: ""}
 
    parsed.attrs = parseAttributeGroup(el, depth)
-   parsed.content = parseType(el.attrs.base)
+   parsed.content = parseType(el.attrs.base, depth)
 
    let str = "{\n"
    if (parsed.attrs.length > 0) {

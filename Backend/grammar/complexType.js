@@ -158,6 +158,9 @@ function restrictSC(new_ct, simpleTypes, complexTypes, default_prefix) {
 
     // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
     if (!union) {
+        /* let new_attrs = new_ct.content[0].content[0].content.filter(x => x.element.includes("attribute"))
+        new_ct.content[0].content[0].content = new_ct.content[0].content[0].content.filter(x => !x.element.includes("attribute")) */
+
         let facets = stAPI.check_restrictionST_facets(base, new_ct.content[0].content[0].content, default_prefix, simpleTypes)
         if ("error" in facets) return facets
         return data({built_in_base: base, content: facets.data})
