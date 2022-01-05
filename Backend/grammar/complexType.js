@@ -247,6 +247,7 @@ function validateRestrictionCC(base_el, new_el, err_msg) {
 
         if ("type" in base_el.attrs && !("type" in new_el.attrs)) new_el.attrs.type = base_el.attrs.type
         if (base_el.content.length > 0 && !new_el.content.length) new_el.content = base_el.content
+        if ("type" in new_el.attrs && new_el.content.length > 0) delete new_el.attrs.type
     }
 
     if (base_el.element == "all") {

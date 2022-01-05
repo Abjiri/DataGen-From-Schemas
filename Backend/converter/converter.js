@@ -74,17 +74,19 @@ function convertXSD(xsd, st, ct, max_settings) {
    complexTypes = ct
 
    let elements = xsd.content.filter(x => x.element == "element")
-   //for (let i = 0; i < elements.length; i++) {
-      let {elem_str, _} = parseElement(elements[0], depth, {}, true)
-
-      if (elem_str.length > 0) {
-         str += indent(depth) + elem_str
-         //if (i < elements.length-1) str += ","
-         str += "\n"
-      }
-   //}
-
    if (!elements.length) str += indent(depth) + "DFS_EMPTY_XML: true\n"
+   else {
+      //for (let i = 0; i < elements.length; i++) {
+         let {elem_str, _} = parseElement(elements[0], depth, {}, true)
+
+         if (elem_str.length > 0) {
+            str += indent(depth) + elem_str
+            //if (i < elements.length-1) str += ","
+            str += "\n"
+         }
+      //}
+   }
+
 
    str += "}"
    return str
