@@ -1,4 +1,4 @@
-const e = require("express")
+const attrsAPI = require("./attrs")
 const stAPI = require("./simpleType")
 
 // Funções auxiliares ----------
@@ -20,7 +20,7 @@ function checkBaseSC(ct, base, complexTypes) {
 }
 
 // derivar um complexType por extensão de outro complexType
-function extend(new_ct, complexTypes) {
+function extend(new_ct, complexTypes, attrGroups) {
     let new_child = new_ct.content[0]
     let base = new_child.content[0].attrs.base
 
@@ -70,13 +70,23 @@ function extend(new_ct, complexTypes) {
     else {
         switch (base_ct.content[0].element) {
             case "all": case "choice": case "group": case "sequence":
+                // separar os atributos do novo CT do resto do conteúdo
                 let new_attrs = new_child.content[0].content.filter(x => x.element.includes("attribute"))
                 new_child.content[0].content = new_child.content[0].content.filter(x => !x.element.includes("attribute"))
+
+                // separar os atributos do CT base do resto do conteúdo
+                let base_attrs = base_ct.content.filter(x => x.element.includes("attribute"))
+                base_ct.content = base_ct.content.filter(x => !x.element.includes("attribute"))
+
+                // verificar que não há atributos repetidos entre os dois CTs
+                let checkAttrs = check_repeatedAttributes(new_ct.attrs, base_attrs, new_attrs, attrGroups)
+                if ("error" in checkAttrs) return checkAttrs
+                else attrGroups = checkAttrs.data
 
                 if (base_ct.content[0].element == "all" && new_child.content[0].content.length > 0) return error("Ao derivar um elemento <all> por extensão, apenas é possível adicionar atributos ao tipo!")
                 
                 base_ct.content[0].content = base_ct.content[0].content.concat(new_child.content[0].content)
-                new_ct.content = base_ct.content.concat(new_attrs)
+                new_ct.content = base_ct.content.concat(base_attrs).concat(new_attrs)
                 
                 break
             case "simpleContent":
@@ -90,7 +100,27 @@ function extend(new_ct, complexTypes) {
         }
     }
     
-    return data(new_ct)
+    return data({new_ct, attrGroups})
+}
+
+// verificar se há atributos com o mesmo nome no novo complexType e no complexType base
+function check_repeatedAttributes(ct_attrs, base_attrs, new_attrs, attrGroups) {
+    let name = "name" in ct_attrs ? `'${ct_attrs.name}'` : "novo"
+
+    let base_names = base_attrs.map(x => {return {element: x.element, name: x.attrs["name" in x.attrs ? "name" : "ref"]}})
+    let new_names = new_attrs.map(x => {return {element: x.element, name: x.attrs["name" in x.attrs ? "name" : "ref"]}})
+    
+    let repeated = base_names.filter(v => new_names.some(x => x.element == v.element && x.name == v.name))
+    if (repeated.length > 0) {
+        let repeated_attrs = repeated.filter(x => x.element == "attribute").map(x => x.name)
+        let repeated_groups = repeated.filter(x => x.element == "attributeGroup").map(x => x.name)
+        
+        if (repeated_attrs.length > 0) return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o <complexType> ${name} tem atributos repetidos com os nomes '${repeated_attrs.join("', '")}'.`)
+        if (repeated_groups.length > 0) return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, tanto o <complexType> ${name} como o seu tipo base referenciam os mesmos grupos de atributos '${repeated_groups.join("', '")}'.`)
+    }
+    else attrGroups = attrsAPI.addAttrGroup(attrGroups, "name" in ct_attrs ? ct_attrs.name : null, "complexType", base_attrs.concat(new_attrs))
+
+    return data(attrGroups)
 }
 
 // determinar o nome e prefixo de schema do tipo em questão e o nome da sua base embutida

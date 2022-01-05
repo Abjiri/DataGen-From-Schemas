@@ -1,5 +1,6 @@
 var createError = require('http-errors');
 var express = require('express');
+var bodyParser = require("body-parser");
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
@@ -12,6 +13,8 @@ app.use(cors());
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(bodyParser.json({limit: "100mb", parameterLimit: 100000000}));
+app.use(bodyParser.urlencoded({limit: '100mb', extended: true, parameterLimit: 100000000}));
 app.use(cookieParser());
 
 app.use('/', indexRouter);

@@ -226,7 +226,10 @@
       }
 
       e.map(x => {
-        let parsed = checkError(ctAPI.extend(x, complexTypes))
+        let parsed = checkError(ctAPI.extend(x, complexTypes, attrGroups))
+        attrGroups = parsed.attrGroups
+        parsed = parsed.new_ct
+
         if ("name" in x.attrs) {
           complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(parsed))
           parsed_types.push(x.attrs.name)
@@ -544,7 +547,7 @@ XML_standalone_value = "yes" / "no"
 // ----- <schema> -----
 
 schema = comments (p:open_XSD_el {default_prefix = p}) el_name:"schema" attrs:schema_attrs ws ">" ws content:schema_content close_schema
-         &{return checkError(attrsAPI.check_repeatedAttributes(attrGroups)) && check_stQueue() && check_ctQueue() && checkQueue()} {
+         &{return check_stQueue() && check_ctQueue() && checkError(attrsAPI.check_repeatedAttributes(attrGroups)) && checkQueue()} {
   content = complete_refs(content, content, "schema")
 
   let complexKeys = Object.keys(complexTypes)
@@ -583,7 +586,7 @@ schema_content = el:((redefine / include / import / annotation)* (((simpleType /
 
 include = comments prefix:open_XSD_el el_name:"include" attrs:schemaLocID_attrs ws close:(merged_close / ann_content)
           &{return check_elTags(el_name, prefix, close)}
-          {return {element: el_name, attrs, content: close.content}}
+          {return null} //{return {element: el_name, attrs, content: close.content}}
 
 schemaLocID_attrs = el:(schemaLocation elem_id? / elem_id schemaLocation?)? {return check_requiredAttr(getAttrs(el), "include", "schemaLocation")}
 
@@ -594,7 +597,7 @@ schemaLocation = ws2 attr:"schemaLocation" ws "=" ws val:string {return {attr, v
 
 import = comments prefix:open_XSD_el el_name:"import" attrs:import_attrs ws close:(merged_close / ann_content)
          &{return check_elTags(el_name, prefix, close)}
-         {return {element: el_name, attrs, content: close.content}}
+         {return null} //{return {element: el_name, attrs, content: close.content}}
 
 import_attrs = el:(import_namespace / elem_id / schemaLocation)* {return check_repeatedAttrs(el, getAttrs(el), "import")}
 
@@ -606,7 +609,7 @@ import_namespace = ws2 attr:"namespace" ws "=" ws val:string {return {attr, val}
 redefine = comments prefix:open_XSD_el el_name:$("redefine" {curr.redefine = true}) attrs:schemaLocID_attrs ws 
            close:(merged_close / openEl content:redefine_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
            &{return check_elTags(el_name, prefix, close)}
-           {curr.redefine = false; return {element: el_name, attrs, content: close.content}}
+           {curr.redefine = false; return null} //return {element: el_name, attrs, content: close.content}}
 
 redefine_content = c:(annotation / (simpleType / complexType / group / attributeGroup))* {return cleanContent(c)}
 
@@ -652,7 +655,7 @@ element_content = c:(annotation? (simpleType / complexType)? (keyOrUnique / keyr
 
 field = comments prefix:open_XSD_el el_name:"field" attrs:field_attrs ws close:(merged_close / ann_content)
         &{return check_elTags(el_name, prefix, close)}
-        {return {element: el_name, attrs, content: close.content}}
+        {return null} //{return {element: el_name, attrs, content: close.content}}
 
 field_attrs = attrs:(field_xpath elem_id? / elem_id field_xpath?)? {return check_requiredAttr(getAttrs(attrs), "field", "xpath")}
 
@@ -663,7 +666,7 @@ field_xpath = ws2 attr:"xpath" ws "=" q1:QMo val:fieldXPath q2:QMc {return check
 
 selector = comments prefix:open_XSD_el el_name:"selector" attrs:selector_attrs ws close:(merged_close / ann_content)
            &{return check_elTags(el_name, prefix, close)}
-           {return {element: el_name, attrs, content: close.content}}
+           {return null} //{return {element: el_name, attrs, content: close.content}}
 
 selector_attrs = attrs:(selector_xpath elem_id? / elem_id selector_xpath?)? {return check_requiredAttr(getAttrs(attrs), "selector", "xpath")}
 
@@ -676,7 +679,7 @@ keyOrUnique = comments prefix:open_XSD_el el_name:$("key"/"unique")
               attrs:(a:keyOrUnique_attrs &{return check_requiredAttr(a, el_name, "name") && validateName(a.name, el_name)} {return a}) ws
               close:(merged_close / openEl content:xpath_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
               &{return check_elTags(el_name, prefix, close)}
-              {return {element: el_name, attrs, content: close.content}}
+              {return null} //{return {element: el_name, attrs, content: close.content}}
 
 keyOrUnique_attrs = attrs:(elem_constraint_name elem_id? / elem_id elem_constraint_name?)? {return getAttrs(attrs)}
 
@@ -690,7 +693,7 @@ xpath_content = c:(annotation? (selector field+)) {return cleanContent(c.flat())
 keyref = comments prefix:open_XSD_el el_name:"keyref" attrs:(a:keyref_attrs &{return validateName(a.name, el_name)} {return a}) ws
          close:(merged_close / openEl content:xpath_content close_el:close_XSD_el {return {merged: false, ...close_el, content}})
          &{return check_elTags(el_name, prefix, close)}
-         {return {element: el_name, attrs, content: close.content}}
+         {return null} //{return {element: el_name, attrs, content: close.content}}
 
 keyref_attrs = attrs:(elem_id / elem_constraint_name / keyref_refer)* {return checkError(attrsAPI.check_keyrefAttrs(attrs))}
 
@@ -736,7 +739,7 @@ attributeGroup_content = c:(annotation? attributes) {return cleanContent(c.flat(
 
 anyAttribute = comments prefix:open_XSD_el el_name:"anyAttribute" attrs:anyAttribute_attrs ws close:(merged_close / ann_content)
                &{return check_elTags(el_name, prefix, close)} 
-               {return {element: el_name, attrs, content: close.content}}
+               {return null} //{return {element: el_name, attrs, content: close.content}}
 
 anyAttribute_attrs = el:(elem_id / any_namespace / processContents)* {return check_repeatedAttrs(el, getAttrs(el), "anyAttribute")}
 
@@ -748,7 +751,7 @@ processContents = ws2 attr:"processContents" ws "=" q1:QMo val:processContents_v
 
 any = comments prefix:open_XSD_el el_name:"any" attrs:any_attrs ws close:(merged_close / ann_content)
       &{return check_elTags(el_name, prefix, close)} 
-      {return {element: el_name, attrs, content: close.content}}
+      {return null} //{return {element: el_name, attrs, content: close.content}}
 
 any_attrs = el:(elem_id / elem_maxOccurs / elem_minOccurs / any_namespace / processContents)* {return check_occursAttrs(el,"any")}
 
@@ -940,10 +943,8 @@ restrictionSC_content = c:(restrictionST_content attributes) {return cleanConten
 
 restrictionCC = comments prefix:open_XSD_el el_name:"restriction" attrs:base_attrs ws 
                 close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-                &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)} {
-  attrGroups = attrsAPI.addAttrGroup(attrGroups, null, "restriction (complexContent)", close.content)
-  return {element: el_name, attrs, content: close.content}
-}
+                &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)} 
+                {return {element: el_name, attrs, content: close.content}}
                      
 CC_son_content = c:(annotation? (all / choiceOrSequence / group)? attributes) {return cleanContent(c.flat())}
 
@@ -962,10 +963,8 @@ extensionSC_content = c:(annotation? attributes) {return cleanContent(c.flat())}
 
 extensionCC = comments prefix:open_XSD_el el_name:"extension" attrs:base_attrs ws 
               close:(merged_close / openEl content:CC_son_content close_el:close_XSD_el {return {merged: false, ...close_el, content}}) 
-              &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)} {
-  attrGroups = attrsAPI.addAttrGroup(attrGroups, null, "extension (complexContent)", close.content)
-  return {element: el_name, attrs, content: close.content}
-}
+              &{return check_requiredBase(el_name, "complexContent", prefix, attrs, close)} 
+              {return {element: el_name, attrs, content: close.content}}
 
 
 // ----- <minExclusive> <minInclusive> <maxExclusive> <maxInclusive> <totalDigits <fractionDigits> <length> <minLength> <maxLength> <enumeration> <whiteSpace> <pattern> -----
@@ -1111,7 +1110,7 @@ group_content = c:(annotation? (all / choiceOrSequence)?) {return cleanContent(c
 
 notation = comments prefix:open_XSD_el el_name:"notation" attrs:notation_attrs ws close:(merged_close / ann_content)
           &{return check_elTags(el_name, prefix, close)}
-          {return {element: el_name, attrs, content: close.content}}
+          {return null} //{return {element: el_name, attrs, content: close.content}}
 
 notation_attrs = el:(elem_id / notation_name / notation_URI_attrs)* {return checkError(attrsAPI.check_notationAttrs(el))}
 

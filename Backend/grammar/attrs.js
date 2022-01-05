@@ -269,19 +269,21 @@ function check_repeatedAttributes(attrGroups) {
     for (let x in attrGroups) {
       if (attrGroups[x].groups.every(g => g in parsed_groups)) next_groups[x] = attrGroups[x]
     }
+
+    let k = Object.keys(next_groups).reverse()
     
-    for (let x in next_groups) {
-      let new_attrs = next_groups[x].groups.map(g => parsed_groups[g]).flat()
-      let repeated = next_groups[x].attrs.filter(v => new_attrs.includes(v))
+    for (let i = 0; i < k.length; i++) {
+      let new_attrs = next_groups[k[i]].groups.map(g => parsed_groups[g]).flat()
+      let repeated = next_groups[k[i]].attrs.filter(v => new_attrs.includes(v))
       
       if (repeated.length > 0) {
-        let name = parseInt(x) === NaN ? `'${x}'` : "novo"
-        return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o <${attrGroups[x].element}> ${name} tem atributos repetidos com os nomes '${repeated.join("', '")}'.`)
+        let name = isNaN(parseInt(k[i])) ? `'${k[i]}'` : "novo"
+        return error(`Os elementos <attribute> locais de um elemento devem ter todos nomes distintos entre si! Neste caso, o <${attrGroups[k[i]].element}> ${name} tem atributos repetidos com os nomes '${repeated.join("', '")}'.`)
       }
       else {
-        next_groups[x].attrs = next_groups[x].attrs.concat(new_attrs)
-        parsed_groups[x] = next_groups[x].attrs
-        delete attrGroups[x]
+        next_groups[k[i]].attrs = next_groups[k[i]].attrs.concat(new_attrs)
+        parsed_groups[k[i]] = next_groups[k[i]].attrs
+        delete attrGroups[k[i]]
       }
     }
   }
