@@ -9,43 +9,10 @@ let isPredetermined = content => "enumeration" in content || "pattern" in conten
 let randomize = (min,max) => Math.floor(Math.random() * ((max+1) - min) + min)
 let indent = depth => '\t'.repeat(depth)
 
-function string(base, length, depth) {
-   return `gen => {
-${indent(depth)}let str = "", base = "${base}", length = ${length}
-${indent(depth)}for (let i = 0; i < length; i++) {
-${indent(depth+1)}let arr = (["Name","NCName","ENTITY","ID","IDREF","NOTATION","QName"].includes(base) && !i) ? "alphabet" : "alphanumerical"
-${indent(depth+1)}let space = ["normalizedString","string","token"].includes(base) && i>0 && i != length-1
-${indent(depth+1)}if (arr == "alphabet") str += gen.random(gen.letter())
-${indent(depth+1)}else {
-${indent(depth+2)}if (base == "base64Binary") {
-${indent(depth+3)}if (Math.random() < 1/64) str += gen.random("+", "/")
-${indent(depth+3)}else str += gen.random(gen.letter(), gen.integerOfSize(1))
-${indent(depth+2)}}
-${indent(depth+2)}else if (space) {
-${indent(depth+3)}if (Math.random() < 1/63) str += " "
-${indent(depth+3)}else str += gen.random(gen.letter(), gen.integerOfSize(1))
-${indent(depth+2)}}
-${indent(depth+2)}else str += gen.random(gen.letter(), gen.integerOfSize(1))
-${indent(depth+1)}}
-${indent(depth)}}
-${indent(depth)}return str
-${indent(depth-1)}}`
-}
-
-function hexBinary(length, depth) {
-   return `gen => {
-${indent(depth)}let str = "", hexChars = [...Array(60).keys()].map(i => i + 20)
-${indent(depth)}hexChars = hexChars.concat(["2","3","4","5","6","7"].map(x => ["A","B","C","D","E","F"].map(y => x+y)).flat())
-${indent(depth)}hexChars.pop()
-${indent(depth)}for (let i = 0; i < ${length}; i++) str += gen.random(...hexChars)
-${indent(depth)}return str
-${indent(depth-1)}}`
-}
-
 
 // Funções de tradução de tipos embutidos ----------
 
-function parseStringType(c, base, has, depth) { 
+function parseStringType(c, base, has) { 
    let length = 0
 
    if (has("length")) length = c.length
@@ -62,7 +29,8 @@ function parseStringType(c, base, has, depth) {
       length = randomize(min, max)
    }
    
-   return (base == "hexBinary" ? hexBinary(length, depth) : string(base, length, depth))
+   if (base == "hexBinary") return `{DFS_UTILS__hexBinary: "${length}"}`
+   return `{DFS_UTILS__string: "${base};${length}"}`
 }
  
 function parseNumberType(c, base, has) {
@@ -125,7 +93,7 @@ function parseSimpleGType(c, base, has) {
     return `${"-".repeat(hyphens[base])}{{formattedInteger(${min},${max},${pad},"")}}`
 }
  
-function parseComplexGType(c, base, list, has, depth) {
+function parseComplexGType(c, base, list, has) {
    let aux = {
       gMonthDay: (x,offset) => {
          let day = parseInt(x.substring(5,7)), month = parseInt(x.substring(2,4))
@@ -177,30 +145,7 @@ function parseComplexGType(c, base, list, has, depth) {
    else if (max == null) max = base == "gMonthDay" ? {month: 12, day: 31} : {year: min.year + 100, month: 12}
    else if (min == null) min = base == "gMonthDay" ? {month: 1, day: 1} : {year: max.year - 100, month: 1}
 
-   return `gen => {
-${indent(depth)}let str = "", base = "${base}", max = ${JSON.stringify(max)}, min = ${JSON.stringify(min)}
-${indent(depth)}let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
-${indent(depth)}let left = base == "gMonthDay" ? "month" : "year"
-${indent(depth)}let right = base == "gMonthDay" ? "day" : "month"
-${indent(depth)}let right_lower_bound = {
-${indent(depth+1)}month: x => 12,
-${indent(depth+1)}day: x => {
-${indent(depth+2)}if ([1,3,5,7,8,10,12].includes(x)) return 31
-${indent(depth+2)}if ([4,6,9,11].includes(x)) return 30
-${indent(depth+2)}return 29
-${indent(depth+1)}}
-${indent(depth)}}
-${indent(depth)}for (let i = 0; i < randomize(${list.max},${list.min}); i++) {
-${indent(depth+1)}let right_val, left_val = randomize(max[left], min[left])
-${indent(depth+1)}if (left_val == max[left]) right_val = randomize(max[right], 1)
-${indent(depth+1)}else if (left_val == min[left]) right_val = randomize(min[right], right_lower_bound[right](left_val))
-${indent(depth+1)}else right_val = randomize(1, right_lower_bound[right](left_val))
-${indent(depth+1)}let hyphens = {gMonthDay: 2, gYearMonth: 0}
-${indent(depth+1)}let pad = base == "gMonthDay" ? [2,2] : [4,2]
-${indent(depth+1)}str += "-".repeat(hyphens[base]) + left_val.toString().padStart(pad[0],"0") + "-" + right_val.toString().padStart(pad[1],"0") + " "
-${indent(depth)}}
-${indent(depth)}return str.slice(0,-1)
-${indent(depth-1)}}`
+   return `{DFS_UTILS__complexGType: '${base};${JSON.stringify(max)};${JSON.stringify(min)};${JSON.stringify(list)}'}`
 }
  
 function parseDateTimeType(c, base, list, has, depth) {
@@ -421,7 +366,7 @@ function parseRestriction(content, base, list, depth) {
 
       case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "Name": case "NCName": 
       case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
-         return parseStringType(content, base, has, depth)
+         return parseStringType(content, base, has)
 
       case "byte": case "decimal": case "double": case "float": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger":
       case "nonPositiveInteger": case "positiveInteger": case "short": case "unsignedByte": case "unsignedInt": case "unsignedLong": case "unsignedShort":
@@ -434,7 +379,7 @@ function parseRestriction(content, base, list, depth) {
          return parseSimpleGType(content, base, has)
 
       case "gMonthDay": case "gYearMonth":
-         return parseComplexGType(content, base, list, has, depth)
+         return parseComplexGType(content, base, list, has)
    }
 }
 
