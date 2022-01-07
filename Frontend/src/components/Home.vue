@@ -110,8 +110,9 @@ export default {
     async generate() {
       let UNBOUNDED = parseInt(document.getElementById('unbounded_value').value)
       let RECURSIV = parseInt(document.getElementById('recursiv_value').value)
+      let OUTPUT_FORMAT = "XML" //document.getElementById('output_format').value
 
-      let settings = {UNBOUNDED, RECURSIV}
+      let settings = {UNBOUNDED, RECURSIV, OUTPUT_FORMAT}
       let {data} = await axios.post('http://localhost:3000/xml_schema/', {xsd: this.input, settings})
       
       if (typeof data == "string") this.output = data

@@ -30,6 +30,7 @@ router.post('/xml_schema', (req, res) => {
     catch(err) { console.log(err) }
 
     const formData = new FormData()
+    formData.append('output_format', req.body.settings.OUTPUT_FORMAT)
     formData.append('xml_declaration', data.xml_declaration)
     formData.append('model', fs.createReadStream('./output/model.txt'), {
       filename: "model.txt",
