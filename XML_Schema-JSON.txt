@@ -1,0 +1,12 @@
+	
+	
+	Taxonomia XML Schema -> JSON:
+
+	- "."/"-" em nomes de propriedades -> "_"
+	- elementos com a mesma chave à mesma profundidade são diferenciados com um contador -> "p1", "p2", "p3", ... (se só houver um com um dado nome, não é numerado)
+	- chaves de atributos passam a começar com uma flag para indicar que é um atributo: "nome" -> "Attr_nome"
+	- quando um elemento tem atributos e valor de texto, o valor é colocado numa propriedade com chave "value"
+	- quando é mixed, o texto fora dos elementos filhos é colocado em propriedades numeradas com chaves "text1", "text2", ... (ou "text", se só houver um)
+
+
+

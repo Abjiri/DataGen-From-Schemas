@@ -42,7 +42,10 @@ router.post('/xml_schema', (req, res) => {
       maxContentLength: Infinity,
       maxBodyLength: Infinity
     })
-      .then(data => res.status(201).jsonp(data.data))
+      .then(data => {
+        data = req.body.settings.OUTPUT_FORMAT == "XML" ? data.data : JSON.stringify(data.data, null, 3)
+        res.status(201).jsonp(data)
+      })
       .catch(err => {console.log("catch"); res.status(201).jsonp(err)})
 
   } catch (err) {res.status(201).jsonp(err)}
