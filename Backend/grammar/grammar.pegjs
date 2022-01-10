@@ -138,17 +138,22 @@
         
         // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
         if (union) x.ref.content = content
-        else x.ref.content = checkError(stAPI.check_restrictionST_facets(base, content, default_prefix, simpleTypes))
+        else x.ref.content = checkError(stAPI.check_restrictionST_facets(x.parent, base, content, default_prefix, simpleTypes))
       })
 
       st.map(x => {
         let name = x.args[0], content = x.args[1]
         let extension_content = []
 
-        if ("complex" in x && content[0].attrs.base in complexTypes) {
-          let base_extension = complexTypes[content[0].attrs.base].content[0].content[0]
-          content[0].attrs.base = base_extension.attrs.base
-          extension_content = base_extension.content
+        if ("complex" in x) {          
+          if (content[0].attrs.base in complexTypes) {
+            let base_extension = complexTypes[content[0].attrs.base].content[0].content[0]
+            content[0].attrs.base = base_extension.attrs.base
+            extension_content = base_extension.content
+          }
+          
+          extension_content = extension_content.concat(content.filter(x => x.element.includes("attribute")))
+          content = content.filter(x => !x.element.includes("attribute"))
         }
         let parsed = checkError(stAPI.restrict(name, content, default_prefix, simpleTypes))
         
@@ -874,6 +879,7 @@ restrictionST = comments prefix:open_XSD_el el_name:"restriction" attrs:base_att
   st_queue.restrictions.push({
     // ou é o atributo base ou o nome do simpleType filho
     base: stAPI.getTypeInfo(restriction.attrs.base, default_prefix, simpleTypes).type,
+    parent: "simpleType",
     args: [arg_base, close.content],
     ref: restriction
   })
@@ -914,6 +920,7 @@ restrictionSC = comments prefix:open_XSD_el el_name:"restriction" attrs:base_att
     // texto que aparece entre partículas por causa de ser mixed
     st_queue.restrictions.push({
       base: "string",
+      parent: "simpleContent",
       args: ["xs:string", close.content],
       complex: true,
       ref: base_ct.mixed_type
@@ -927,6 +934,7 @@ restrictionSC = comments prefix:open_XSD_el el_name:"restriction" attrs:base_att
 
     st_queue.restrictions.push({
       base,
+      parent: "simpleContent",
       args: [arg_base, close.content],
       complex: true,
       ref: restriction

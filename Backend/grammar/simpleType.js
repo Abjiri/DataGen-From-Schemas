@@ -202,10 +202,16 @@ function create_simpleTypes(default_prefix) {
 
 
 // validar o espaço léxico dos restraining facets que ainda faltam e verificar todas as restrições entre os facets dentro do mesmo elemento
-function check_restrictionST_facets(base, content, default_prefix, simpleTypes) {
+function check_restrictionST_facets(parent, base, content, default_prefix, simpleTypes) {
   // simpleType não é uma faceta, remover temporariamente do conteúdo se tiver um
-  let st = null
-  if (content.length > 0 && content[0].element == "simpleType") st = content.shift()
+  let st = null, attrs = []
+  if (content.length > 0) {
+    if (content[0].element == "simpleType") st = content.shift()
+    if (parent == "simpleContent") {
+      attrs = content.filter(x => x.element.includes("attribute"))
+      content = content.filter(x => !x.element.includes("attribute"))
+    }
+  }
 
   // se for um tipo lista, a base devolvida pela getTypeInfo é dos elementos da lista
   let type = getTypeInfo(base, default_prefix, simpleTypes)
@@ -344,6 +350,7 @@ function check_restrictionST_facets(base, content, default_prefix, simpleTypes) 
   
   // adicionar de novo o simpleType ao conteúdo, caso o tenha removido no início da função
   if (st !== null) content.unshift(st)
+  content = content.concat(attrs)
   return data(content)
 }
 
