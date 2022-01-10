@@ -1,5 +1,4 @@
 const attrsAPI = require("./attrs")
-const stAPI = require("./simpleType")
 
 // Funções auxiliares ----------
 
