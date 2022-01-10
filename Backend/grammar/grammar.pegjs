@@ -151,9 +151,11 @@
             content[0].attrs.base = base_extension.attrs.base
             extension_content = base_extension.content
           }
-          
-          extension_content = extension_content.concat(content.filter(x => x.element.includes("attribute")))
-          content = content.filter(x => !x.element.includes("attribute"))
+
+          let new_attrs = content[0].content.filter(x => x.element.includes("attribute"))
+          content[0].content = content[0].content.filter(x => !x.element.includes("attribute"))
+
+          extension_content = checkError(ctAPI.validateRestrictionAttrsSC(extension_content, new_attrs)).data
         }
         let parsed = checkError(stAPI.restrict(name, content, default_prefix, simpleTypes))
         
@@ -243,7 +245,7 @@
       })
 
       r.map(x => {
-        let parsed = checkError(ctAPI.restrict(x, simpleTypes, complexTypes, default_prefix))
+        let parsed = checkError(ctAPI.restrict(x, complexTypes))
 
         if ("name" in x.attrs) {
           complexTypes[x.attrs.name] = JSON.parse(JSON.stringify(parsed))

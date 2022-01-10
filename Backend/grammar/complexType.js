@@ -106,71 +106,8 @@ function check_repeatedAttributes(ct_attrs, base_attrs, new_attrs, attrGroups) {
     return data(attrGroups)
 }
 
-// determinar o nome e prefixo de schema do tipo em questão e o nome da sua base embutida
-/* operacional apenas para tipos da schema local */
-function getTypeInfo(type, simpleTypes, complexTypes, default_prefix) {
-    let builtin_types = stAPI.built_in_types(simpleTypes)
-    let base = null // nome do tipo embutido em questão ou em qual é baseado o tipo atual
-    let prefix = null, complex = false
- 
-    if (type.includes(':')) {
-      let split = type.split(':')
-      type = split[1] // remover o prefixo do nome do tipo
-      prefix = split[0]
-    }
-    // tipo embutido ou local desta schema
-    else prefix = default_prefix
- 
-    // é um tipo da schema local
-    if (prefix == default_prefix) {
-       if (Object.keys(complexTypes).includes(type)) complex = true
-       // se não for embutido, é possível encontrar a sua base embutida na estrutura simpleTypes
-       else base = builtin_types.includes(type) ? type : simpleTypes[type].built_in_base
-    }
- 
-    return {type, complex, base, prefix}
-}
-
-// derivar um complexType por restrição
-function restrict(new_ct, simpleTypes, complexTypes, default_prefix) {
-    if (new_ct.content[0].element == "simpleContent") return restrictSC(new_ct, simpleTypes, complexTypes, default_prefix)
-    return restrictCC(new_ct, complexTypes)
-}
-
-// derivar um complexType com simpleContent por restrição
-function restrictSC(new_ct, simpleTypes, complexTypes, default_prefix) {
-    let union = false, base_st
-    let base = getTypeInfo(new_ct.content[0].content[0].attrs.base, simpleTypes, complexTypes, default_prefix)
-    
-    if (!base.complex) {
-        base_st = JSON.parse(JSON.stringify(simpleTypes[base.type]))        
-        if (!["built_in_base","list","union"].some(x => x in base_st)) base_st.built_in_base = base.base
-        base = base.base
-    }
-    else {
-        let base_ct = complexTypes[base.type]
-        base_st = simpleTypes[base_ct.content[0].content[0].attrs.base]
-        base = base_st.built_in_base
-    }
-    
-    if (stAPI.isObject(base_st.built_in_base) && "union" in base_st.built_in_base) base = base_st.built_in_base
-    if ("union" in base_st) union = true
-
-    // quando é restrição a uma union, não precisa de verificar as facetas aqui porque o faz depois, numa função específica para unions
-    if (!union) {
-        /* let new_attrs = new_ct.content[0].content[0].content.filter(x => x.element.includes("attribute"))
-        new_ct.content[0].content[0].content = new_ct.content[0].content[0].content.filter(x => !x.element.includes("attribute")) */
-
-        let facets = stAPI.check_restrictionST_facets(base, new_ct.content[0].content[0].content, default_prefix, simpleTypes)
-        if ("error" in facets) return facets
-        return data({built_in_base: base, content: facets.data})
-    }
-
-    return data(new_ct)
-}
-
 // derivar um complexType com complexContent por restrição
-function restrictCC(new_ct, complexTypes) {
+function restrict(new_ct, complexTypes) {
     let restriction = new_ct.content[0].content[0]
     let base = restriction.attrs.base
 
@@ -206,6 +143,27 @@ function restrictCC(new_ct, complexTypes) {
 
     new_ct.content = restriction.content
     return data(new_ct)
+}
+
+function validateRestrictionAttrsSC(ct_attrs, b, r) {
+    let name_ct = "name" in ct_attrs ? ct_attrs.name : "novo complexType"
+    
+    for (let i = 0; i < r.length; i++) {
+        let prop = "name" in r[i].attrs ? "name" : "ref"
+        let getProp = x => "name" in x.attrs ? "name" : "ref"
+
+        // índice deste atributo na restrição
+        let index = b.findIndex(x => x.element == r[i].element && x.attrs[getProp(x)] == r[i].attrs[prop])
+        if (index != -1) {
+            if ("fixed" in b[index].attrs && !("fixed" in r[i].attrs)) return error(`A definição do ${name_ct} é inválida. O valor do atributo '${b[index].attrs[getProp(b[index])]}' neste novo tipo não é fixado, o que contradiz o tipo base que está a derivar, cujo valor do respetivo atributo é fixado a '${b[index].attrs.fixed}'!`)
+            if ("fixed" in b[index].attrs && r[i].attrs.fixed != b[index].attrs.fixed) return error(`A definição do ${name_ct} é inválida. O valor do atributo '${b[index].attrs[getProp(b[index])]}' neste novo tipo é fixado a '${r[i].attrs.fixed}', o que contradiz o tipo base que está a derivar, cujo valor do respetivo atributo é fixado a '${b[index].attrs.fixed}'!`)
+
+            b[index] = r[i]
+        }
+        else return error(`A definição do ${name_ct} é inválida. O atributo '${r[i].attrs[prop]}' neste novo tipo não corresponde a nenhum atributo do tipo base!`)
+    }
+
+    return data(b)
 }
 
 function validateRestrictionAttrsCC(b, r, name_ct) {
@@ -414,5 +372,6 @@ module.exports = {
     extend,
     restrict,
     validateBaseRestrictionSC,
+    validateRestrictionAttrsSC,
     copyRefs
 }
