@@ -4,6 +4,7 @@ var axios = require('axios');
 
 var fs = require('fs');
 const FormData = require('form-data');
+const { v4: uuidv4 } = require('uuid');
 
 const parser = require('../grammar/parser')
 const converter = require('../converter/converter')
@@ -22,17 +23,18 @@ router.post('/xml_schema', (req, res) => {
     }
 
     let model = converter.convertXSD(data.xsd, data.simpleTypes, data.complexTypes, req.body.settings)
+    let path = `./output/${uuidv4()}.txt`
 
     try {
-      fs.writeFileSync('./output/model.txt', model)
-      console.log('Modelo DataGen guardado no ficheiro model.txt!')
+      fs.writeFileSync(path, model)
+      console.log(`Modelo DataGen guardado em ${path.slice(2)}!`)
     }
     catch(err) { console.log(err) }
 
     const formData = new FormData()
     formData.append('output_format', req.body.settings.OUTPUT_FORMAT)
     formData.append('xml_declaration', data.xml_declaration)
-    formData.append('model', fs.createReadStream('./output/model.txt'), {
+    formData.append('model', fs.createReadStream(path), {
       filename: "model.txt",
       contentType: "text/plain"
     })
@@ -44,6 +46,7 @@ router.post('/xml_schema', (req, res) => {
     })
       .then(data => {
         data = req.body.settings.OUTPUT_FORMAT == "XML" ? data.data : JSON.stringify(data.data, null, 3)
+        fs.unlink(path, err => { if (err) console.log(`Ocorreu um erro ao eliminar o modelo ${path.slice(2)}.`) })
         res.status(201).jsonp(data)
       })
       .catch(err => {console.log("catch"); res.status(201).jsonp(err)})
