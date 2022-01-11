@@ -13898,7 +13898,7 @@ module.exports = /*
               let new_attrs = content[0].content.filter(x => x.element.includes("attribute"))
               content[0].content = content[0].content.filter(x => !x.element.includes("attribute"))
 
-              extension_content = checkError(ctAPI.validateRestrictionAttrsSC(extension_content, new_attrs))
+              extension_content = checkError(ctAPI.validateRestrictionAttrsSC(x.complex.attrs, extension_content, new_attrs))
             }
             let parsed = checkError(stAPI.restrict(name, content, default_prefix, simpleTypes))
             

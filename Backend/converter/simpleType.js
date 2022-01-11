@@ -295,8 +295,6 @@ function parseLanguage(c, has) {
 }
 
 function parseRestriction(content, base, list) {
-   console.log(content)
-   console.log(base)
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in content
    
