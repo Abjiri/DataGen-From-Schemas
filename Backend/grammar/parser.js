@@ -503,7 +503,7 @@ module.exports = /*
 
           if (complexType.content.length > 0) {
             if (close.content[0].element == "mixed_restriction") {
-              let new_complexType = close.content[0].element.content
+              let new_complexType = close.content[0].content
               new_complexType.attrs.name = attrs.name
               complexTypes[attrs.name] = new_complexType
               return new_complexType

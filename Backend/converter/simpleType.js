@@ -372,7 +372,6 @@ function parseList(st, depth) {
 }
 
 function parseSimpleType(st, ids, depth) {
-   console.log(st)
    let str
    
    // derivação por lista
@@ -388,7 +387,6 @@ function parseSimpleType(st, ids, depth) {
    else {
       let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
       let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1})
-      console.log(parsed)
       str = (isGenType(st.built_in_base) && !isPredetermined(content)) ? parsed : ("'" + parsed + "'")
    }
 
