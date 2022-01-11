@@ -1,5 +1,7 @@
 const RandExp = require('randexp');
 
+let ids, new_ids = []
+
 // Funções auxiliares ----------
 
 // verifica se a base é um dos tipos cujo valor é gerado por função anónima do DataGen
@@ -298,13 +300,16 @@ function parseRestriction(content, base, list) {
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in content
    
-   if (has("enumeration")) return `{{random("${content.enumeration.join('","')}")}}`
-   if (has("pattern") && base != "language") return new RandExp(content.pattern).gen()
+   if (base != "ID") {
+      if (has("enumeration")) return `{{random("${content.enumeration.join('","')}")}}`
+      if (has("pattern") && base != "language") return new RandExp(content.pattern).gen()
+   }
 
    switch (base) {
       case "anyURI": return "http://www.w3.org/2001/XMLSchema"
       case "boolean": return "{{boolean()}}"
       case "language": return parseLanguage(content, has)
+      case "ID": let id = `id${++ids}`; new_ids.push(id); return id
 
       case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "Name": case "NCName": 
       case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
@@ -370,20 +375,30 @@ function parseList(st, depth) {
    }
 }
 
-function parseSimpleType(st, depth) {
+function parseSimpleType(st, ids_num, depth) {
+   ids = ids_num; new_ids = []
+   let str
+   
    // derivação por lista
-   if ("list" in st) return parseList(st, depth+1)
+   if ("list" in st) str = parseList(st, depth+1)
 
    // derivação por união
-   if ("union" in st) {
-      st.union = st.union.map(x => parseSimpleType(x, depth))
-      return st.union[randomize(0, st.union.length-1)]
+   else if ("union" in st) {
+      st.union = st.union.map(x => parseSimpleType(x, ids_num, depth).str)
+      str = st.union[randomize(0, st.union.length-1)]
+      
+      let ids_regex = new RegExp(new_ids.join("|"))
+      if (!ids_regex.test(str)) ids -= new_ids.length
    }
 
    // derivação por restrição
-   let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
-   let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1})
-   return (isGenType(st.built_in_base) && !isPredetermined(content)) ? parsed : ("'" + parsed + "'")
+   else {
+      let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
+      let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1})
+      str = (isGenType(st.built_in_base) && !isPredetermined(content)) ? parsed : ("'" + parsed + "'")
+   }
+
+   return {str, ids}
 }
 
 

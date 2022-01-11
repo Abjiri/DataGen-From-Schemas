@@ -161,7 +161,11 @@ function parseElementAux(el, depth) {
 
    // parsing do conteúdo -----
    let type = el.content[0]
-   if (type.element == "simpleType") return `${parseSimpleType(type, depth)}` // a parte relevante do simpleType é o elemento filho (list / restriction / union)
+   if (type.element == "simpleType") {
+      let parsed = parseSimpleType(type, ids, depth) // a parte relevante do simpleType é o elemento filho (list / restriction / union)
+      ids = parsed.ids
+      return parsed.str
+   }
    else return parseComplexType(type, depth)
 }
 
@@ -186,7 +190,10 @@ function parseType(type, depth) {
 
       let st = JSON.parse(JSON.stringify(simpleTypes[type.type]))
       if (!["built_in_base","list","union"].some(x => x in st)) st.built_in_base = type.base
-      return parseSimpleType(st, depth)
+
+      let parsed = parseSimpleType(st, ids, depth)
+      ids = parsed.ids
+      return parsed.str
    }
    return parseComplexType(complexTypes[type.type], depth)
 }
@@ -220,8 +227,10 @@ function parseComplexType(el, depth) {
       if (!("mixed_type" in el)) str += `${indent(depth+1)}DFS_MIXED_DEFAULT: true${empty ? "" : ",\n"}`
       else {
          let base_st = el.mixed_type.content[0]
-         let mixed_content = parseSimpleType({built_in_base: base_st.built_in_base, content: base_st.content}, depth)
-         str += `${indent(depth+1)}DFS_MIXED_RESTRICTED: ${mixed_content}${empty ? "" : ",\n"}`
+         let mixed_content = parseSimpleType({built_in_base: base_st.built_in_base, content: base_st.content}, ids, depth)
+         
+         ids = mixed_content.ids
+         str += `${indent(depth+1)}DFS_MIXED_RESTRICTED: ${mixed_content.str}${empty ? "" : ",\n"}`
       }
    }
    else if (empty) return "{ missing(100) {empty: true} }"
@@ -249,7 +258,11 @@ function parseAttribute(el, depth) {
    }
 
    if ("type" in attrs) value = parseType(attrs.type, depth)
-   else value = parseSimpleType(el.content[0], depth)
+   else {
+      value = parseSimpleType(el.content[0], ids, depth)
+      ids = value.ids
+      value = value.str
+   }
 
    return indent(depth) + str + value
 }
