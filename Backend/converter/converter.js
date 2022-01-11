@@ -6,6 +6,7 @@ let simpleTypes = {}
 let complexTypes = {}
 let recursiv = {element: {}, complexType: {}, group: {}}
 let settings = {}
+let ids = 0
 
 /* nr de elementos que vão ser criados como objetos temporariamente na DSL com uma chave especial 
 e convertidos posteriormente para a forma original na tradução JSON-XML do DataGen */
@@ -65,13 +66,14 @@ function normalizeName(name, end_prefix) {
 function convertXSD(xsd, st, ct, max_settings) {
    let str = "<!LANGUAGE pt>\n{\n"
    let depth = 1
-   settings = max_settings
    
    // variáveis globais
    default_prefix = xsd.prefix
    xsd_content = xsd.content
    simpleTypes = st
    complexTypes = ct
+   settings = max_settings
+   ids = 0
 
    let elements = xsd.content.filter(x => x.element == "element")
    if (!elements.length) str += indent(depth) + "DFS_EMPTY_XML: true\n"
@@ -89,6 +91,7 @@ function convertXSD(xsd, st, ct, max_settings) {
 
 
    str += "}"
+   str = str.replace(/IDREF/g, `id{{integer(1,${ids})}}`)
    return str
 }
 
@@ -178,8 +181,10 @@ function parseType(type, depth) {
    type = getTypeInfo(type)
 
    if (!type.complex) {
-      let st = simpleTypes[type.type]
-   
+      if (type.type == "ID") return `"id${++ids}"`
+      if (type.type == "IDREF") return "'IDREF'"
+
+      let st = JSON.parse(JSON.stringify(simpleTypes[type.type]))
       if (!["built_in_base","list","union"].some(x => x in st)) st.built_in_base = type.base
       return parseSimpleType(st, depth)
    }

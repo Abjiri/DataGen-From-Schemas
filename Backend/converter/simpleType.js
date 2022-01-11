@@ -297,19 +297,14 @@ function parseLanguage(c, has) {
 function parseRestriction(content, base, list) {
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in content
-
+   
    if (has("enumeration")) return `{{random("${content.enumeration.join('","')}")}}`
    if (has("pattern") && base != "language") return new RandExp(content.pattern).gen()
 
    switch (base) {
-      case "anyURI":
-         return "http://www.w3.org/2001/XMLSchema"
-
-      case "boolean":
-         return "{{boolean()}}"
-
-      case "language":
-         return parseLanguage(content, has)
+      case "anyURI": return "http://www.w3.org/2001/XMLSchema"
+      case "boolean": return "{{boolean()}}"
+      case "language": return parseLanguage(content, has)
 
       case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "Name": case "NCName": 
       case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
@@ -348,9 +343,10 @@ function parseList(st, depth) {
    else if (min === null) min = min-5 > 0 ? min-5 : 0
 
    if (st.content.length == 1) {
-      let elem = parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min})
+      let base = st.content[0].built_in_base
+      let elem = base == "IDREF" ? base : parseRestriction(st.content[0].content, base, {max, min})
 
-      if (isGenType(st.content[0].built_in_base) && !isPredetermined(st.content[0].content)) return elem
+      if (isGenType(base) && !isPredetermined(st.content[0].content)) return elem
       else {
          for (let i = 0; i < randomize(min,max); i++) str += elem + " "
          return "'" + str.slice(0,-1) + "'"
