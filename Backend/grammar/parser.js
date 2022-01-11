@@ -205,7 +205,7 @@ module.exports = /*
             complexTypes[complexKeys[i]].content = complete_refs(complexTypes[complexKeys[i]].content, complexTypes[complexKeys[i]].content, "schema")
           }
 
-          if (id_types.IDREF > 0 && !id_types.ID) return error("A schema possui 1 ou mais elementos com tipo 'IDREF', mas nenhum com tipo 'ID', pelo que não é possível fazer esta referenciação!")
+          if ((id_types.IDREF + id_types.IDREFS) > 0 && !id_types.ID) return error("A schema possui 1 ou mais elementos com tipo 'IDREF(S)', mas nenhum com tipo 'ID', pelo que não é possível fazer esta referenciação!")
           return {element: el_name, prefix: default_prefix, attrs, content}
         },
         peg$c53 = function(prefix) {
@@ -13763,7 +13763,7 @@ module.exports = /*
       // atributos "id" de elementos da schema - têm de ser únicos
       let ids = []
       // número de elementos com tipo ID(REF), para determinar se a referenciação é válida
-      let id_types = {ID: 0, IDREF: 0}
+      let id_types = {ID: 0, IDREF: 0, IDREFS: 0}
       // array com os valores dos atributos 'minOccurs' que coexistem com 'maxOccurs' = "unbounded"
       let unbounded_min = []
       // boleanos para saber se está a ser processado um <element> (para a função validationQueue.type), um <group> ou um <redefine>
@@ -14018,7 +14018,7 @@ module.exports = /*
         ref: (ref, el_name) => (ref.includes(":") || names[el_name].includes(ref)) ? true : error(`Está a tentar referenciar um elemento <${el_name}> inexistente! Só é possível referenciar elementos globais.`),
         // verificar que o tipo local que está a ser referenciado existe
         type: (type, prefix, curr_any_type, curr_type, curr_el) => {
-          if (type == "ID" || type == "IDREF") id_types[type]++
+          if (/ID(REF(S)?)?/.test(type)) id_types[type]++
           let error_msg = {
             BSC: "tipo embutido, simpleType ou complexType",
             BS: "tipo embutido ou simpleType",
