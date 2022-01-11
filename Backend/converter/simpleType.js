@@ -295,13 +295,13 @@ function parseLanguage(c, has) {
 }
 
 function parseRestriction(content, base, list) {
+   console.log(content)
+   console.log(base)
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in content
    
-   if (!base.includes("ID")) {
-      if (has("enumeration")) return `{{random("${content.enumeration.join('","')}")}}`
-      if (has("pattern") && base != "language") return new RandExp(content.pattern).gen()
-   }
+   if (has("enumeration")) return `{{random("${content.enumeration.join('","')}")}}`
+   if ((typeof base != "string" || !base.includes("ID") && base != "language") && has("pattern")) return new RandExp(content.pattern).gen()
 
    switch (base) {
       case "anyURI": return "http://www.w3.org/2001/XMLSchema"
@@ -374,6 +374,7 @@ function parseList(st, depth) {
 }
 
 function parseSimpleType(st, ids, depth) {
+   console.log(st)
    let str
    
    // derivação por lista
@@ -389,6 +390,7 @@ function parseSimpleType(st, ids, depth) {
    else {
       let content = st.content.reduce((a,c) => {a[c.element] = c.attrs.value; return a}, {})
       let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1})
+      console.log(parsed)
       str = (isGenType(st.built_in_base) && !isPredetermined(content)) ? parsed : ("'" + parsed + "'")
    }
 
