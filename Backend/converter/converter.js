@@ -91,7 +91,7 @@ function convertXSD(xsd, st, ct, max_settings) {
 
 
    str += "}"
-   str = str.replace(/IDREF/g, `id{{integer(1,${ids})}}`)
+   str = str.replace(/{XSD_IDREF}/g, `id{{integer(1,${ids})}}`)
    return str
 }
 
@@ -185,9 +185,6 @@ function parseType(type, depth) {
    type = getTypeInfo(type)
 
    if (!type.complex) {
-      if (type.type == "ID") return `"id${++ids}"`
-      if (type.type == "IDREF") return "'IDREF'"
-
       let st = JSON.parse(JSON.stringify(simpleTypes[type.type]))
       if (!["built_in_base","list","union"].some(x => x in st)) st.built_in_base = type.base
 

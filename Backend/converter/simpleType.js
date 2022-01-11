@@ -1,7 +1,5 @@
 const RandExp = require('randexp');
 
-let ids, new_ids = []
-
 // Funções auxiliares ----------
 
 // verifica se a base é um dos tipos cujo valor é gerado por função anónima do DataGen
@@ -300,7 +298,7 @@ function parseRestriction(content, base, list) {
    // verificar se a faceta em questão existe no conteúdo
    let has = facet => facet in content
    
-   if (base != "ID") {
+   if (!base.includes("ID")) {
       if (has("enumeration")) return `{{random("${content.enumeration.join('","')}")}}`
       if (has("pattern") && base != "language") return new RandExp(content.pattern).gen()
    }
@@ -309,10 +307,11 @@ function parseRestriction(content, base, list) {
       case "anyURI": return "http://www.w3.org/2001/XMLSchema"
       case "boolean": return "{{boolean()}}"
       case "language": return parseLanguage(content, has)
-      case "ID": let id = `id${++ids}`; new_ids.push(id); return id
+      case "IDREF": return "{XSD_IDREF}"
+      case "ID": return "{XSD_ID}"
 
-      case "base64Binary": case "ENTITY": case "hexBinary": case "ID": case "IDREF": case "Name": case "NCName": 
-      case "NMTOKEN": case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
+      case "base64Binary": case "ENTITY": case "hexBinary": case "Name": case "NCName": case "NMTOKEN":
+      case "normalizedString": case "NOTATION": case "QName": case "string": case "token":
          return parseStringType(content, base, has)
 
       case "byte": case "decimal": case "double": case "float": case "int": case "integer": case "long": case "negativeInteger": case "nonNegativeInteger":
@@ -348,10 +347,9 @@ function parseList(st, depth) {
    else if (min === null) min = min-5 > 0 ? min-5 : 0
 
    if (st.content.length == 1) {
-      let base = st.content[0].built_in_base
-      let elem = base == "IDREF" ? base : parseRestriction(st.content[0].content, base, {max, min})
+      let elem = parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min})
 
-      if (isGenType(base) && !isPredetermined(st.content[0].content)) return elem
+      if (isGenType(st.content[0].built_in_base) && !isPredetermined(st.content[0].content)) return elem
       else {
          for (let i = 0; i < randomize(min,max); i++) str += elem + " "
          return "'" + str.slice(0,-1) + "'"
@@ -375,8 +373,7 @@ function parseList(st, depth) {
    }
 }
 
-function parseSimpleType(st, ids_num, depth) {
-   ids = ids_num; new_ids = []
+function parseSimpleType(st, ids, depth) {
    let str
    
    // derivação por lista
@@ -384,11 +381,8 @@ function parseSimpleType(st, ids_num, depth) {
 
    // derivação por união
    else if ("union" in st) {
-      st.union = st.union.map(x => parseSimpleType(x, ids_num, depth).str)
+      st.union = st.union.map(x => parseSimpleType(x, ids, depth).str)
       str = st.union[randomize(0, st.union.length-1)]
-      
-      let ids_regex = new RegExp(new_ids.join("|"))
-      if (!ids_regex.test(str)) ids -= new_ids.length
    }
 
    // derivação por restrição
@@ -398,6 +392,7 @@ function parseSimpleType(st, ids_num, depth) {
       str = (isGenType(st.built_in_base) && !isPredetermined(content)) ? parsed : ("'" + parsed + "'")
    }
 
+   str = str.replace(/{XSD_ID}/g, () => `id${++ids}`)
    return {str, ids}
 }
 
