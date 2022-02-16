@@ -1,25 +1,22 @@
 <template>
-  <div id="app">
-    <Home/>
-  </div>
+  <v-app>
+    <Navbar/>
+    <v-main>
+      <router-view/>
+    </v-main>
+
+  </v-app>
 </template>
 
 <script>
-import Home from './components/Home.vue'
+import Navbar from '@/components/Navbar'
 
 export default {
   name: 'App',
-  components: {
-    Home
-  }
-}
-</script>
+  components: { Navbar },
 
-<style>
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  margin-top: 60px;
-}
-</style>
+  data: () => ({
+    //
+  }),
+};
+</script>

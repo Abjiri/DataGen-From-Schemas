@@ -14,8 +14,8 @@
 	<xs:complexType name="Tnodo">
 		<xs:sequence>
 			<xs:element name="info" type="xs:string"/>
-			<xs:element name="arv-bin-esq" type="Tnodo" minOccurs="0"/>
-			<xs:element name="arv-bin-dir" type="Tnodo" minOccurs="0"/>
+			<xs:element name="arv-bin-esq" type="Tnodo"/>
+			<xs:element name="arv-bin-dir" type="Tnodo"/>
 		</xs:sequence>
 		<xs:attribute name="tipo" type="Tarv" use="optional" default="numérica"/>
 	</xs:complexType>

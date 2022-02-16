@@ -207,7 +207,7 @@ function parseComplexType(el, depth) {
 
    for (let i = 0; i < content_len; i++) {
       switch (content[i].element) {
-         case "simpleContent": return parseSimpleContent(content[i], depth+1);
+         case "simpleContent": return parseExtensionSC(content[i].content[0], depth)
          case "group": parsed.content += parseGroup(content[i], depth+1, {}).str.slice(0, -2); break;
          case "all": parsed.content += parseAll(content[i], depth+2, {}).str; break;
          case "sequence": parsed.content += parseSequence(content[i], depth+1, {}).str.slice(0, -1); break;
@@ -279,10 +279,6 @@ function parseAttributeGroup(el, depth) {
    }
 
    return str.slice(0, -2)
-}
-
-function parseSimpleContent(el, depth) {
-   if (el.content[0].element == "extension") return parseExtensionSC(el.content[0], depth)
 }
 
 function parseExtensionSC(el, depth) {

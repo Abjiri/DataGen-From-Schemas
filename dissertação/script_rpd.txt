@@ -1,0 +1,38 @@
+Bom dia, hoje vou apresentar o tema da minha dissertação que se chama DataGen From Schemas e está a ser orientada pela professor José Carlos Ramalho.
+
+O DataGen é uma aplicação da qual eu fiz parte da equipa de desenvolvimento e permite a prototipagem rápida de datasets, através da sua própria linguagem específica de domínio, a sua DSL, que permite a especificação de modelos de dados. A aplicação está assente sobre uma gramática que é capaz de processar esses modelos e a partir deles gerar datasets sintéticos heterogéneos e extensos que obedeçam às restrições estruturais e semânticas estabelecidas.
+
+Contudo, possui uma barreira de entrada a novos utilizadores, que é a necessidade de aprender a DSL, de forma a escrever os modelos dos datasets pretendidos. Como tal, surgiu a ideia de automatizar a criação destes modelos, permitindo ao utilizador introduzir diretamente schemas de JSON ou XML e criando os modelos correspondentes automaticamente em segundo plano.
+
+Os objetivos desta dissertação são os seguintes:
+- o desenvolvimento de um compilador para filtrar XML Schema e outro para JSON Schema;
+- a criação de programas conversores capazes de gerar modelos válidos da DSL do DataGen a partir dos dados filtrados;
+- o estabelecimento de comunicação entre a nova aplicação e o DataGen, de forma a incorporar o DataGen como uma espécie de middleware;
+- o desenvolvimento de uma aplicação web para disponibilizar o serviço, com características user-friendly e um workflow intuitivo;
+- a criação de rotas REST, para possibilitar a utilização da aplicação sem recurso à interface e a eventual integração em terceiros;
+- a testagem da implementação realizada;
+- e, por fim, o deployment do DataGen From Schemas num servidor do DI
+
+Aqui temos um diagrama que reflete o fluxo de trabalho pretendido. O utilizador poderá introduzir uma schema de JSON ou XML no DataGen From Schemas, que será analisada pelo respetivo compilador. Os dados analisados serão depois convertidos para um modelo na DSL do DataGen, através dos tais programas conversores, e o DataGen encarregar-se-á então de gerar o dataset final. Por fim, este dataset será traduzido para a linguagem pretendida, seja ela JSON ou XML.
+
+A metodologia para o desenvolvimento deste projeto passa pelas seguintes etapas:
+- inicialmente, o estudo e pesquisa bibliográfica sobre geração de dados sintéticos a partir de schemas;
+- de seguida, o levantamento e análise de requisitos para a aplicação;
+- o estudo das tecnologias mais adequadas;
+- o desenvolvimento da solução;
+- e a testagem e análise de desempenho da implementação;
+- tudo isto sob um regime semanal de reuniões com o orientador.
+
+O estado da arte desta dissertação teve três componentes distintas:
+- a análise aprofundada dos formatos de dados a gerar, JSON e XML, que são bastante diferentes do ponto de vista estrutural;
+- o estudo detalhado do DataGen, de forma a prever que vantagens e entraves a maneira como está implementado podem trazer ao processo de tradução de schemas;
+- e, por fim, a análise de aplicações reais semelhantes, a fim de apurar características desejáveis e características a evitar para o DataGen From Schemas.
+
+Atualmente, toda a componente de XML do programa já se encontra implementada, ou seja, já é possível gerar datasets a partir de qualquer schema de XML. Vou apresentar de seguida dois exemplos interessantes, para dar a entender a funcionalidade do programa:
+
+- o primeiro é o de uma árvore binária, com recursividade, como podemos observar aqui: o elemento "Tnodo" é referido recursivamente dentro da sua própria hierarquia. À direita temos um exemplo da árvore que pode ser gerada;
+- e o segundo é a estrutura de um parágrafo, representado por conteúdo semi-estruturado, que é indicado por estes atributos mixed="true". Isto significa que na instância, pode aparecer texto fora dos elementos-filho. Novamente, à direita podemos ver um resultado exemplo produzido pelo programa.
+
+Em termos de trabalho futuro, o próximo passo a tomar agora é desenvolver a mesma infraestrutura para JSON schema e, depois, desenvolver a frontend da aplicação web e criar as rotas aplicacionais na backend.
+
+Dou assim por terminada a minha apresentação e se houver alguma dúvida, estarei aqui para responder.

@@ -1,4 +1,4 @@
-# frontend
+# datagen-xsd
 
 ## Project setup
 ```
