@@ -1,24 +1,21 @@
 <template>
     <v-container>
       <v-row>
-          <v-col md="auto">
+          <v-col sm="auto">
             <v-btn depressed dark color="indigo" @click="generate()">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
           </v-col>
-          <v-col md="auto">
-            <Settings/>
+          <v-col>
+            <SettingsXML @saved="updateSettings"/>
+          </v-col>
+          <v-col class="justify-end">
+            <ButtonGroup @changed="updateOutputFormat"/>
           </v-col>
       </v-row>
 
-      <v-row>
-        <v-col>
-          <v-text-field label="Unbounded"></v-text-field>
-        </v-col>
-      </v-row>
-
-      <v-row class="fill-height">
+      <v-row class="fill-height mt-0">
         <v-flex xs12 md6>
           <Codemirror :type="'input'" :mode="input_mode" v-bind:text="input" @changed="onChangeInput"/>
         </v-flex>
@@ -30,13 +27,15 @@
 </template>
 
 <script>
-import Settings from '@/components/Settings'
+import SettingsXML from '@/components/Settings_XML'
+import ButtonGroup from '@/components/ButtonGroup'
 import Codemirror from '@/components/Codemirror'
 import axios from 'axios'
 
 export default {
   components: {
-    Settings,
+    SettingsXML,
+    ButtonGroup,
     Codemirror
   },
   data() {
@@ -44,21 +43,20 @@ export default {
       input_mode: "xml",
       output_mode: "xml",
       input: "",
-      output: ""
+      output: "",
+      settings: {
+        UNBOUNDED: 10,
+        RECURSIV: {LOWER: 0, UPPER: 3},
+        OUTPUT: "XML"
+      }
     }
   },
   methods: {
     onChangeInput(input) { this.input = input },
-    openSettings() {
-
-    },
+    updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
+    updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
     async generate() {
-      let UNBOUNDED = 10 //parseInt(document.getElementById('unbounded_value').value)
-      let RECURSIV = 3 //parseInt(document.getElementById('recursiv_value').value)
-      let OUTPUT_FORMAT = "XML" //document.getElementById('output_format').value
-
-      let settings = {UNBOUNDED, RECURSIV, OUTPUT_FORMAT}
-      let {data} = await axios.post('http://localhost:3000/xml_schema/', {xsd: this.input, settings})
+      let {data} = await axios.post('http://localhost:3000/xml_schema/', {xsd: this.input, settings: this.settings})
 
       this.output = typeof data == "string" ? data : "ERRO!!\n\n" + data.message
     }

@@ -32,7 +32,7 @@ router.post('/xml_schema', (req, res) => {
     catch(err) { console.log(err) }
 
     const formData = new FormData()
-    formData.append('output_format', req.body.settings.OUTPUT_FORMAT)
+    formData.append('output_format', req.body.settings.OUTPUT)
     formData.append('xml_declaration', data.xml_declaration)
     formData.append('model', fs.createReadStream(path), {
       filename: "model.txt",
@@ -45,7 +45,7 @@ router.post('/xml_schema', (req, res) => {
       maxBodyLength: Infinity
     })
       .then(data => {
-        data = req.body.settings.OUTPUT_FORMAT == "XML" ? data.data : JSON.stringify(data.data, null, 3)
+        data = req.body.settings.OUTPUT == "XML" ? data.data : JSON.stringify(data.data, null, 3)
         fs.unlink(path, err => { if (err) console.log(`Ocorreu um erro ao eliminar o modelo ${path.slice(2)}.`) })
         res.status(201).jsonp(data)
       })
