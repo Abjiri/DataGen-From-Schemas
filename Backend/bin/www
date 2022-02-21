@@ -5,7 +5,7 @@
  */
 
 var app = require('../app');
-var debug = require('debug')('backend:server');
+var debug = require('debug')('apimodelos:server');
 var http = require('http');
 
 /**
@@ -82,5 +82,5 @@ function onError(error) {
  */
 
 function onListening() {
-  console.log("À escuta na porta:" + port)
+  console.log("À escuta na porta:"+port)
 }

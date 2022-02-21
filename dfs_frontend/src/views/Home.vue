@@ -40,14 +40,14 @@ export default {
   },
   data() {
     return {
-      input_mode: "xml",
-      output_mode: "xml",
+      input_mode: "json",
+      output_mode: "json",
       input: "",
       output: "",
       settings: {
         UNBOUNDED: 10,
         RECURSIV: {LOWER: 0, UPPER: 3},
-        OUTPUT: "XML"
+        OUTPUT: "JSON"
       }
     }
   },
@@ -56,9 +56,12 @@ export default {
     updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
     updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
     async generate() {
-      let {data} = await axios.post('http://localhost:3000/xml_schema/', {xsd: this.input, settings: this.settings})
+      let {data} = await axios.post('http://localhost:3000/api/json_schema', {json: this.input, settings: this.settings})
+      //let {data} = await axios.post('http://localhost:3000/xml_schema/', {xsd: this.input, settings: this.settings})
+      console.log(typeof data)
 
-      this.output = typeof data == "string" ? data : "ERRO!!\n\n" + data.message
+      this.output = JSON.stringify(data, null, 2)
+      //this.output = typeof data == "string" ? data : "ERRO!!\n\n" + data.message
     }
   }
 }

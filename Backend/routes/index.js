@@ -1,57 +1,302 @@
 var express = require('express');
 var router = express.Router();
-var axios = require('axios');
+const fs = require("fs")
+const AdmZip = require('adm-zip')
+const axios = require('axios')
+const isReachable = require('is-reachable');
+var rimraf = require("rimraf");
 
-var fs = require('fs');
-const FormData = require('form-data');
-const { v4: uuidv4 } = require('uuid');
+var MongoClient = require('mongodb').MongoClient;
+var url = "mongodb://mongo:27017/LEI2021";
 
-const parser = require('../grammar/parser')
-const converter = require('../converter/converter')
+const strContro = `'use strict';
+  
+/**
+ * Read the documentation (https://strapi.io/documentation/developer-docs/latest/concepts/controllers.html#core-controllers)
+ * to customize this controller
+ */
 
-// POST para gerar um dataset a partir de um XML schema
-router.post('/xml_schema', (req, res) => {
-  try {
-    let data = parser.parse(req.body.xsd)
-    //console.log(JSON.stringify(data))
-    
-    for (let i = 0; i < data.unbounded_min; i++) {
-      if (data.unbounded_min[i] > req.body.settings.UNBOUNDED) {
-        let message = `Um elemento na schema tem minOccurs='${data.unbounded_min[i]}' e maxOccurs='unbounded', o que é inválido porque o máximo de repetições geráveis está definido como '${req.body.unbounded}'.`
-        return res.status(201).jsonp({message})
-      }
+module.exports = {};`  
+
+const strModels = `'use strict';
+
+/**
+ * Read the documentation (https://strapi.io/documentation/developer-docs/latest/concepts/models.html#lifecycle-hooks)
+ * to customize this model
+ */
+
+module.exports = {};`
+
+const strServices = `'use strict';
+
+/**
+ * Read the documentation (https://strapi.io/documentation/developer-docs/latest/concepts/services.html#core-services)
+ * to customize this service
+ */
+
+module.exports = {};
+`
+router.get('/collections', function(req, res, next) {
+  fs.readdir("./shared/api/", (err, files) => { 
+    if(err) { 
+      res.status(500).jsonp({erro : "Error on fetching collections names: ",err})
+    } 
+    for (var i = files.length; i--;) {
+      if (files[i] === ".gitkeep") files.splice(i, 1);
     }
-
-    let model = converter.convertXSD(data.xsd, data.simpleTypes, data.complexTypes, req.body.settings)
-    let path = `./output/${uuidv4()}.txt`
-
-    try {
-      fs.writeFileSync(path, model)
-      console.log(`Modelo DataGen guardado em ${path.slice(2)}!`)
-    }
-    catch(err) { console.log(err) }
-
-    const formData = new FormData()
-    formData.append('output_format', req.body.settings.OUTPUT)
-    formData.append('xml_declaration', data.xml_declaration)
-    formData.append('model', fs.createReadStream(path), {
-      filename: "model.txt",
-      contentType: "text/plain"
+    res.status(200).jsonp({
+      ColNames: files,
     })
-    
-    axios.post("http://localhost:12080/api/datagen/dfs", formData, {
-      headers: formData.getHeaders(),
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity
-    })
-      .then(data => {
-        data = req.body.settings.OUTPUT == "XML" ? data.data : JSON.stringify(data.data, null, 3)
-        fs.unlink(path, err => { if (err) console.log(`Ocorreu um erro ao eliminar o modelo ${path.slice(2)}.`) })
-        res.status(201).jsonp(data)
-      })
-      .catch(err => {console.log("catch"); res.status(201).jsonp(err)})
-
-  } catch (err) {res.status(201).jsonp(err)}
+    res.end()
+  }); 
 });
+
+router.delete('/collection/:name', function(req, res, next) {
+  
+    MongoClient.connect(url,{useNewUrlParser: true, useUnifiedTopology: true}).then((client) => {
+     
+      var cols=[]
+      cols.push(req.params.name)
+      if(fs.existsSync('./shared/components/'+req.params.name)){
+        fs.readdirSync('./shared/components/'+req.params.name).forEach(file => {
+          String(file)
+          let str = file.replace(".json", "");
+          cols.push("components_"+str)
+        });
+      }
+      console.log("cols:"+cols)
+      const connect = client.db("StrapiAPI");
+      var result = []
+      var collection
+      cols.forEach(element => {
+        collection = connect.collection(element);
+        //var suc = collection.drop() // Dropping the collection
+        collection.drop().catch(err =>{
+          if(err){
+            if(err.message.match(/ns not found/)){
+              result.push(2) 
+            }else{
+              result.push(0) 
+              console.log("dabase error:",err)
+            } 
+          }else{
+            result.push(1) 
+          } 
+        });
+      });
+
+      if(fs.existsSync('./shared/api/'+req.params.name)){rimraf.sync("./shared/api/"+req.params.name);}
+
+      if(fs.existsSync('./shared/components/'+req.params.name)){rimraf.sync('./shared/components/'+req.params.name); }
+
+      if(result.includes(0)) {
+        console.log("Error deleting collection!");
+        res.status(500).jsonp("Error deleting collection!")
+        res.end() 
+      }else if(result.includes(2)){
+        console.log("Collection or components don´t exist!");
+        res.status(404).jsonp("Collection doesn´t exist!")
+        res.end() 
+      }else{
+        console.log("Collection deleted Successfully!");
+        res.status(200).jsonp("Collection deleted Successfully!")
+        res.end() 
+      }
+  })
+})
+
+router.get('/download/:id', function(req, res, next) {
+  try{
+    let ok = false
+    var zip = AdmZip('./utils/Strapi.zip');
+    if (fs.existsSync('./shared/api/'+req.params.id)) {
+      ok = true
+      fs.readdirSync('./shared/api/'+req.params.id).forEach(folder => {
+        fs.readdirSync('./shared/api/'+req.params.id+"/"+folder).forEach(file=>{
+          zip.addLocalFile('./shared/api/'+req.params.id+"/"+folder+"/"+file, '/Strapi/api/'+req.params.id+"/"+folder)
+        })
+      })
+    }
+    if(fs.existsSync('./shared/components/'+req.params.id)){
+      ok = true
+      fs.readdirSync('./shared/components/'+req.params.id).forEach(file => {
+        zip.addLocalFile('./shared/components/'+req.params.id +"/"+file, "/Strapi/components/"+req.params.id)
+      })
+    }
+    if(ok){
+      res.writeHead(200, {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename=${req.params.id}.zip`,
+      })
+      res.write(zip.toBuffer())
+      res.end()
+    }
+  }
+  catch(error){
+    console.log(error)
+  }
+})
+
+router.post('/genAPI', function(req, res, next) {
+  var apiname = req.body["apiName"]
+  var model = JSON.stringify(req.body["model"], null, 2)
+  console.log("apiname: ",apiname)
+  console.log("model. ",req.body["model"])
+  
+  try {
+    fs.mkdirSync("./shared/api/"+apiname) 
+
+    fs.mkdirSync("./shared/api/"+apiname+"/config")
+  
+      // Data which will write in a file. 
+    let data = `{
+"routes": [
+  {
+    "method": "GET",
+    "path": "/${apiname}s",
+    "handler": "${apiname}.find",
+    "config": {
+      "policies": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/${apiname}s/count",
+    "handler": "${apiname}.count",
+    "config": {
+      "policies": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/${apiname}s/:id",
+    "handler": "${apiname}.findOne",
+    "config": {
+      "policies": []
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/${apiname}s",
+    "handler": "${apiname}.create",
+    "config": {
+      "policies": []
+    }
+  },
+  {
+    "method": "PUT",
+    "path": "/${apiname}s/:id",
+    "handler": "${apiname}.update",
+    "config": {
+      "policies": []
+    }
+  },
+  {
+    "method": "DELETE",
+    "path": "/${apiname}s/:id",
+    "handler": "${apiname}.delete",
+    "config": {
+      "policies": []
+    }
+  }
+]
+}`
+ 
+    fs.writeFileSync("./shared/api/"+apiname+"/config/routes.json", data) 
+
+    console.log('Config created successfully!'); 
+
+    fs.mkdirSync("./shared/api/"+apiname+"/controllers") 
+    
+    fs.writeFileSync("./shared/api/"+apiname+"/controllers/"+apiname+".js", strContro) 
+       
+    console.log('controllers created successfully!'); 
+
+    fs.mkdirSync("./shared/api/"+apiname+"/models")
+     
+    fs.writeFileSync("./shared/api/"+apiname+"/models/"+apiname+".js", strModels)
+    fs.writeFileSync("./shared/api/"+apiname+"/models/"+apiname+".settings.json", model)
+
+    fs.mkdirSync("./shared/api/"+apiname+"/services")
+    fs.writeFileSync("./shared/api/"+apiname+"/services/"+apiname+".js", strServices)
+
+    console.log('services created successfully!'); 
+    console.log('Directory created successfully!'); 
+
+    var ckeys = Object.keys(req.body["componentes"])
+    console.log("componentes: ",req.body["componentes"])
+
+    console.log("ckeys: ",ckeys)
+    console.log("ckeys size: ",ckeys.length)
+
+    if(ckeys.length > 0){
+      fs.mkdirSync("./shared/components/"+apiname) 
+      ckeys.forEach(k => {
+        var str =  JSON.stringify(req.body["componentes"][`${k}`], null, 2)
+
+        fs.writeFileSync("./shared/components/"+apiname+"/"+k+".json", str)        
+      });
+      console.log('components created successfully!');  
+    }
+      res.status(200).jsonp("Geração api done!")
+      res.end()
+      
+    } catch (error) {
+      res.status(500).jsonp({error: error})
+      console.log("teyy:"+error)
+      res.end()
+    }
+
+    console.log("geração done!")
+})   
+
+
+router.post('/import', function(req, res, next) {
+  var apiname = req.body["apiName"]
+
+  var dkeys = Object.keys(req.body["dataset"])
+  var dataName = dkeys[0]
+  var dataset = req.body["dataset"]
+  console.log("dataset: ", dataset)
+  function povoar() {
+    (async () => {
+      var bol = await isReachable('http://strapi:1337/')
+      console.log("esperando")
+      while(!bol){
+        bol = await isReachable('http://strapi:1337/')
+      } 
+    
+    for (var key in dataset) {
+      if (dataset.hasOwnProperty(key)) {
+        var val = JSON.stringify(dataset[key]);
+        console.log("val:"+ val)
+
+        axios.post('http://strapi:1337/'+apiname+"s", val, {
+          headers: {
+              'Content-Type': 'application/json',
+          }
+        })
+        .then(dados => console.log("postado"))
+        .catch(erro => {
+          console.log("---------erro no for----------"+JSON.stringify(erro.response.data.data));
+        })
+      }
+    }  
+  })();
+  }
+
+  try {
+    let pov = setTimeout(povoar, 5500);
+    
+    res.status(200).jsonp("Import done!")
+    res.end()
+  } catch (error) {
+    res.status(500).jsonp({error: error})
+    console.log("teyy:"+error)
+    res.end()
+  }
+})
+
+
 
 module.exports = router;
