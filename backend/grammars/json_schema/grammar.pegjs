@@ -7,20 +7,19 @@
 
   // chave só permitida na raiz
   const atRoot = kw => depth==1 ? true : error(`A chave '${kw}' só é permitida ao nível da raiz!`)
-  // verificar se objeto tem propriedade em questão
-  const has = (key, obj) => key in obj
+  // verificar se objeto tem a(s) propriedade(s) em questão
+  const has = (k, obj) => typeof k == "string" ? k in obj : k.every(key => key in obj)
   // encontrar todos os elementos com várias ocorrências no array
   const findDuplicates = arr => arr.filter((item, index) => arr.indexOf(item) != index)
 
   // fazer todas as verificações necessárias para garantir que a schema está bem escrita
   function checkSchema(s) {
-    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s)
+    if (s === null) return true
+    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s) && checkContains(s) && checkArrayLength(s)
   }
 
   // verificar que não se usam chaves específicas a tipos nos tipos errados
   function checkKeysByType(obj) {
-    if (obj === null) return true
-
     if (propertyNames) { if (!has("type", obj)) obj.type = ["string"] }
     else if (!has("type", obj)) return error("Especifique o tipo deste valor através da chave 'type'!")
 
@@ -31,6 +30,7 @@
         case "integer":
         case "number": keywords = keywords.concat(["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]); break
         case "object": keywords = keywords.concat(["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]); break
+        case "array": keywords = keywords.concat(["items","prefixItems","contains","minContains","maxContains","minItems","maxItems","uniqueItems"]); break
       }
     }
 
@@ -41,7 +41,6 @@
 
   // verificar a coerência das chaves de alcance de tipos númericos
   function checkRangeKeywords(obj) {
-    if (obj === null) return true
     let min = null, max = null, emin = null, emax = null
 
     if (has("minimum", obj)) min = obj.minimum
@@ -67,10 +66,9 @@
 
   // verificar a coerência do array de propriedades da chave 'required'
   function checkRequiredProps(obj) {
-    if (obj === null) return true
     if (!has("properties", obj) && has("required", obj)) return error("Não faz sentido usar a chave 'required' sem definir um conjunto de propriedades com a chave 'properties'!")
 
-    if (has("properties", obj) && has("required", obj)) {
+    if (has(["properties","required"], obj)) {
       if (obj.required.length != [...new Set(obj.required)].length) return error("Todos os elementos do array da chave 'required' devem ser únicos!")
       
       let props = Object.keys(obj.properties)
@@ -91,10 +89,30 @@
 
   // verificar que as chaves 'required' e 'maxProperties' não se contradizem
   function checkMaxProperties(obj) {
-    if (obj === null) return true
-
-    if (has("required", obj) && has("maxProperties", obj))
+    if (has(["required","maxProperties"], obj))
       if (obj.maxProperties < obj.required.length) return error(`A chave 'maxProperties' define que o objeto deve ter, no máximo, ${obj.maxProperties} propriedades, contudo a chave 'required' define que há ${obj.required.length} propriedades obrigatórias!`)
+    return true
+  }
+
+  // verificar a coerência das chaves de contenção 
+  function checkContains(obj) {
+    if (!has("contains", obj)) {
+      if (has("minContains", obj) || has("maxContains", obj)) return error("As chaves 'minContains' e 'maxContains' só podem ser usadas em conjunto com a chave 'contains'!")
+    }
+    else if (has(["minContains","maxContains"], obj) && obj.minContains > obj.maxContains) return error("O valor da chave 'minContains' deve ser <= ao da chave 'maxContains'!")
+
+    return true
+  }
+
+  // verificar a coerência das chaves de comprimento de arrays
+  function checkArrayLength(obj) {
+    if (has(["prefixItems","maxItems"], obj) && obj.maxItems < obj.prefixItems.length)
+      return error(`A chave 'maxItems' define que o array deve ter, no máximo, ${obj.maxItems} elementos, contudo a chave 'prefixItems' especifica ${obj.prefixItems.length} elementos obrigatórios!`)
+
+    if (has(["prefixItems","minItems","items"], obj) && obj.items === false && obj.minItems > obj.prefixItems.length)
+      return error(`A chave 'minItems' define que o array deve ter, no mínimo, ${obj.minItems} elementos, contudo a chave 'prefixItems' especifica apenas ${obj.prefixItems.length} elementos obrigatórios e a chave 'items' proibe elementos extra para além desses!`)
+
+    if (has(["minItems","maxItems"], obj) && obj.minItems > obj.maxItems) return error("O valor da chave 'minItems' deve ser <= ao da chave 'maxItems'!")
     return true
   }
 }
@@ -112,10 +130,8 @@ value_separator = ws "," ws
 
 ws "whitespace" = [ \t\n\r]*
 
-
-// ----- Valores -----
-
-value = false / true / null / object / array / number / string
+value = boolean / null / object / array / number / string
+boolean = false / true
 
 false = "false" { return false; }
 null  = "null"  { return null;  }
@@ -124,7 +140,7 @@ true  = "true"  { return true;  }
 
 // ----- Keywords -----
 
-keyword = kw_type / kw_schema / string_keywords / number_keywords / object_keywords
+keyword = kw_type / kw_schema / string_keyword / number_keyword / object_keyword / array_keyword
 
 kw_type = QM key:"type" QM name_separator value:type_value {return {key, value}}
 type_value = t:type {return [t]} / arr:type_array {return arr}
@@ -135,9 +151,9 @@ schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https:/
 
 // ---------- Keywords string ----------
 
-string_keywords = kws_length / kw_pattern / kw_format
+string_keyword = kws_string_length / kw_pattern / kw_format
 
-kws_length = QM key:$(("min"/"max")"Length") QM name_separator value:int {return {key, value}}
+kws_string_length = QM key:$(("min"/"max")"Length") QM name_separator value:int {return {key, value}}
 kw_pattern = QM key:"pattern" QM name_separator value:string {return {key, value}}
 
 kw_format = QM key:"format" QM name_separator value:format_value {return {key, value}}
@@ -146,14 +162,14 @@ format_value = QM f:("date-time" / "time" / "date" / "duration" / "email" / "idn
 
 // ---------- Keywords number ----------
 
-number_keywords = kw_multipleOf / kws_range
+number_keyword = kw_multipleOf / kws_range
 
 kw_multipleOf = QM key:"multipleOf" QM name_separator value:positiveNumber {return {key, value}}
 kws_range = QM key:$(("exclusive"?("Min"/"Max")"imum")/("min"/"max")"imum") QM name_separator value:positiveNumber {return {key, value}}
 
 // ---------- Keywords object ----------
 
-object_keywords = kw_props / kw_patternProps / kw_moreProps / kw_requiredProps / kw_propertyNames / kws_size
+object_keyword = kw_props / kw_patternProps / kw_moreProps / kw_requiredProps / kw_propertyNames / kws_size
 
 kw_props = QM key:"properties" QM name_separator value:object {return {key, value}}
 kw_patternProps = QM key:"patternProperties" QM name_separator value:object_schemaMap {return {key, value}}
@@ -162,11 +178,22 @@ kw_requiredProps = QM key:"required" QM name_separator value:string_array {retur
 kw_propertyNames = QM key:$("propertyNames" {propertyNames=true}) QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {propertyNames=false; return {key, value}}
 kws_size = QM key:$(("min"/"max")"Properties") QM name_separator value:int {return {key, value}}
 
+// ---------- Keywords array ----------
+
+array_keyword = kw_items / kw_prefixItems / kw_contains / kws_mContains / kws_array_length
+
+kw_items = QM key:"items" QM name_separator value:schema_object {return {key, value}}
+kw_prefixItems = QM key:"prefixItems" QM name_separator value:schema_array {return {key, value}}
+kw_contains = QM key:"contains" QM name_separator value:schema_object {return {key, value}}
+kws_mContains = QM key:$(("min"/"max")"Contains") QM name_separator value:int {return {key, value}}
+kws_array_length = QM key:$(("min"/"max")"Items") QM name_separator value:int {return {key, value}}
+kw_uniqueness = QM key:"uniqueItems" QM name_separator value:boolean {return {key, value}}
+
 
 // ----- Objetos -----
 
 schema_object
-  = true / false /
+  = boolean /
     begin_object members:(
       head:keyword tail:(value_separator m:keyword { return m; })* {
         var result = {};
@@ -215,14 +242,18 @@ string_array
     )? end_array
     { return values !== null ? values : []; }
 
+schema_array
+  = begin_array values:(
+      head:schema_object tail:(value_separator v:schema_object { return v; })*
+    { return [head].concat(tail); }
+    )? end_array
+    { return values !== null ? values : []; }
+
 type_array
-  = begin_array
-    values:(
-      head:type
-      tail:(value_separator v:type { return v; })*
-      { return tail.includes(head) ? error("Os elementos do array 'type' devem ser todos únicos!") : [head].concat(tail); }
-    )?
-    end_array
+  = begin_array values:(
+      head:type tail:(value_separator v:type { return v; })*
+    { return tail.includes(head) ? error("Os elementos do array 'type' devem ser todos únicos!") : [head].concat(tail); }
+    )? end_array
     { return values !== null ? values : []; }
 
 
