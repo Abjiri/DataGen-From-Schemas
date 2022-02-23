@@ -3,55 +3,99 @@
 {
   let depth = 0
   let genericKeys = ["type","$schema"]
+  let propertyNames = false
 
+  // chave só permitida na raiz
   const atRoot = kw => depth==1 ? true : error(`A chave '${kw}' só é permitida ao nível da raiz!`)
+  // verificar se objeto tem propriedade em questão
+  const has = (key, obj) => key in obj
+  // encontrar todos os elementos com várias ocorrências no array
+  const findDuplicates = arr => arr.filter((item, index) => arr.indexOf(item) != index)
+
+  // fazer todas as verificações necessárias para garantir que a schema está bem escrita
+  function checkSchema(s) {
+    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s)
+  }
 
   // verificar que não se usam chaves específicas a tipos nos tipos errados
-  function checkKeysByType(members) {
-    if (members === null) return true
-    if (!("type" in members)) return error("Especifique o tipo deste valor através da chave 'type'!")
+  function checkKeysByType(obj) {
+    if (obj === null) return true
+
+    if (propertyNames) { if (!has("type", obj)) obj.type = ["string"] }
+    else if (!has("type", obj)) return error("Especifique o tipo deste valor através da chave 'type'!")
 
     let keywords = genericKeys
-    for (let i = 0; i < members.type.length; i++) {
-      switch (members.type[i]) {
+    for (let i = 0; i < obj.type.length; i++) {
+      switch (obj.type[i]) {
         case "string": keywords = keywords.concat(["minLength","maxLength","pattern","format"]); break
         case "integer":
         case "number": keywords = keywords.concat(["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]); break
-        case "object": keywords = keywords.concat(["properties","patternProperties","additionalProperties","unevaluatedProperties"]); break
+        case "object": keywords = keywords.concat(["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]); break
       }
     }
 
-    for (let k in members)
-      if (!keywords.includes(k)) return error(`O tipo '${members.type}' não suporta a chave '${k}'!`)
+    for (let k in obj)
+      if (!keywords.includes(k)) return error(`O tipo '${obj.type}' não suporta a chave '${k}'!`)
     return true
   }
 
   // verificar a coerência das chaves de alcance de tipos númericos
-  function checkRangeKeywords(members) {
-    if (members === null) return true
-
+  function checkRangeKeywords(obj) {
+    if (obj === null) return true
     let min = null, max = null, emin = null, emax = null
-    let has = key => key in members
 
-    if (has("minimum")) min = members.minimum
-    if (has("maximum")) max = members.maximum
-    if (has("exclusiveMinimum")) emin = members.exclusiveMinimum
-    if (has("exclusiveMaximum")) emax = members.exclusiveMaximum
+    if (has("minimum", obj)) min = obj.minimum
+    if (has("maximum", obj)) max = obj.maximum
+    if (has("exclusiveMinimum", obj)) emin = obj.exclusiveMinimum
+    if (has("exclusiveMaximum", obj)) emax = obj.exclusiveMaximum
 
     if (min !== null && max !== null && min > max) return error(`O valor da chave 'minimum' deve ser <= ao da chave 'maximum'!`)
     if (min !== null && emax !== null && min >= emax) return error(`O valor da chave 'minimum' deve ser < ao da chave 'exclusiveMaximum'!`)
     if (max !== null && emin !== null && max <= emin) return error(`O valor da chave 'maximum' deve ser > ao da chave 'exclusiveMinimum'!`)
 
     if (min !== null && emin !== null) {
-      if (emin >= min) delete members.minimum
-      else delete members.exclusiveMinimum
+      if (emin >= min) delete obj.minimum
+      else delete obj.exclusiveMinimum
     }
     if (max !== null && emax !== null) {
-      if (emax <= max) delete members.maximum
-      else delete members.exclusiveMaximum
+      if (emax <= max) delete obj.maximum
+      else delete obj.exclusiveMaximum
     }
 
-    return members
+    return obj
+  }
+
+  // verificar a coerência do array de propriedades da chave 'required'
+  function checkRequiredProps(obj) {
+    if (obj === null) return true
+    if (!has("properties", obj) && has("required", obj)) return error("Não faz sentido usar a chave 'required' sem definir um conjunto de propriedades com a chave 'properties'!")
+
+    if (has("properties", obj) && has("required", obj)) {
+      if (obj.required.length != [...new Set(obj.required)].length) return error("Todos os elementos do array da chave 'required' devem ser únicos!")
+      
+      let props = Object.keys(obj.properties)
+      for (let i = 0; i < obj.required.length; i++)
+        if (!props.includes(obj.required[i])) return error(`A propriedade '${obj.required[i]}' referida na chave 'required' não foi definida no conjunto de propriedades da chave 'properties'!`)
+    }
+    return true
+  }
+
+  // verificar que a schema dada pela chave 'propertyNames' é do tipo string
+  function checkPropertyNamesType(obj) {
+    if (has("type", obj) && (obj.type.length > 1 || obj.type[0] != "string"))
+      return error(`Como as chaves de objetos devem ser sempre strings, está implícito que a schema dada pela chave 'propertyNames' tem sempre { "type": "string" }!`)
+    else obj.type = ["string"]
+
+    return obj
+  }
+
+  // verificar que as chaves 'required' e 'maxProperties' não se contradizem
+  function checkMaxProperties(obj) {
+    if (obj === null) return true
+
+    if (has("required", obj) && has("maxProperties", obj))
+      if (obj.maxProperties < obj.required.length) return error(`A chave 'maxProperties' define que o objeto deve ter, no máximo, ${obj.maxProperties} propriedades, contudo a chave 'required' define que há ${obj.required.length} propriedades obrigatórias!`)
+    return true
   }
 }
 
@@ -109,11 +153,14 @@ kws_range = QM key:$(("exclusive"?("Min"/"Max")"imum")/("min"/"max")"imum") QM n
 
 // ---------- Keywords object ----------
 
-object_keywords = kw_properties / kw_patternProperties / kw_moreProperties
+object_keywords = kw_props / kw_patternProps / kw_moreProps / kw_requiredProps / kw_propertyNames / kws_size
 
-kw_properties = QM key:"properties" QM name_separator value:object {return {key, value}}
-kw_patternProperties = QM key:"patternProperties" QM name_separator value:object_schemaMap {return {key, value}}
-kw_moreProperties = QM key:$(("additional"/"unevaluated")"Properties") QM name_separator value:schema_object {return {key, value}}
+kw_props = QM key:"properties" QM name_separator value:object {return {key, value}}
+kw_patternProps = QM key:"patternProperties" QM name_separator value:object_schemaMap {return {key, value}}
+kw_moreProps = QM key:$(("additional"/"unevaluated")"Properties") QM name_separator value:schema_object {return {key, value}}
+kw_requiredProps = QM key:"required" QM name_separator value:string_array {return {key, value}}
+kw_propertyNames = QM key:$("propertyNames" {propertyNames=true}) QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {propertyNames=false; return {key, value}}
+kws_size = QM key:$(("min"/"max")"Properties") QM name_separator value:int {return {key, value}}
 
 
 // ----- Objetos -----
@@ -126,7 +173,7 @@ schema_object
         [head].concat(tail).forEach(el => {result[el.key] = el.value});
         return result;
     })? end_object
-    &{ return checkKeysByType(members) && checkRangeKeywords(members) }
+    &{ return checkSchema(members) }
     { return members !== null ? members: {}; }
 
 object
@@ -155,13 +202,17 @@ schemaMember = name:string name_separator value:schema_object {return {name, val
 // ----- Arrays -----
 
 array
-  = begin_array
-    values:(
-      head:value
-      tail:(value_separator v:value { return v; })*
-      { return [head].concat(tail); }
-    )?
-    end_array
+  = begin_array values:(
+      head:value tail:(value_separator v:value { return v; })*
+    { return [head].concat(tail); }
+    )? end_array
+    { return values !== null ? values : []; }
+
+string_array
+  = begin_array values:(
+      head:string tail:(value_separator v:string { return v; })*
+    { return [head].concat(tail); }
+    )? end_array
     { return values !== null ? values : []; }
 
 type_array
