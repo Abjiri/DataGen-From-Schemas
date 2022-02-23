@@ -2,40 +2,44 @@
 
 {
   let depth = 0
-  let genericKeys = ["type","$schema"]
   let propertyNames = false
+
+  let genericKeywords = ["type","$schema","enum"]
+  let stringKeywords = ["minLength","maxLength","pattern","format"]
+  let numericKeywords = ["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]
+  let objectKeywords = ["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]
+  let arrayKeywords = ["items","prefixItems","contains","minContains","maxContains","minItems","maxItems","uniqueItems"]
 
   // chave só permitida na raiz
   const atRoot = kw => depth==1 ? true : error(`A chave '${kw}' só é permitida ao nível da raiz!`)
   // verificar se objeto tem a(s) propriedade(s) em questão
   const has = (k, obj) => typeof k == "string" ? k in obj : k.every(key => key in obj)
-  // encontrar todos os elementos com várias ocorrências no array
-  const findDuplicates = arr => arr.filter((item, index) => arr.indexOf(item) != index)
 
   // fazer todas as verificações necessárias para garantir que a schema está bem escrita
   function checkSchema(s) {
     if (s === null) return true
-    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s) && checkContains(s) && checkArrayLength(s)
+    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s) && checkContains(s) && checkArrayLength(s) && checkEnumArray(s)
   }
 
   // verificar que não se usam chaves específicas a tipos nos tipos errados
   function checkKeysByType(obj) {
     if (propertyNames) { if (!has("type", obj)) obj.type = ["string"] }
-    else if (!has("type", obj)) return error("Especifique o tipo deste valor através da chave 'type'!")
+    else if (!has("type", obj) && !Object.keys(obj).every(k => genericKeywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
 
-    let keywords = genericKeys
-    for (let i = 0; i < obj.type.length; i++) {
-      switch (obj.type[i]) {
-        case "string": keywords = keywords.concat(["minLength","maxLength","pattern","format"]); break
-        case "integer":
-        case "number": keywords = keywords.concat(["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]); break
-        case "object": keywords = keywords.concat(["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]); break
-        case "array": keywords = keywords.concat(["items","prefixItems","contains","minContains","maxContains","minItems","maxItems","uniqueItems"]); break
+    if (has("type", obj)) {
+      let keywords = genericKeywords
+      for (let i = 0; i < obj.type.length; i++) {
+        switch (obj.type[i]) {
+          case "string": keywords = keywords.concat(stringKeywords); break
+          case "integer": case "number": keywords = keywords.concat(numericKeywords); break
+          case "object": keywords = keywords.concat(objectKeywords); break
+          case "array": keywords = keywords.concat(arrayKeywords); break
+        }
       }
-    }
 
-    for (let k in obj)
-      if (!keywords.includes(k)) return error(`O tipo '${obj.type}' não suporta a chave '${k}'!`)
+      for (let k in obj)
+        if (!keywords.includes(k)) return error(`O tipo '${obj.type}' não suporta a chave '${k}'!`)
+    }
     return true
   }
 
@@ -115,6 +119,30 @@
     if (has(["minItems","maxItems"], obj) && obj.minItems > obj.maxItems) return error("O valor da chave 'minItems' deve ser <= ao da chave 'maxItems'!")
     return true
   }
+
+  // verificar que os elementos do array da chave 'enum' são todos únicos (não funciona para elementos array/objeto) e do tipo correto
+  function checkEnumArray(obj) {
+    if (has("enum", obj)) {
+      if (!obj.enum.length) return error("O array da chave 'enum' deve ter, no mínimo, um elemento!")
+      if (obj.enum.length != [...new Set(obj.enum)].length) return error("Todos os elementos do array da chave 'enum' devem ser únicos!")
+
+      if (has("type", obj)) {
+        for (let i = 0; i < obj.enum.length; i++) {
+          let valid = false
+
+          for (let j = 0; j < obj.type.length; j++) {
+            if (obj.type[j] == "array" && Array.isArray(obj.enum[i])) valid = true
+            else if (obj.type[j] == "null" && obj.enum[i] === null) valid = true
+            else if (obj.type[j] == "integer" && Number.isInteger(obj.enum[i])) valid = true
+            else if (typeof obj.enum[i] == obj.type[j]) valid = true
+          }
+
+          if (!valid) return error(`Todos os elementos do array da chave 'enum' devem ser do tipo {${obj.type.join(", ")}}, segundo definido pela chave 'type'!`)
+        }
+      }
+    }
+    return true
+  }
 }
 
 // ----- JSON -----
@@ -140,7 +168,11 @@ true  = "true"  { return true;  }
 
 // ----- Keywords -----
 
-keyword = kw_type / kw_schema / string_keyword / number_keyword / object_keyword / array_keyword
+keyword = generic_keyword / string_keyword / number_keyword / object_keyword / array_keyword
+
+// ---------- Keywords generic ----------
+
+generic_keyword = kw_type / kw_schema / kw_enum
 
 kw_type = QM key:"type" QM name_separator value:type_value {return {key, value}}
 type_value = t:type {return [t]} / arr:type_array {return arr}
@@ -148,6 +180,8 @@ type = QM v:$("string" / "number" / "integer" / "object" / "array" / "boolean" /
 
 kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return {key, value}}
 schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM {return v}
+
+kw_enum = QM key:"enum" QM name_separator value:array {return {key, value}}
 
 // ---------- Keywords string ----------
 
