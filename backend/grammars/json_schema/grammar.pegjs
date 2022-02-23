@@ -4,7 +4,7 @@
   let depth = 0
   let propertyNames = false
 
-  let genericKeywords = ["type","$schema","enum"]
+  let genericKeywords = ["type","$schema","enum","const"]
   let stringKeywords = ["minLength","maxLength","pattern","format"]
   let numericKeywords = ["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]
   let objectKeywords = ["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]
@@ -18,7 +18,8 @@
   // fazer todas as verificações necessárias para garantir que a schema está bem escrita
   function checkSchema(s) {
     if (s === null) return true
-    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s) && checkContains(s) && checkArrayLength(s) && checkEnumArray(s)
+    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && 
+           checkMaxProperties(s) && checkContains(s) && checkArrayLength(s) && checkEnumArray(s) && checkConstType(s)
   }
 
   // verificar que não se usam chaves específicas a tipos nos tipos errados
@@ -28,6 +29,7 @@
 
     if (has("type", obj)) {
       let keywords = genericKeywords
+
       for (let i = 0; i < obj.type.length; i++) {
         switch (obj.type[i]) {
           case "string": keywords = keywords.concat(stringKeywords); break
@@ -38,7 +40,7 @@
       }
 
       for (let k in obj)
-        if (!keywords.includes(k)) return error(`O tipo '${obj.type}' não suporta a chave '${k}'!`)
+        if (!keywords.includes(k)) return error(`O tipo {${obj.type.join(", ")}} não suporta a chave '${k}'!`)
     }
     return true
   }
@@ -131,15 +133,32 @@
           let valid = false
 
           for (let j = 0; j < obj.type.length; j++) {
-            if (obj.type[j] == "array" && Array.isArray(obj.enum[i])) valid = true
-            else if (obj.type[j] == "null" && obj.enum[i] === null) valid = true
-            else if (obj.type[j] == "integer" && Number.isInteger(obj.enum[i])) valid = true
-            else if (typeof obj.enum[i] == obj.type[j]) valid = true
+            if (obj.type[j] == "array" && Array.isArray(obj.enum[i])) {valid = true; break}
+            else if (obj.type[j] == "null" && obj.enum[i] === null) {valid = true; break}
+            else if (obj.type[j] == "integer" && Number.isInteger(obj.enum[i])) {valid = true; break}
+            else if (typeof obj.enum[i] == obj.type[j]) {valid = true; break}
           }
 
           if (!valid) return error(`Todos os elementos do array da chave 'enum' devem ser do tipo {${obj.type.join(", ")}}, segundo definido pela chave 'type'!`)
         }
       }
+    }
+    return true
+  }
+
+  // verificar se o valor da chave 'const' é do tipo correto
+  function checkConstType(obj) {
+    if (has(["const","type"], obj)) {
+      let valid = false
+
+      for (let j = 0; j < obj.type.length; j++) {
+        if (obj.type[j] == "array" && Array.isArray(obj.const)) {valid = true; break}
+        else if (obj.type[j] == "null" && obj.const === null) {valid = true; break}
+        else if (obj.type[j] == "integer" && Number.isInteger(obj.const)) {valid = true; break}
+        else if (typeof obj.const == obj.type[j]) {valid = true; break}
+      }
+
+      if (!valid) return error(`O valor da chave 'enum' deve ser do tipo {${obj.type.join(", ")}}, segundo definido pela chave 'type'!`)
     }
     return true
   }
@@ -172,7 +191,7 @@ keyword = generic_keyword / string_keyword / number_keyword / object_keyword / a
 
 // ---------- Keywords generic ----------
 
-generic_keyword = kw_type / kw_schema / kw_enum
+generic_keyword = kw_type / kw_schema / kw_enum / kw_const
 
 kw_type = QM key:"type" QM name_separator value:type_value {return {key, value}}
 type_value = t:type {return [t]} / arr:type_array {return arr}
@@ -182,6 +201,7 @@ kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoo
 schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM {return v}
 
 kw_enum = QM key:"enum" QM name_separator value:array {return {key, value}}
+kw_const = QM key:"const" QM name_separator value:value {return {key, value}}
 
 // ---------- Keywords string ----------
 
