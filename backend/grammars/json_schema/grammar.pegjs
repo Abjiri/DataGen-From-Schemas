@@ -4,7 +4,8 @@
   let depth = 0
   let propertyNames = false
 
-  let genericKeywords = ["type","$schema","enum","const"]
+  let genericKeywords = ["$schema","type","enum","const"]
+  let annotationKeywords = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
   let stringKeywords = ["minLength","maxLength","pattern","format"]
   let numericKeywords = ["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]
   let objectKeywords = ["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]
@@ -24,12 +25,12 @@
 
   // verificar que não se usam chaves específicas a tipos nos tipos errados
   function checkKeysByType(obj) {
+    let keywords = genericKeywords.concat(annotationKeywords)
+
     if (propertyNames) { if (!has("type", obj)) obj.type = ["string"] }
-    else if (!has("type", obj) && !Object.keys(obj).every(k => genericKeywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
+    else if (!has("type", obj) && !Object.keys(obj).every(k => keywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
 
     if (has("type", obj)) {
-      let keywords = genericKeywords
-
       for (let i = 0; i < obj.type.length; i++) {
         switch (obj.type[i]) {
           case "string": keywords = keywords.concat(stringKeywords); break
@@ -191,17 +192,26 @@ keyword = generic_keyword / string_keyword / number_keyword / object_keyword / a
 
 // ---------- Keywords generic ----------
 
-generic_keyword = kw_type / kw_schema / kw_enum / kw_const
+generic_keyword = kw_schema / kw_type / kw_enum / kw_const / annotation_keyword
+
+kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return {key, value}}
+schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM {return v}
 
 kw_type = QM key:"type" QM name_separator value:type_value {return {key, value}}
 type_value = t:type {return [t]} / arr:type_array {return arr}
 type = QM v:$("string" / "number" / "integer" / "object" / "array" / "boolean" / "null") QM {return v}
 
-kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return {key, value}}
-schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM {return v}
-
 kw_enum = QM key:"enum" QM name_separator value:array {return {key, value}}
 kw_const = QM key:"const" QM name_separator value:value {return {key, value}}
+
+// ---------- Keywords annotation ----------
+
+annotation_keyword = kws_annotation_stringValues / kw_default / kw_examples / kws_annotation_booleanValues
+
+kws_annotation_stringValues = QM key:$("title"/"description"/"$comment") QM name_separator value:string {return {key, value}}
+kw_default = QM key:"default" QM name_separator value:value {return {key, value}}
+kw_examples = QM key:"examples" QM name_separator value:array {return {key, value}}
+kws_annotation_booleanValues = QM key:$((("read"/"write")"Only")/"deprecated") QM name_separator value:boolean {return {key, value}}
 
 // ---------- Keywords string ----------
 
