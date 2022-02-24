@@ -4,9 +4,10 @@
   let depth = 0
   let propertyNames = false
 
-  let genericKeys = ["$schema","type","enum","const"]
+  let genericKeys = ["type","enum","const"]
   let annotationKeys = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
   let schemaKeys = ["allOf","anyOf","oneOf","not","dependentRequired","dependentSchemas","if","then","else"]
+  let structuringKeys = ["$schema","$id","$anchor"]
 
   let stringKeys = ["minLength","maxLength","pattern","format"]
   let numericKeys = ["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]
@@ -29,7 +30,7 @@
 
   // verificar que não se usam chaves específicas a tipos nos tipos errados
   function checkKeysByType(obj) {
-    let keywords = genericKeys.concat(annotationKeys, schemaKeys)
+    let keywords = genericKeys.concat(annotationKeys, schemaKeys, structuringKeys)
     
     if (propertyNames) { if (!hasAll("type", obj)) obj.type = ["string"] }
     //else if (!hasAll("type", obj) && !Object.keys(obj).every(k => keywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
@@ -199,9 +200,9 @@
   }
 }
 
-// ----- JSON -----
+// ----- Dialect -----
 
-JSON_text = ws value:(schema_object /* / value */) ws { return value; }
+Dialect = ws value:schema_object ws { return value; }
 
 begin_array     = ws "[" ws
 begin_object    = ws "{" ws {depth++}
@@ -222,14 +223,11 @@ true  = "true"  { return true;  }
 
 // ----- Keywords -----
 
-keyword = generic_keyword / string_keyword / number_keyword / object_keyword / array_keyword / schemaComposition_keyword / conditionalSubschemas_keyword
+keyword = generic_keyword / string_keyword / number_keyword / object_keyword / array_keyword / schemaComposition_keyword / conditionalSubschemas_keyword / structuring_keyword
 
 // ---------- Keywords generic ----------
 
-generic_keyword = kw_schema / kw_type / kw_enum / kw_const / annotation_keyword
-
-kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return {key, value}}
-schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM {return v}
+generic_keyword = kw_type / kw_enum / kw_const / annotation_keyword
 
 kw_type = QM key:"type" QM name_separator value:type_value {return {key, value}}
 type_value = t:type {return [t]} / arr:type_array {return arr}
@@ -311,6 +309,16 @@ kw_dependentRequired = QM key:"dependentRequired" QM name_separator value:object
 kw_dependentSchemas = QM key:"dependentSchemas" QM name_separator value:object_schemaMap {return {key, value}}
 kw_ifThenElse = QM key:("if"/"then"/"else") QM name_separator value:schema_object {return {key, value}}
 
+// ---------- Keywords structuring ----------
+
+structuring_keyword = kw_schema / kw_id / kw_anchor
+
+kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return {key, value}}
+schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM {return v}
+
+kw_id = QM key:"$id" QM name_separator value:string &{return atRoot(key)} {return {key, value}}
+kw_anchor = QM key:"$anchor" QM name_separator value:anchor {return {key, value}}
+
 
 // ----- Objetos -----
 
@@ -334,7 +342,7 @@ object
     })? end_object
     { return members !== null ? members: {}; }
 
-member "object member"
+member /* "object member" */
   = name:string name_separator value:value {return {name, value}}
 
 object_schemaMap
@@ -346,7 +354,7 @@ object_schemaMap
     })? end_object
     { return members !== null ? members: {}; }
 
-schema_member "object member with a schema value"
+schema_member /* "object member with a schema value" */
   = name:string name_separator value:schema_object {return {name, value}}
 
 object_arrayOfStringsMap
@@ -358,7 +366,7 @@ object_arrayOfStringsMap
     })? end_object
     { return members !== null ? members: {}; }
 
-arrayOfStrings_member "object member with a string array value"
+arrayOfStrings_member /* "object member with a string array value" */
   = name:string name_separator value:string_array {return {name, value}}
 
 
@@ -407,8 +415,8 @@ int "integer"
 
 // ----- Strings -----
 
-string "string"
-  = QM chars:char* QM { return chars.join(""); }
+string "string" = QM chars:char* QM {return chars.join("")}
+anchor "anchor" = QM value:$([a-zA-Z][a-zA-Z0-9\-\_\:\.]*) QM {return value}
 
 char
   = unescaped
