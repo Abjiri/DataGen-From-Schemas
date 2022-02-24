@@ -4,39 +4,43 @@
   let depth = 0
   let propertyNames = false
 
-  let genericKeywords = ["$schema","type","enum","const"]
-  let annotationKeywords = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
-  let stringKeywords = ["minLength","maxLength","pattern","format"]
-  let numericKeywords = ["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]
-  let objectKeywords = ["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]
-  let arrayKeywords = ["items","prefixItems","contains","minContains","maxContains","minItems","maxItems","uniqueItems"]
+  let genericKeys = ["$schema","type","enum","const"]
+  let annotationKeys = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
+  let schemaKeys = ["allOf","anyOf","oneOf","not","dependentRequired","dependentSchemas","if","then","else"]
+
+  let stringKeys = ["minLength","maxLength","pattern","format"]
+  let numericKeys = ["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]
+  let objectKeys = ["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]
+  let arrayKeys = ["items","prefixItems","contains","minContains","maxContains","minItems","maxItems","uniqueItems"]
 
   // chave só permitida na raiz
   const atRoot = kw => depth==1 ? true : error(`A chave '${kw}' só é permitida ao nível da raiz!`)
-  // verificar se objeto tem a(s) propriedade(s) em questão
-  const has = (k, obj) => typeof k == "string" ? k in obj : k.every(key => key in obj)
+  // verificar se objeto tem todas as propriedades em questão
+  const hasAll = (k, obj) => typeof k == "string" ? k in obj : k.every(key => key in obj)
+  // verificar se objeto alguma das propriedades em questão
+  const hasAny = (k, obj) => k.some(key => key in obj)
 
   // fazer todas as verificações necessárias para garantir que a schema está bem escrita
   function checkSchema(s) {
     if (s === null) return true
-    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && 
-           checkMaxProperties(s) && checkContains(s) && checkArrayLength(s) && checkEnumArray(s) && checkConstType(s)
+    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s) && 
+           checkContains(s) && checkArrayLength(s) && checkEnumArray(s) && checkConstType(s) && checkDependentRequired(s) && checkIfThenElse(s)
   }
 
   // verificar que não se usam chaves específicas a tipos nos tipos errados
   function checkKeysByType(obj) {
-    let keywords = genericKeywords.concat(annotationKeywords)
+    let keywords = genericKeys.concat(annotationKeys, schemaKeys)
+    
+    if (propertyNames) { if (!hasAll("type", obj)) obj.type = ["string"] }
+    //else if (!hasAll("type", obj) && !Object.keys(obj).every(k => keywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
 
-    if (propertyNames) { if (!has("type", obj)) obj.type = ["string"] }
-    else if (!has("type", obj) && !Object.keys(obj).every(k => keywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
-
-    if (has("type", obj)) {
+    if (hasAll("type", obj)) {
       for (let i = 0; i < obj.type.length; i++) {
         switch (obj.type[i]) {
-          case "string": keywords = keywords.concat(stringKeywords); break
-          case "integer": case "number": keywords = keywords.concat(numericKeywords); break
-          case "object": keywords = keywords.concat(objectKeywords); break
-          case "array": keywords = keywords.concat(arrayKeywords); break
+          case "string": keywords = keywords.concat(stringKeys); break
+          case "integer": case "number": keywords = keywords.concat(numericKeys); break
+          case "object": keywords = keywords.concat(objectKeys); break
+          case "array": keywords = keywords.concat(arrayKeys); break
         }
       }
 
@@ -50,10 +54,10 @@
   function checkRangeKeywords(obj) {
     let min = null, max = null, emin = null, emax = null
 
-    if (has("minimum", obj)) min = obj.minimum
-    if (has("maximum", obj)) max = obj.maximum
-    if (has("exclusiveMinimum", obj)) emin = obj.exclusiveMinimum
-    if (has("exclusiveMaximum", obj)) emax = obj.exclusiveMaximum
+    if (hasAll("minimum", obj)) min = obj.minimum
+    if (hasAll("maximum", obj)) max = obj.maximum
+    if (hasAll("exclusiveMinimum", obj)) emin = obj.exclusiveMinimum
+    if (hasAll("exclusiveMaximum", obj)) emax = obj.exclusiveMaximum
 
     if (min !== null && max !== null && min > max) return error(`O valor da chave 'minimum' deve ser <= ao da chave 'maximum'!`)
     if (min !== null && emax !== null && min >= emax) return error(`O valor da chave 'minimum' deve ser < ao da chave 'exclusiveMaximum'!`)
@@ -73,9 +77,9 @@
 
   // verificar a coerência do array de propriedades da chave 'required'
   function checkRequiredProps(obj) {
-    if (!has("properties", obj) && has("required", obj)) return error("Não faz sentido usar a chave 'required' sem definir um conjunto de propriedades com a chave 'properties'!")
+    if (!hasAll("properties", obj) && hasAll("required", obj)) return error("Não faz sentido usar a chave 'required' sem definir um conjunto de propriedades com a chave 'properties'!")
 
-    if (has(["properties","required"], obj)) {
+    if (hasAll(["properties","required"], obj)) {
       if (obj.required.length != [...new Set(obj.required)].length) return error("Todos os elementos do array da chave 'required' devem ser únicos!")
       
       let props = Object.keys(obj.properties)
@@ -87,7 +91,7 @@
 
   // verificar que a schema dada pela chave 'propertyNames' é do tipo string
   function checkPropertyNamesType(obj) {
-    if (has("type", obj) && (obj.type.length > 1 || obj.type[0] != "string"))
+    if (hasAll("type", obj) && (obj.type.length > 1 || obj.type[0] != "string"))
       return error(`Como as chaves de objetos devem ser sempre strings, está implícito que a schema dada pela chave 'propertyNames' tem sempre { "type": "string" }!`)
     else obj.type = ["string"]
 
@@ -96,40 +100,40 @@
 
   // verificar que as chaves 'required' e 'maxProperties' não se contradizem
   function checkMaxProperties(obj) {
-    if (has(["required","maxProperties"], obj))
+    if (hasAll(["required","maxProperties"], obj))
       if (obj.maxProperties < obj.required.length) return error(`A chave 'maxProperties' define que o objeto deve ter, no máximo, ${obj.maxProperties} propriedades, contudo a chave 'required' define que há ${obj.required.length} propriedades obrigatórias!`)
     return true
   }
 
   // verificar a coerência das chaves de contenção 
   function checkContains(obj) {
-    if (!has("contains", obj)) {
-      if (has("minContains", obj) || has("maxContains", obj)) return error("As chaves 'minContains' e 'maxContains' só podem ser usadas em conjunto com a chave 'contains'!")
+    if (!hasAll("contains", obj)) {
+      if (hasAny(["minContains","maxContains"], obj)) return error("As chaves 'minContains' e 'maxContains' só podem ser usadas em conjunto com a chave 'contains'!")
     }
-    else if (has(["minContains","maxContains"], obj) && obj.minContains > obj.maxContains) return error("O valor da chave 'minContains' deve ser <= ao da chave 'maxContains'!")
+    else if (hasAll(["minContains","maxContains"], obj) && obj.minContains > obj.maxContains) return error("O valor da chave 'minContains' deve ser <= ao da chave 'maxContains'!")
 
     return true
   }
 
   // verificar a coerência das chaves de comprimento de arrays
   function checkArrayLength(obj) {
-    if (has(["prefixItems","maxItems"], obj) && obj.maxItems < obj.prefixItems.length)
+    if (hasAll(["prefixItems","maxItems"], obj) && obj.maxItems < obj.prefixItems.length)
       return error(`A chave 'maxItems' define que o array deve ter, no máximo, ${obj.maxItems} elementos, contudo a chave 'prefixItems' especifica ${obj.prefixItems.length} elementos obrigatórios!`)
 
-    if (has(["prefixItems","minItems","items"], obj) && obj.items === false && obj.minItems > obj.prefixItems.length)
+    if (hasAll(["prefixItems","minItems","items"], obj) && obj.items === false && obj.minItems > obj.prefixItems.length)
       return error(`A chave 'minItems' define que o array deve ter, no mínimo, ${obj.minItems} elementos, contudo a chave 'prefixItems' especifica apenas ${obj.prefixItems.length} elementos obrigatórios e a chave 'items' proibe elementos extra para além desses!`)
 
-    if (has(["minItems","maxItems"], obj) && obj.minItems > obj.maxItems) return error("O valor da chave 'minItems' deve ser <= ao da chave 'maxItems'!")
+    if (hasAll(["minItems","maxItems"], obj) && obj.minItems > obj.maxItems) return error("O valor da chave 'minItems' deve ser <= ao da chave 'maxItems'!")
     return true
   }
 
   // verificar que os elementos do array da chave 'enum' são todos únicos (não funciona para elementos array/objeto) e do tipo correto
   function checkEnumArray(obj) {
-    if (has("enum", obj)) {
+    if (hasAll("enum", obj)) {
       if (!obj.enum.length) return error("O array da chave 'enum' deve ter, no mínimo, um elemento!")
       if (obj.enum.length != [...new Set(obj.enum)].length) return error("Todos os elementos do array da chave 'enum' devem ser únicos!")
 
-      if (has("type", obj)) {
+      if (hasAll("type", obj)) {
         for (let i = 0; i < obj.enum.length; i++) {
           let valid = false
 
@@ -149,7 +153,7 @@
 
   // verificar se o valor da chave 'const' é do tipo correto
   function checkConstType(obj) {
-    if (has(["const","type"], obj)) {
+    if (hasAll(["const","type"], obj)) {
       let valid = false
 
       for (let j = 0; j < obj.type.length; j++) {
@@ -163,11 +167,41 @@
     }
     return true
   }
+
+  // verificar que todas as propriedades referidas na chave 'dependentRequired' são válidas
+  function checkDependentRequired(obj) {
+    if (hasAll(["properties","dependentRequired"], obj)) {
+      let props = Object.keys(obj.properties)
+
+      for (let key in obj.dependentRequired) {
+        if (!props.includes(key)) return error(`A propriedade '${key}' referida na chave 'dependentRequired' é inválida porque não foi definida na chave 'properties'!`)
+
+        // remover propriedades repetidas
+        obj.dependentRequired[key] = [...new Set(obj.dependentRequired[key])]
+        let array_value = obj.dependentRequired[key]
+
+        // se tiver a propriedade dependente dela mesma, remover porque é redundante
+        if (array_value.includes(key)) obj.dependentRequired[key].splice(obj.dependentRequired[key].indexOf(key), 1)
+
+        for (let i = 0; i < array_value.length; i++)
+          if (!props.includes(array_value[i])) return error(`A propriedade '${array_value[i]}' definida como obrigatória na presença da propriedade '${key}', na chave 'dependentRequired', é inválida porque não foi definida na chave 'properties'!`)
+      }
+    }
+    return obj
+  }
+
+  // verificar as condições if then else
+  function checkIfThenElse(obj) {
+    if (hasAny(["if","then","else"], obj)) {
+      if (!hasAll("if", obj)) return error("Não pode usar as chaves 'then' e/ou 'else' numa schema sem usar a chave 'if'!")
+    }
+    return true
+  }
 }
 
 // ----- JSON -----
 
-JSON_text = ws value:(schema_object / value) ws { return value; }
+JSON_text = ws value:(schema_object /* / value */) ws { return value; }
 
 begin_array     = ws "[" ws
 begin_object    = ws "{" ws {depth++}
@@ -188,7 +222,7 @@ true  = "true"  { return true;  }
 
 // ----- Keywords -----
 
-keyword = generic_keyword / string_keyword / number_keyword / object_keyword / array_keyword
+keyword = generic_keyword / string_keyword / number_keyword / object_keyword / array_keyword / schemaComposition_keyword / conditionalSubschemas_keyword
 
 // ---------- Keywords generic ----------
 
@@ -233,10 +267,9 @@ kws_range = QM key:$(("exclusive"?("Min"/"Max")"imum")/("min"/"max")"imum") QM n
 
 // ---------- Keywords object ----------
 
-object_keyword = kw_props / kw_patternProps / kw_moreProps / kw_requiredProps / kw_propertyNames / kws_size
+object_keyword = kws_props / kw_moreProps / kw_requiredProps / kw_propertyNames / kws_size
 
-kw_props = QM key:"properties" QM name_separator value:object {return {key, value}}
-kw_patternProps = QM key:"patternProperties" QM name_separator value:object_schemaMap {return {key, value}}
+kws_props = QM key:$(("patternP"/"p")"roperties") QM name_separator value:object_schemaMap {return {key, value}}
 kw_moreProps = QM key:$(("additional"/"unevaluated")"Properties") QM name_separator value:schema_object {return {key, value}}
 kw_requiredProps = QM key:"required" QM name_separator value:string_array {return {key, value}}
 kw_propertyNames = QM key:$("propertyNames" {propertyNames=true}) QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {propertyNames=false; return {key, value}}
@@ -252,6 +285,31 @@ kw_contains = QM key:"contains" QM name_separator value:schema_object {return {k
 kws_mContains = QM key:$(("min"/"max")"Contains") QM name_separator value:int {return {key, value}}
 kws_array_length = QM key:$(("min"/"max")"Items") QM name_separator value:int {return {key, value}}
 kw_uniqueness = QM key:"uniqueItems" QM name_separator value:boolean {return {key, value}}
+
+// ---------- Keywords media ----------
+
+media_keyword = kw_contentMediaType / kw_contentEncoding
+
+kw_contentMediaType = QM key:"contentMediaType" QM name_separator value:mime_type {return {key, value}}
+mime_type = ""
+
+kw_contentEncoding = QM key:"contentEncoding" QM name_separator value:encoding {return {key, value}}
+encoding = $("7bit" / "8bit" / "binary" / "quoted-printable" / "base16" / "base32" / "base64")
+
+// ---------- Keywords schema composition ----------
+
+schemaComposition_keyword = kws_combineSchemas / kw_notSchema
+
+kws_combineSchemas = QM key:$(("all"/"any"/"one")"Of") QM name_separator value:schema_array {return {key, value}}
+kw_notSchema = QM key:"not" QM name_separator value:schema_object {return {key, value}}
+
+// ---------- Keywords conditional subschemas ----------
+
+conditionalSubschemas_keyword = kw_dependentRequired / kw_dependentSchemas / kw_ifThenElse
+
+kw_dependentRequired = QM key:"dependentRequired" QM name_separator value:object_arrayOfStringsMap {return {key, value}}
+kw_dependentSchemas = QM key:"dependentSchemas" QM name_separator value:object_schemaMap {return {key, value}}
+kw_ifThenElse = QM key:("if"/"then"/"else") QM name_separator value:schema_object {return {key, value}}
 
 
 // ----- Objetos -----
@@ -276,44 +334,58 @@ object
     })? end_object
     { return members !== null ? members: {}; }
 
-member = name:string name_separator value:value {return {name, value}}
+member "object member"
+  = name:string name_separator value:value {return {name, value}}
 
 object_schemaMap
   = begin_object members:(
-      head:schemaMember tail:(value_separator m:schemaMember { return m; })* {
+      head:schema_member tail:(value_separator m:schema_member { return m; })* {
         var result = {};
         [head].concat(tail).forEach(el => {result[el.name] = el.value});
         return result;
     })? end_object
     { return members !== null ? members: {}; }
 
-schemaMember = name:string name_separator value:schema_object {return {name, value}}
+schema_member "object member with a schema value"
+  = name:string name_separator value:schema_object {return {name, value}}
+
+object_arrayOfStringsMap
+  = begin_object members:(
+      head:arrayOfStrings_member tail:(value_separator m:arrayOfStrings_member { return m; })* {
+        var result = {};
+        [head].concat(tail).forEach(el => {result[el.name] = el.value});
+        return result;
+    })? end_object
+    { return members !== null ? members: {}; }
+
+arrayOfStrings_member "object member with a string array value"
+  = name:string name_separator value:string_array {return {name, value}}
 
 
 // ----- Arrays -----
 
-array
+array "array"
   = begin_array values:(
       head:value tail:(value_separator v:value { return v; })*
     { return [head].concat(tail); }
     )? end_array
     { return values !== null ? values : []; }
 
-string_array
+string_array "array of strings"
   = begin_array values:(
       head:string tail:(value_separator v:string { return v; })*
     { return [head].concat(tail); }
     )? end_array
     { return values !== null ? values : []; }
 
-schema_array
+schema_array "array of schemas"
   = begin_array values:(
       head:schema_object tail:(value_separator v:schema_object { return v; })*
     { return [head].concat(tail); }
     )? end_array
     { return values !== null ? values : []; }
 
-type_array
+type_array "array of JSON types"
   = begin_array values:(
       head:type tail:(value_separator v:type { return v; })*
     { return tail.includes(head) ? error("Os elementos do array 'type' devem ser todos únicos!") : [head].concat(tail); }
@@ -323,13 +395,14 @@ type_array
 
 // ----- Números -----
 
-number = "-"? int frac? exp? { return parseFloat(text()); }
-positiveNumber = int frac? exp? { return parseFloat(text()); }
+number "number" = "-"? int frac? exp? { return parseFloat(text()); }
+positiveNumber "positive number" = int frac? exp? { return parseFloat(text()); }
 
 exp = [eE] ("-"/"+")? [0-9]+
 frac = "." [0-9]+
 
-int = integer:(("0"* i:([1-9] [0-9]*) {return i}) / (i:"0" "0"* {return i})) {return parseInt(Array.isArray(integer) ? integer.flat().join("") : integer)}
+int "integer" 
+  = integer:(("0"* i:([1-9] [0-9]*) {return i}) / (i:"0" "0"* {return i})) {return parseInt(Array.isArray(integer) ? integer.flat().join("") : integer)}
 
 
 // ----- Strings -----
