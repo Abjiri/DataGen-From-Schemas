@@ -12,9 +12,14 @@ function convert(json) {
     if (emptyObject(json) || json === true) {
         str += indent(depth) + `anything: '{{random(boolean(), date("01-01-1900"), float(-9999,9999), integer(-9999,9999), guid(), lorem("paragraphs", 1))}}'\n`
     }
+    else str += parseType(json)
 
     str += "}"
     return str
+}
+
+function parseType(json) {
+    
 }
 
 module.exports = { convert }

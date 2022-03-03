@@ -3,19 +3,24 @@
 {
   let depth = 0
   let propertyNames = false
+  let $defs = false
+  let ids = []
 
   let genericKeys = ["type","enum","const"]
   let annotationKeys = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
+  let mediaKeys = ["contentMediaType","contentEncoding","contentSchema"]
   let schemaKeys = ["allOf","anyOf","oneOf","not","dependentRequired","dependentSchemas","if","then","else"]
-  let structuringKeys = ["$schema","$id","$anchor"]
+  let structuringKeys = ["$schema","$id","$anchor","$ref","$defs"]
 
   let stringKeys = ["minLength","maxLength","pattern","format"]
   let numericKeys = ["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]
   let objectKeys = ["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]
-  let arrayKeys = ["items","prefixItems","contains","minContains","maxContains","minItems","maxItems","uniqueItems"]
+  let arrayKeys = ["items","prefixItems","unevaluatedItems","contains","minContains","maxContains","minItems","maxItems","uniqueItems"]
 
   // chave só permitida na raiz
-  const atRoot = kw => depth==1 ? true : error(`A chave '${kw}' só é permitida ao nível da raiz!`)
+  const atRoot = kw => (($defs && depth==3) || depth==1) ? true : error(`A chave '${kw}' só é permitida ao nível da raiz!`)
+  // todos os ids devem ser únicos
+  const newId = id => !ids.includes(id) ? true : error(`Todas as propriedades '$id' devem ser únicas! Há mais do que uma (sub)schema cujo '$id' é '${id}'.`)
   // verificar se objeto tem todas as propriedades em questão
   const hasAll = (k, obj) => typeof k == "string" ? k in obj : k.every(key => key in obj)
   // verificar se objeto alguma das propriedades em questão
@@ -24,13 +29,13 @@
   // fazer todas as verificações necessárias para garantir que a schema está bem escrita
   function checkSchema(s) {
     if (s === null) return true
-    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s) && 
-           checkContains(s) && checkArrayLength(s) && checkEnumArray(s) && checkConstType(s) && checkDependentRequired(s) && checkIfThenElse(s)
+    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s) && checkContains(s) && 
+           checkArrayLength(s) && checkEnumArray(s) && checkConstType(s) && checkDependentRequired(s) && checkIfThenElse(s) && checkContentSchema(s)
   }
 
   // verificar que não se usam chaves específicas a tipos nos tipos errados
   function checkKeysByType(obj) {
-    let keywords = genericKeys.concat(annotationKeys, schemaKeys, structuringKeys)
+    let keywords = genericKeys.concat(annotationKeys, mediaKeys, schemaKeys, structuringKeys)
     
     if (propertyNames) { if (!hasAll("type", obj)) obj.type = ["string"] }
     //else if (!hasAll("type", obj) && !Object.keys(obj).every(k => keywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
@@ -169,6 +174,13 @@
     return true
   }
 
+  // verificar os requisitos necessários para se considerar a chave 'contentSchema'
+  function checkContentSchema(obj) {
+    if (hasAll("contentSchema", obj) && !(hasAll(["type","contentMediaType"], obj) && obj.type.includes("string")))
+      return error("O valor da chave 'contentSchema' só é considerado se a instância for uma string e a chave 'contentMediaType' estiver presente!")
+    return true
+  }
+
   // verificar que todas as propriedades referidas na chave 'dependentRequired' são válidas
   function checkDependentRequired(obj) {
     if (hasAll(["properties","dependentRequired"], obj)) {
@@ -223,7 +235,8 @@ true  = "true"  { return true;  }
 
 // ----- Keywords -----
 
-keyword = generic_keyword / string_keyword / number_keyword / object_keyword / array_keyword / schemaComposition_keyword / conditionalSubschemas_keyword / structuring_keyword
+keyword = generic_keyword / string_keyword / number_keyword / object_keyword / array_keyword / 
+          media_keyword / schemaComposition_keyword / conditionalSubschemas_keyword / structuring_keyword
 
 // ---------- Keywords generic ----------
 
@@ -243,13 +256,13 @@ annotation_keyword = kws_annotation_stringValues / kw_default / kw_examples / kw
 kws_annotation_stringValues = QM key:$("title"/"description"/"$comment") QM name_separator value:string {return {key, value}}
 kw_default = QM key:"default" QM name_separator value:value {return {key, value}}
 kw_examples = QM key:"examples" QM name_separator value:array {return {key, value}}
-kws_annotation_booleanValues = QM key:$((("read"/"write")"Only")/"deprecated") QM name_separator value:boolean {return {key, value}}
+kws_annotation_booleanValues = QM key:$("readOnly"/"writeOnly"/"deprecated") QM name_separator value:boolean {return {key, value}}
 
 // ---------- Keywords string ----------
 
 string_keyword = kws_string_length / kw_pattern / kw_format
 
-kws_string_length = QM key:$(("min"/"max")"Length") QM name_separator value:int {return {key, value}}
+kws_string_length = QM key:$("minLength"/"maxLength") QM name_separator value:int {return {key, value}}
 kw_pattern = QM key:"pattern" QM name_separator value:string {return {key, value}}
 
 kw_format = QM key:"format" QM name_separator value:format_value {return {key, value}}
@@ -261,44 +274,47 @@ format_value = QM f:("date-time" / "time" / "date" / "duration" / "email" / "idn
 number_keyword = kw_multipleOf / kws_range
 
 kw_multipleOf = QM key:"multipleOf" QM name_separator value:positiveNumber {return {key, value}}
-kws_range = QM key:$(("exclusive"?("Min"/"Max")"imum")/("min"/"max")"imum") QM name_separator value:positiveNumber {return {key, value}}
+kws_range = QM key:$("minimum"/"exclusiveMinimum"/"maximum"/"exclusiveMaximum") QM name_separator value:positiveNumber {return {key, value}}
 
 // ---------- Keywords object ----------
 
 object_keyword = kws_props / kw_moreProps / kw_requiredProps / kw_propertyNames / kws_size
 
-kws_props = QM key:$(("patternP"/"p")"roperties") QM name_separator value:object_schemaMap {return {key, value}}
-kw_moreProps = QM key:$(("additional"/"unevaluated")"Properties") QM name_separator value:schema_object {return {key, value}}
+kws_props = QM key:$("patternProperties"/"properties") QM name_separator value:object_schemaMap {return {key, value}}
+kw_moreProps = QM key:$("additionalProperties"/"unevaluatedProperties") QM name_separator value:schema_object {return {key, value}}
 kw_requiredProps = QM key:"required" QM name_separator value:string_array {return {key, value}}
 kw_propertyNames = QM key:$("propertyNames" {propertyNames=true}) QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {propertyNames=false; return {key, value}}
-kws_size = QM key:$(("min"/"max")"Properties") QM name_separator value:int {return {key, value}}
+kws_size = QM key:$("minProperties"/"maxProperties") QM name_separator value:int {return {key, value}}
 
 // ---------- Keywords array ----------
 
-array_keyword = kw_items / kw_prefixItems / kw_contains / kws_mContains / kws_array_length
+array_keyword = kw_items / kw_prefixItems / kw_unevaluatedItems / kw_contains / kws_mContains / kws_array_length
 
 kw_items = QM key:"items" QM name_separator value:schema_object {return {key, value}}
 kw_prefixItems = QM key:"prefixItems" QM name_separator value:schema_array {return {key, value}}
+kw_unevaluatedItems = QM key:"unevaluatedItems" QM name_separator value:schema_object {return {key, value}}
 kw_contains = QM key:"contains" QM name_separator value:schema_object {return {key, value}}
-kws_mContains = QM key:$(("min"/"max")"Contains") QM name_separator value:int {return {key, value}}
-kws_array_length = QM key:$(("min"/"max")"Items") QM name_separator value:int {return {key, value}}
+kws_mContains = QM key:$("minContains"/"maxContains") QM name_separator value:int {return {key, value}}
+kws_array_length = QM key:$("minItems"/"maxItems") QM name_separator value:int {return {key, value}}
 kw_uniqueness = QM key:"uniqueItems" QM name_separator value:boolean {return {key, value}}
 
 // ---------- Keywords media ----------
 
-media_keyword = kw_contentMediaType / kw_contentEncoding
+media_keyword = kw_contentMediaType / kw_contentEncoding / kw_contentSchema
 
 kw_contentMediaType = QM key:"contentMediaType" QM name_separator value:mime_type {return {key, value}}
 mime_type = ""
 
 kw_contentEncoding = QM key:"contentEncoding" QM name_separator value:encoding {return {key, value}}
-encoding = $("7bit" / "8bit" / "binary" / "quoted-printable" / "base16" / "base32" / "base64")
+encoding = QM e:$("7bit" / "8bit" / "binary" / "quoted-printable" / "base16" / "base32" / "base64") QM {return e}
+
+kw_contentSchema = QM key:"contentSchema" QM name_separator value:schema_object {return {key, value}}
 
 // ---------- Keywords schema composition ----------
 
 schemaComposition_keyword = kws_combineSchemas / kw_notSchema
 
-kws_combineSchemas = QM key:$(("all"/"any"/"one")"Of") QM name_separator value:schema_array {return {key, value}}
+kws_combineSchemas = QM key:$("allOf"/"anyOf"/"oneOf") QM name_separator value:schema_array {return {key, value}}
 kw_notSchema = QM key:"not" QM name_separator value:schema_object {return {key, value}}
 
 // ---------- Keywords conditional subschemas ----------
@@ -311,13 +327,15 @@ kw_ifThenElse = QM key:("if"/"then"/"else") QM name_separator value:schema_objec
 
 // ---------- Keywords structuring ----------
 
-structuring_keyword = kw_schema / kw_id / kw_anchor
+structuring_keyword = kw_schema / kw_id / kw_anchor / kw_ref / kw_defs
 
 kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return {key, value}}
 schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM {return v}
 
-kw_id = QM key:"$id" QM name_separator value:string &{return atRoot(key)} {return {key, value}}
+kw_id = QM key:"$id" QM name_separator value:string &{return atRoot(key) && newId(value)} {ids.push(value); return {key, value}}
 kw_anchor = QM key:"$anchor" QM name_separator value:anchor {return {key, value}}
+kw_ref = QM key:"$ref" QM name_separator value:string {return {key, value}}
+kw_defs = QM key:$("$defs" {$defs = true}) QM name_separator value:object_schemaMap {$defs = false; return {key, value}}
 
 
 // ----- Objetos -----
