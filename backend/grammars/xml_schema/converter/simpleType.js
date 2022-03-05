@@ -1,5 +1,3 @@
-const RandExp = require('randexp');
-
 // Funções auxiliares ----------
 
 // verifica se a base é um dos tipos cujo valor é gerado por função anónima do DataGen
@@ -29,8 +27,8 @@ function parseStringType(c, base, has) {
       length = randomize(min, max)
    }
    
-   if (base == "hexBinary") return `{DFS_UTILS__hexBinary: "${length}"}`
-   return `{DFS_UTILS__string: "${base};${length}"}`
+   if (base == "hexBinary") return `{DFXS_UTILS__hexBinary: "${length}"}`
+   return `{DFXS_UTILS__string: "${base};${length}"}`
 }
  
 function parseNumberType(c, base, has) {
@@ -145,7 +143,7 @@ function parseComplexGType(c, base, list, has) {
    else if (max == null) max = base == "gMonthDay" ? {month: 12, day: 31} : {year: min.year + 100, month: 12}
    else if (min == null) min = base == "gMonthDay" ? {month: 1, day: 1} : {year: max.year - 100, month: 1}
 
-   return `{DFS_UTILS__complexGType: '${base};${JSON.stringify(max)};${JSON.stringify(min)};${JSON.stringify(list)}'}`
+   return `{DFXS_UTILS__complexGType: '${base};${JSON.stringify(max)};${JSON.stringify(min)};${JSON.stringify(list)}'}`
 }
  
 function parseDateTimeType(c, base, list, has) {
@@ -243,7 +241,7 @@ function parseDateTimeType(c, base, list, has) {
          min = {date: [`${maxDate[0]}/${maxDate[1]}/${year > 1000 ? (year-1000).toString().padStart(4,"0") : "0000"}`, "00:00:00"], neg: false}
       }
 
-      return `{DFS_UTILS__dateTime: '${base};${JSON.stringify(max)};${JSON.stringify(min)};${JSON.stringify(list)}'}`
+      return `{DFXS_UTILS__dateTime: '${base};${JSON.stringify(max)};${JSON.stringify(min)};${JSON.stringify(list)}'}`
    }
  
    if (base == "time") {
@@ -263,13 +261,13 @@ function parseDateTimeType(c, base, list, has) {
          else min = [0,0,0,0,0,0,0]
       }
 
-      return `{DFS_UTILS__duration: '${JSON.stringify(max)};${JSON.stringify(min)};${JSON.stringify(list)}'}`
+      return `{DFXS_UTILS__duration: '${JSON.stringify(max)};${JSON.stringify(min)};${JSON.stringify(list)}'}`
    }
 }
  
 function parseLanguage(c, has) {
     let langs = ["af","ar-ae","ar-bh","ar-dz","ar-eg","ar-iq","ar-jo","ar-kw","ar-lb","ar-ly","ar-ma","ar-om","ar-qa","ar-sa","ar-sy","ar-tn","ar-ye","ar","as","az","be","bg","bn","ca","cs","da","de-at","de-ch","de-li","de-lu","de","div","el","en-au","en-bz","en-ca","en-gb","en-ie","en-jm","en-nz","en-ph","en-tt","en-us","en-za","en-zw","en","es-ar","es-bo","es-cl","es-co","es-cr","es-do","es-ec","es-gt","es-hn","es-mx","es-ni","es-pa","es-pe","es-pr","es-py","es-sv","es-us","es-uy","es-ve","es","et","eu","fa","fi","fo","fr-be","fr-ca","fr-ch","fr-lu","fr-mc","fr","gd","gl","gu","he","hi","hr","hu","hy","id","is","it-ch","it","ja","ka","kk","kn","ko","kok","kz","lt","lv","mk","ml","mn","mr","ms","mt","nb-no","ne","nl-be","nl","nn-no","no","or","pa","pl","pt-br","pt","rm","ro-md","ro","ru-md","ru","sa","sb","sk","sl","sq","sr","sv-fi","sv","sw","sx","syr","ta","te","th","tn","tr","ts","tt","uk","ur","uz","vi","xh","yi","zh-cn","zh-hk","zh-mo","zh-sg","zh-tw","zh","zu"]
-    if ("pattern" in c && c.pattern != "([a-zA-Z]{2}|[iI]-[a-zA-Z]+|[xX]-[a-zA-Z]{1,8})(-[a-zA-Z]{1,8})*") return new RandExp(c.pattern).gen()
+    if ("pattern" in c && c.pattern != "([a-zA-Z]{2}|[iI]-[a-zA-Z]+|[xX]-[a-zA-Z]{1,8})(-[a-zA-Z]{1,8})*") return `{{pattern("${content.pattern}")}}`
  
     let max = null, min = null
  
@@ -299,7 +297,7 @@ function parseRestriction(content, base, list) {
    let has = facet => facet in content
    
    if (has("enumeration")) return `{{random("${content.enumeration.join('","')}")}}`
-   if ((typeof base != "string" || !base.includes("ID") && base != "language") && has("pattern")) return new RandExp(content.pattern).gen()
+   if ((typeof base != "string" || !base.includes("ID") && base != "language") && has("pattern")) return `{{pattern("${content.pattern}")}}`
 
    switch (base) {
       case "anyURI": return "http://www.w3.org/2001/XMLSchema"
@@ -354,7 +352,7 @@ function parseList(st, depth) {
       }
    }
    else {
-      str = `{\n${indent(depth++)}DFS_UTILS__list: gen => {\n${indent(depth)}let elems = []\n`
+      str = `{\n${indent(depth++)}DFXS_UTILS__list: gen => {\n${indent(depth)}let elems = []\n`
       let type_len = st.content.length - 1
 
       for (let i = 0; i < randomize(min,max); i++) {

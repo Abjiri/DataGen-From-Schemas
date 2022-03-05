@@ -25,22 +25,18 @@ router.post('/', (req, res) => {
     // criar modelo DSL a partir dos dados da schemas
     let model = xmlConverter.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.settings)
     console.log('modelo criado')
+    console.log(model)
     // gerar dataset
     let dataset = dslParser.parse(model)
     let format = req.body.settings.OUTPUT
     console.log('dataset gerado')
 
     // converter dataset para o formato final
-    if (format == "JSON") dataset = dslConverter.cleanJson(dataset.dataModel.data)
+    if (format == "JSON") dataset = JSON.stringify(dslConverter.cleanJson(dataset.dataModel.data), null, 2)
     if (format == "XML") dataset = dslConverter.jsonToXml(dataset.dataModel.data, data.xml_declaration)
     console.log('dataset convertido')
 
-    res.status(201)
-    if (format == "JSON") res.type('application/json')
-    if (format == "XML") res.type('application/xhtml+xml')
-    res.write(dataset)
-    res.end()
-
+    res.status(201).jsonp({dataset})
   } catch (err) {
     res.status(404).jsonp(err)
   }

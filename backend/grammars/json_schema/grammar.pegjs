@@ -2,7 +2,6 @@
 
 {
   let depth = 0
-  let propertyNames = false
   let $defs = false
   let ids = []
 
@@ -28,31 +27,73 @@
 
   // fazer todas as verificações necessárias para garantir que a schema está bem escrita
   function checkSchema(s) {
-    if (s === null) return true
+    s = determineType(s)
     return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s) && checkContains(s) && 
            checkArrayLength(s) && checkEnumArray(s) && checkConstType(s) && checkDependentRequired(s) && checkIfThenElse(s) && checkContentSchema(s)
+  }
+
+  // formatar os dados para a estrutura intermédia pretendida
+  function structureSchemaData(obj) {
+    let schema = {type: {def: true}}
+
+    if (obj === null) {
+      obj = {type: ["string"]} // se uma subschema for {}, convenciona-se que gera uma string
+      schema.type.def = false
+    }
+
+    for (let k of obj.type) schema.type[k] = {}
+    delete obj.type
+
+    for (let k in obj) {
+      if (numericKeys.includes(k)) {
+        if ("integer" in schema.type) schema.type.integer[k] = obj[k]
+        if ("number" in schema.type) schema.type.number[k] = obj[k]
+      }
+      else if (stringKeys.includes(k)) schema.type.string[k] = obj[k]
+      else if (objectKeys.includes(k)) schema.type.object[k] = obj[k]
+      else if (arrayKeys.includes(k)) schema.type.array[k] = obj[k]
+      else schema[k] = obj[k]
+    }
+
+    return schema
+  }
+
+  // determinar o tipo do valor, se a chave 'type' não for especificada
+  function determineType(obj) {
+    if (obj === null) return {type: ["string"]}
+
+    if (!hasAll("type", obj)) {
+      let type = []
+
+      for (let k in obj) {
+        if (stringKeys.includes(k)) type.push("string")
+        if (numericKeys.includes(k)) type.push("number")
+        if (objectKeys.includes(k)) type.push("object")
+        if (arrayKeys.includes(k)) type.push("array")
+      }
+
+      obj.type = type
+    }
+
+    return obj
   }
 
   // verificar que não se usam chaves específicas a tipos nos tipos errados
   function checkKeysByType(obj) {
     let keywords = genericKeys.concat(annotationKeys, mediaKeys, schemaKeys, structuringKeys)
-    
-    if (propertyNames) { if (!hasAll("type", obj)) obj.type = ["string"] }
-    //else if (!hasAll("type", obj) && !Object.keys(obj).every(k => keywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
-
-    if (hasAll("type", obj)) {
-      for (let i = 0; i < obj.type.length; i++) {
-        switch (obj.type[i]) {
-          case "string": keywords = keywords.concat(stringKeys); break
-          case "integer": case "number": keywords = keywords.concat(numericKeys); break
-          case "object": keywords = keywords.concat(objectKeys); break
-          case "array": keywords = keywords.concat(arrayKeys); break
-        }
+    //if (!hasAll("type", obj) && !Object.keys(obj).every(k => keywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
+    for (let i = 0; i < obj.type.length; i++) {
+      switch (obj.type[i]) {
+        case "string": keywords = keywords.concat(stringKeys); break
+        case "integer": case "number": keywords = keywords.concat(numericKeys); break
+        case "object": keywords = keywords.concat(objectKeys); break
+        case "array": keywords = keywords.concat(arrayKeys); break
       }
-
-      for (let k in obj)
-        if (!keywords.includes(k)) return error(`O tipo {${obj.type.join(", ")}} não suporta a chave '${k}'!`)
     }
+
+    for (let k in obj)
+      if (!keywords.includes(k)) return error(`O tipo {${obj.type.join(", ")}} não suporta a chave '${k}'!`)
+        
     return true
   }
 
@@ -214,7 +255,7 @@
 
 // ----- Dialect -----
 
-Dialect = ws value:schema_object ws { return value; }
+Dialect = ws value:schema_object ws {return value}
 
 begin_array     = ws "[" ws
 begin_object    = ws "{" ws {depth++}
@@ -266,8 +307,8 @@ kws_string_length = QM key:$("minLength"/"maxLength") QM name_separator value:in
 kw_pattern = QM key:"pattern" QM name_separator value:string {return {key, value}}
 
 kw_format = QM key:"format" QM name_separator value:format_value {return {key, value}}
-format_value = QM f:("date-time" / "time" / "date" / "duration" / "email" / "idn-email" / "hostname" / "idn-hostname" / "ipv4" 
-              / "ipv6" / "uuid" / "uri" / "uri-reference" / "iri" / "iri-reference" / "uri-template" / "json-pointer" / "regex") QM {return f}
+format_value = QM f:("date-time" / "time" / "date" / "duration" / "email" / "idn-email" / "hostname" / "idn-hostname" / "ipv4" / "ipv6"
+               / "uuid" / "uri" / "uri-reference" / "iri" / "iri-reference" / "uri-template" / "json-pointer" / "relative-json-pointer" / "regex") QM {return f}
 
 // ---------- Keywords number ----------
 
@@ -283,7 +324,7 @@ object_keyword = kws_props / kw_moreProps / kw_requiredProps / kw_propertyNames 
 kws_props = QM key:$("patternProperties"/"properties") QM name_separator value:object_schemaMap {return {key, value}}
 kw_moreProps = QM key:$("additionalProperties"/"unevaluatedProperties") QM name_separator value:schema_object {return {key, value}}
 kw_requiredProps = QM key:"required" QM name_separator value:string_array {return {key, value}}
-kw_propertyNames = QM key:$("propertyNames" {propertyNames=true}) QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {propertyNames=false; return {key, value}}
+kw_propertyNames = QM key:"propertyNames" QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {return {key, value}}
 kws_size = QM key:$("minProperties"/"maxProperties") QM name_separator value:int {return {key, value}}
 
 // ---------- Keywords array ----------
@@ -349,7 +390,7 @@ schema_object
         return result;
     })? end_object
     &{ return checkSchema(members) }
-    { return members !== null ? members: {}; }
+    { return structureSchemaData(members) }
 
 object
   = begin_object members:(
@@ -416,7 +457,7 @@ type_array "array of JSON types"
       head:type tail:(value_separator v:type { return v; })*
     { return tail.includes(head) ? error("Os elementos do array 'type' devem ser todos únicos!") : [head].concat(tail); }
     )? end_array
-    { return values !== null ? values : []; }
+    { return values !== null ? values : error("O array de tipos não pode ser vazio!"); }
 
 
 // ----- Números -----
