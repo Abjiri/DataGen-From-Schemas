@@ -374,7 +374,7 @@ module.exports = /*
                 return result;
             },
         peg$c228 = function(members) { return checkSchema(members) },
-        peg$c229 = function(members) { return structureSchemaData(members) },
+        peg$c229 = function(members) { members = structureSchemaData(members); return validateSchemaData(members) },
         peg$c230 = function(head, tail) {
                 var result = {};
                 [head].concat(tail).forEach(el => {result[el.name] = el.value});
@@ -1983,7 +1983,7 @@ module.exports = /*
           if (s3 !== peg$FAILED) {
             s4 = peg$parsename_separator();
             if (s4 !== peg$FAILED) {
-              s5 = peg$parsepositiveNumber();
+              s5 = peg$parsenumber();
               if (s5 !== peg$FAILED) {
                 peg$savedPos = s0;
                 s1 = peg$c29(s2, s5);
@@ -4463,7 +4463,7 @@ module.exports = /*
     }
 
     function peg$parsenumber() {
-      var s0, s1, s2, s3, s4;
+      var s0, s1, s2, s3;
 
       peg$silentFails++;
       s0 = peg$currPos;
@@ -4485,18 +4485,9 @@ module.exports = /*
             s3 = null;
           }
           if (s3 !== peg$FAILED) {
-            s4 = peg$parseexp();
-            if (s4 === peg$FAILED) {
-              s4 = null;
-            }
-            if (s4 !== peg$FAILED) {
-              peg$savedPos = s0;
-              s1 = peg$c245();
-              s0 = s1;
-            } else {
-              peg$currPos = s0;
-              s0 = peg$FAILED;
-            }
+            peg$savedPos = s0;
+            s1 = peg$c245();
+            s0 = s1;
           } else {
             peg$currPos = s0;
             s0 = peg$FAILED;
@@ -4519,7 +4510,7 @@ module.exports = /*
     }
 
     function peg$parsepositiveNumber() {
-      var s0, s1, s2, s3;
+      var s0, s1, s2;
 
       peg$silentFails++;
       s0 = peg$currPos;
@@ -4530,18 +4521,9 @@ module.exports = /*
           s2 = null;
         }
         if (s2 !== peg$FAILED) {
-          s3 = peg$parseexp();
-          if (s3 === peg$FAILED) {
-            s3 = null;
-          }
-          if (s3 !== peg$FAILED) {
-            peg$savedPos = s0;
-            s1 = peg$c245();
-            s0 = s1;
-          } else {
-            peg$currPos = s0;
-            s0 = peg$FAILED;
-          }
+          peg$savedPos = s0;
+          s1 = peg$c245();
+          s0 = s1;
         } else {
           peg$currPos = s0;
           s0 = peg$FAILED;
@@ -5224,6 +5206,22 @@ module.exports = /*
         return schema
       }
 
+      // validar todas as chaves de cada tipo entre si, para garantir que são coerentes
+      function validateSchemaData(obj) {
+        let valid = true
+
+        for (let k in obj.type) {
+          switch (k) {
+            case "integer": valid = coherentNumericKeywords(obj.type.integer); break
+            case "number": valid = coherentNumericKeywords(obj.type.number); break
+          }
+
+          if (valid !== true) return valid
+        }
+
+        return obj
+      }
+
       // determinar o tipo do valor, se a chave 'type' não for especificada
       function determineType(obj) {
         if (obj === null) return {type: ["string"]}
@@ -5285,7 +5283,7 @@ module.exports = /*
           else delete obj.exclusiveMaximum
         }
 
-        return obj
+        return true
       }
 
       // verificar a coerência do array de propriedades da chave 'required'
@@ -5308,7 +5306,7 @@ module.exports = /*
           return error(`Como as chaves de objetos devem ser sempre strings, está implícito que a schema dada pela chave 'propertyNames' tem sempre { "type": "string" }!`)
         else obj.type = ["string"]
 
-        return obj
+        return true
       }
 
       // verificar que as chaves 'required' e 'maxProperties' não se contradizem
@@ -5376,7 +5374,7 @@ module.exports = /*
             else if (typeof obj.const == obj.type[j]) {valid = true; break}
           }
 
-          if (!valid) return error(`O valor da chave 'enum' deve ser do tipo {${obj.type.join(", ")}}, segundo definido pela chave 'type'!`)
+          if (!valid) return error(`O valor da chave 'const' deve ser do tipo {${obj.type.join(", ")}}, segundo definido pela chave 'type'!`)
         }
         return true
       }
@@ -5407,7 +5405,7 @@ module.exports = /*
               if (!props.includes(array_value[i])) return error(`A propriedade '${array_value[i]}' definida como obrigatória na presença da propriedade '${key}', na chave 'dependentRequired', é inválida porque não foi definida na chave 'properties'!`)
           }
         }
-        return obj
+        return true
       }
 
       // verificar as condições if then else
@@ -5415,6 +5413,39 @@ module.exports = /*
         if (hasAny(["if","then","else"], obj)) {
           if (!hasAll("if", obj)) return error("Não pode usar as chaves 'then' e/ou 'else' numa schema sem usar a chave 'if'!")
         }
+        return true
+      }
+
+      // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
+      function coherentNumericKeywords(obj) {
+        let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
+
+        let frac = multipleOf % 1 != 0
+        let max = null, min = null
+        let upper = null, lower = null
+
+        if (maximum !== undefined) max = maximum
+        if (exclusiveMaximum !== undefined) max = exclusiveMaximum - (frac ? 0.0000000001 : 0)
+
+        if (minimum !== undefined) min = minimum
+        if (exclusiveMinimum !== undefined) min = exclusiveMaximum + (frac ? 0.0000000001 : 0)
+
+        if (max !== null && min !== null) {
+          upper = Math.floor(max/multipleOf)
+          lower = Math.ceil(min/multipleOf)
+          if (upper - lower < 0) return error(`Não existem múltiplos do número '${multipleOf}' no intervalo de valores especificado com as chaves de alcance!`)
+        }
+        else if (max !== null) {
+          upper = Math.floor(max/multipleOf)
+          lower = upper - 100
+        }
+        else if (min !== null) {
+          lower = Math.ceil(min/multipleOf)
+          upper = lower + 100
+        }
+
+        if (upper === null) obj.dsl = `'{{multipleOf(${multipleOf})}}'`
+        else obj.dsl = `gen => { return gen.integer(${lower}, ${upper}) * ${multipleOf} }`
         return true
       }
 

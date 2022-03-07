@@ -295,7 +295,7 @@ function pattern(pattern, i) {
 
 function multipleOf(num, i) {
     num = Array.isArray(num) ? num[i] : num
-    return num * randomize(0,1000)
+    return num * randomize(0,100)
 }
 
 function stringOfSize(chars, i) {

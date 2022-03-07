@@ -40,8 +40,8 @@ export default {
   },
   data() {
     return {
-      input_mode: "xml",
-      output_mode: "json",
+      input_mode: "javascript",
+      output_mode: "javascript",
       input: "",
       output: "",
       settings: {
@@ -56,8 +56,8 @@ export default {
     updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
     updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
     async generate() {
-      //let {data} = await axios.post('http://localhost:3000/api/json_schema', {json: this.input, settings: this.settings})
-      let {data} = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.input, settings: this.settings})
+      let {data} = await axios.post('http://localhost:3000/api/json_schema', {json: this.input, settings: this.settings})
+      //let {data} = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.input, settings: this.settings})
 
       let dataset = data.dataset
       this.output = typeof dataset == "string" ? dataset : "ERRO!!\n\n" + dataset.message

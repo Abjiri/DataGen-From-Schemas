@@ -33,7 +33,7 @@ function parseType(json, depth) {
         switch (type) {
             case "null": value = "null"; break
             case "boolean": value = "{{boolean()}}"; break
-            case "number": case "integer": value = parseNumericType(json, type); break
+            case "number": case "integer": value = json.type[type].dsl; break
             case "string": value = parseStringType(json.type.string); break
         }
 
@@ -42,10 +42,6 @@ function parseType(json, depth) {
     }
 
     return indent(depth) + value + '\n'
-}
-
-function parseNumericType(json, type) {
-
 }
 
 function parseStringType(json) {
