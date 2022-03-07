@@ -139,7 +139,7 @@ function cleanJsonFromXsd(json, depth) {
 function cleanJsonFromJsonSchema(json, depth) {
     let keys = Object.keys(json)
 
-    if (keys.length == 1 && keys[0] == "DFJS_JSON__NOTOBJECT") return json[keys[0]]
+    if (keys.length == 1 && keys[0] == "DFJS_NOT_OBJECT") return json[keys[0]]
 
     return json
 }

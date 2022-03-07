@@ -25,7 +25,7 @@ router.post('/', (req, res) => {
     // criar modelo DSL a partir dos dados da schemas
     let model = xmlConverter.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.settings)
     console.log('modelo criado')
-    console.log(model)
+    
     // gerar dataset
     let dataset = dslParser.parse(model)
     let format = req.body.settings.OUTPUT

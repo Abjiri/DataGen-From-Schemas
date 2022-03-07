@@ -37,7 +37,7 @@ function parseType(json, depth) {
             case "string": value = parseStringType(json.type.string); break
         }
 
-        if (depth==1) value = "DFJS_JSON__NOTOBJECT: " + value
+        if (depth==1) value = "DFJS_NOT_OBJECT: " + value
         else {} 
     }
 

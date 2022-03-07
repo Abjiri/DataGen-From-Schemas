@@ -28,6 +28,7 @@ function parseStringType(c, base, has) {
    }
    
    if (base == "hexBinary") return `{DFXS_UTILS__hexBinary: "${length}"}`
+   if (["normalizedString","string","token"].includes(base)) return `'{{stringOfSize(${length})}}'`
    return `{DFXS_UTILS__string: "${base};${length}"}`
 }
  

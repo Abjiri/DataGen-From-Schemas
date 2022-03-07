@@ -19,7 +19,7 @@ function string(base, length) {
     let alphanumerical = [...alphabet,"0","1","2","3","4","5","6","7","8","9"]
  
     let space = ["normalizedString","string","token"].includes(base)
-    if (base == "base64Binary") alphanumerical.push("+").push("/")
+    if (base == "base64Binary") alphanumerical.push("+", "/")
  
     let str = ""
     for (let i = 0; i < length; i++) {
