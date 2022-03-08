@@ -46,6 +46,10 @@ function parseType(json, depth) {
 
 function parseStringType(json) {
     if ("pattern" in json) return "'" + new RandExp(json.pattern).gen() + "'"
+
+    let min = "minLength" in json ? json.minLength : 0
+    let max = "maxLength" in json ? json.maxLength : min+100
+    return `'{{stringOfSize(${min}, ${max})}}'`
 }
 
 module.exports = { convert }

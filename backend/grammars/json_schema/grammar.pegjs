@@ -64,8 +64,9 @@
 
     for (let k in obj.type) {
       switch (k) {
-        case "integer": valid = coherentNumericKeywords(obj.type.integer); break
-        case "number": valid = coherentNumericKeywords(obj.type.number); break
+        case "integer": valid = dslNumericTypes(obj.type.integer); break
+        case "number": valid = dslNumericTypes(obj.type.number); break
+        case "string": valid = dslStringType(obj.type.string); break
       }
 
       if (valid !== true) return valid
@@ -269,7 +270,7 @@
   }
 
   // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
-  function coherentNumericKeywords(obj) {
+  function dslNumericTypes(obj) {
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
 
     let frac = multipleOf % 1 != 0
