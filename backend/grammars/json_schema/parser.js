@@ -5212,8 +5212,8 @@ module.exports = /*
 
         for (let k in obj.type) {
           switch (k) {
-            case "integer": valid = coherentNumericKeywords(obj.type.integer); break
-            case "number": valid = coherentNumericKeywords(obj.type.number); break
+            case "integer": valid = dslNumericTypes(obj.type.integer, k); break
+            case "number": valid = dslNumericTypes(obj.type.number, k); break
           }
 
           if (valid !== true) return valid
@@ -5417,7 +5417,7 @@ module.exports = /*
       }
 
       // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
-      function coherentNumericKeywords(obj) {
+      function dslNumericTypes(obj, type) {
         let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
 
         let frac = multipleOf % 1 != 0
@@ -5425,10 +5425,10 @@ module.exports = /*
         let upper = null, lower = null
 
         if (maximum !== undefined) max = maximum
-        if (exclusiveMaximum !== undefined) max = exclusiveMaximum - (frac ? 0.0000000001 : 0)
+        if (exclusiveMaximum !== undefined) max = exclusiveMaximum - (frac ? 0.0000000001 : 1)
 
         if (minimum !== undefined) min = minimum
-        if (exclusiveMinimum !== undefined) min = exclusiveMaximum + (frac ? 0.0000000001 : 0)
+        if (exclusiveMinimum !== undefined) min = exclusiveMaximum + (frac ? 0.0000000001 : 1)
 
         if (max !== null && min !== null) {
           upper = Math.floor(max/multipleOf)
@@ -5444,8 +5444,10 @@ module.exports = /*
           upper = lower + 100
         }
 
-        if (upper === null) obj.dsl = `'{{multipleOf(${multipleOf})}}'`
+        if (!Object.keys(obj).length) obj.dsl = `'{{${type == "integer" ? "integer" : "float"}(-1000,1000)}}'`
+        else if (upper === null) obj.dsl = `'{{multipleOf(${multipleOf})}}'`
         else obj.dsl = `gen => { return gen.integer(${lower}, ${upper}) * ${multipleOf} }`
+
         return true
       }
 

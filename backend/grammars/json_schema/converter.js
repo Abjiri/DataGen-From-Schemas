@@ -49,10 +49,13 @@ function parseStringType(json) {
 
     if ("format" in json) {
         let minDate = {date: ["01/01/1950", "00:00:00"], neg: false}
-        let defaultListArg = {max: 1, min: 1}
+        let defaultList = {max: 1, min: 1}
         
         switch (json.format) {
-            case "date-time": return `{DFS_UTILS__dateTime: 'dateTime;null;${JSON.stringify(minDate)};${JSON.stringify(defaultListArg)}'}`
+            case "date-time": return `{DFS_UTILS__dateTime: 'dateTime;null;${JSON.stringify(minDate)};${JSON.stringify(defaultList)}'}`
+            case "date": return `{DFS_UTILS__dateTime: 'date;null;${JSON.stringify(minDate)};${JSON.stringify(defaultList)}'}`
+            case "time": return `'{{time("hh:mm:ss", 24, false, "00:00:00", "23:59:59")}}'`
+            case "duration": return `{DFS_UTILS__duration: '${JSON.stringify([1,0,0,0,0,0,0])};${JSON.stringify([0,0,0,0,0,0,0])};${JSON.stringify(defaultList)}'}`
         }
     }
 

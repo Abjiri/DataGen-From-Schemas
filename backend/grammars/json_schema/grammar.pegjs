@@ -64,9 +64,8 @@
 
     for (let k in obj.type) {
       switch (k) {
-        case "integer": valid = dslNumericTypes(obj.type.integer); break
-        case "number": valid = dslNumericTypes(obj.type.number); break
-        case "string": valid = dslStringType(obj.type.string); break
+        case "integer": valid = dslNumericTypes(obj.type.integer, k); break
+        case "number": valid = dslNumericTypes(obj.type.number, k); break
       }
 
       if (valid !== true) return valid
@@ -270,7 +269,7 @@
   }
 
   // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
-  function dslNumericTypes(obj) {
+  function dslNumericTypes(obj, type) {
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
 
     let frac = multipleOf % 1 != 0
@@ -297,8 +296,10 @@
       upper = lower + 100
     }
 
-    if (upper === null) obj.dsl = `'{{multipleOf(${multipleOf})}}'`
+    if (!Object.keys(obj).length) obj.dsl = `'{{${type == "integer" ? "integer" : "float"}(-1000,1000)}}'`
+    else if (upper === null) obj.dsl = `'{{multipleOf(${multipleOf})}}'`
     else obj.dsl = `gen => { return gen.integer(${lower}, ${upper}) * ${multipleOf} }`
+
     return true
   }
 }
