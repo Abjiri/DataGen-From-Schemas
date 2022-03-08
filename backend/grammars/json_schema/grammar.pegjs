@@ -113,7 +113,7 @@
     return true
   }
 
-  // verificar a coerência das chaves de alcance de tipos númericos
+  // verificar a coerência das chaves de alcance de tipos númericos e string
   function checkRangeKeywords(obj) {
     let min = null, max = null, emin = null, emax = null
 
@@ -134,6 +134,8 @@
       if (emax <= max) delete obj.maximum
       else delete obj.exclusiveMaximum
     }
+
+    if (hasAll(["maxLength", "minLength"], obj) && obj.minLength > obj.maxLength) return error(`O valor da chave 'minLength' deve ser <= ao da chave 'maxLength'!`)
 
     return true
   }
@@ -359,7 +361,7 @@ kw_pattern = QM key:"pattern" QM name_separator value:string {return {key, value
 
 kw_format = QM key:"format" QM name_separator value:format_value {return {key, value}}
 format_value = QM f:("date-time" / "time" / "date" / "duration" / "email" / "idn-email" / "hostname" / "idn-hostname" / "ipv4" / "ipv6"
-               / "uuid" / "uri" / "uri-reference" / "iri" / "iri-reference" / "uri-template" / "json-pointer" / "relative-json-pointer" / "regex") QM {return f}
+               / "uuid" / "uri-reference" / "uri-template" / "uri" / "iri-reference" / "iri" / "json-pointer" / "relative-json-pointer" / "regex") QM {return f}
 
 // ---------- Keywords number ----------
 

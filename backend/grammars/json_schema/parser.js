@@ -236,16 +236,16 @@ module.exports = /*
         peg$c92 = peg$literalExpectation("ipv6", false),
         peg$c93 = "uuid",
         peg$c94 = peg$literalExpectation("uuid", false),
-        peg$c95 = "uri",
-        peg$c96 = peg$literalExpectation("uri", false),
-        peg$c97 = "uri-reference",
-        peg$c98 = peg$literalExpectation("uri-reference", false),
-        peg$c99 = "iri",
-        peg$c100 = peg$literalExpectation("iri", false),
+        peg$c95 = "uri-reference",
+        peg$c96 = peg$literalExpectation("uri-reference", false),
+        peg$c97 = "uri-template",
+        peg$c98 = peg$literalExpectation("uri-template", false),
+        peg$c99 = "uri",
+        peg$c100 = peg$literalExpectation("uri", false),
         peg$c101 = "iri-reference",
         peg$c102 = peg$literalExpectation("iri-reference", false),
-        peg$c103 = "uri-template",
-        peg$c104 = peg$literalExpectation("uri-template", false),
+        peg$c103 = "iri",
+        peg$c104 = peg$literalExpectation("iri", false),
         peg$c105 = "json-pointer",
         peg$c106 = peg$literalExpectation("json-pointer", false),
         peg$c107 = "relative-json-pointer",
@@ -1771,17 +1771,17 @@ module.exports = /*
                               if (peg$silentFails === 0) { peg$fail(peg$c94); }
                             }
                             if (s2 === peg$FAILED) {
-                              if (input.substr(peg$currPos, 3) === peg$c95) {
+                              if (input.substr(peg$currPos, 13) === peg$c95) {
                                 s2 = peg$c95;
-                                peg$currPos += 3;
+                                peg$currPos += 13;
                               } else {
                                 s2 = peg$FAILED;
                                 if (peg$silentFails === 0) { peg$fail(peg$c96); }
                               }
                               if (s2 === peg$FAILED) {
-                                if (input.substr(peg$currPos, 13) === peg$c97) {
+                                if (input.substr(peg$currPos, 12) === peg$c97) {
                                   s2 = peg$c97;
-                                  peg$currPos += 13;
+                                  peg$currPos += 12;
                                 } else {
                                   s2 = peg$FAILED;
                                   if (peg$silentFails === 0) { peg$fail(peg$c98); }
@@ -1803,9 +1803,9 @@ module.exports = /*
                                       if (peg$silentFails === 0) { peg$fail(peg$c102); }
                                     }
                                     if (s2 === peg$FAILED) {
-                                      if (input.substr(peg$currPos, 12) === peg$c103) {
+                                      if (input.substr(peg$currPos, 3) === peg$c103) {
                                         s2 = peg$c103;
-                                        peg$currPos += 12;
+                                        peg$currPos += 3;
                                       } else {
                                         s2 = peg$FAILED;
                                         if (peg$silentFails === 0) { peg$fail(peg$c104); }
@@ -5283,6 +5283,8 @@ module.exports = /*
           else delete obj.exclusiveMaximum
         }
 
+        if (hasAll(["maxLength", "minLength"], obj) && obj.minLength > obj.maxLength) return error(`O valor da chave 'minLength' deve ser <= ao da chave 'maxLength'!`)
+
         return true
       }
 
@@ -5476,3 +5478,4 @@ module.exports = /*
     parse:       peg$parse
   };
 })();
+
