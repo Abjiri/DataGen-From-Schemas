@@ -47,6 +47,15 @@ function parseType(json, depth) {
 function parseStringType(json) {
     if ("pattern" in json) return "'" + new RandExp(json.pattern).gen() + "'"
 
+    if ("format" in json) {
+        let minDate = {date: ["01/01/1950", "00:00:00"], neg: false}
+        let defaultListArg = {max: 1, min: 1}
+        
+        switch (json.format) {
+            case "date-time": return `{DFS_UTILS__dateTime: 'dateTime;null;${JSON.stringify(minDate)};${JSON.stringify(defaultListArg)}'}`
+        }
+    }
+
     let min = "minLength" in json ? json.minLength : 0
     let max = "maxLength" in json ? json.maxLength : min+100
     return `'{{stringOfSize(${min}, ${max})}}'`

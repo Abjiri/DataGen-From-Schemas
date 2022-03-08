@@ -1,4 +1,4 @@
-const utils = require('./DFXS_utils')
+const utils = require('./DFS_utils')
 const loremIpsum = require("lorem-ipsum").loremIpsum;
 
 function randomize(min, max) { return Math.floor(Math.random() * ((max+1) - min) + min) }
@@ -31,7 +31,7 @@ function parseKeyJSON(original, keys_counter) {
 }
 
 function callUtils(obj, prop) {
-    let func = prop.replace(/^DFXS_UTILS__/, "")
+    let func = prop.replace(/^DFS_UTILS__/, "")
     let args = func == "list" ? [obj[prop]] : obj[prop].split(";")
     return utils[func](...args)
 }
@@ -95,7 +95,7 @@ function cleanJsonFromXsd(json, depth) {
             if (Object.keys(json).length == 1) temp = prop
             else json = renameProperty(json, prop, "value")
         }
-        else if (/^DFXS_UTILS__/.test(prop)) {
+        else if (/^DFS_UTILS__/.test(prop)) {
             temp = prop
             json[prop] = callUtils(json, prop)
         }
@@ -139,7 +139,18 @@ function cleanJsonFromXsd(json, depth) {
 function cleanJsonFromJsonSchema(json, depth) {
     let keys = Object.keys(json)
 
-    if (keys.length == 1 && keys[0] == "DFJS_NOT_OBJECT") return json[keys[0]]
+    for (let i = 0; i < keys.length; i++) {
+        let prop = keys[i]
+        
+        if (prop == "DFJS_NOT_OBJECT") {
+            json = cleanJsonFromJsonSchema(json[prop], depth)
+            
+            // o valor foi calculado com uma função do DFS_utils
+            if (typeof json == "object" && json != null) return json[Object.keys(json)[0]]
+            return json
+        }
+        else if (/^DFS_UTILS__/.test(prop)) json[prop] = callUtils(json, prop)
+    }
 
     return json
 }
@@ -201,7 +212,7 @@ function jsonToXml2(obj, depth) {
         }
         else if (/^DFXS_TEMP__\d+/.test(prop)) xml += jsonToXml2(obj[prop], depth)
         else if (/^DFXS_EXTENSION__SC/.test(prop)) xml += '\t'.repeat(depth) + checkUtilsProp(obj[prop]) + '\n'
-        else if (/^DFXS_UTILS__/.test(prop)) {
+        else if (/^DFS_UTILS__/.test(prop)) {
             xml += convertXMLString(callUtils(obj, prop), 'xml', depth)
             last_dfxsUtils = true
         }

@@ -146,7 +146,7 @@ function list(elems) {
     for (let i = 0; i < elems.length; i++) {
         if (typeof elems[i] === 'object' && elems[i] != null) {
             let key = Object.keys(elems[i])[0]
-            str += local[key.replace(/^DFXS_UTILS__/, "")](elems[i][key].split(";")) + " "
+            str += local[key.replace(/^DFS_UTILS__/, "")](elems[i][key].split(";")) + " "
         }
         else str += elems[i] + " "
     }
