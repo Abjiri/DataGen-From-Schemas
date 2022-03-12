@@ -1,9 +1,12 @@
 const RandExp = require('randexp');
+const loremIpsum = require("lorem-ipsum").loremIpsum;
 
 // tabs de indentação
 const indent = depth => "\t".repeat(depth)
 // poder gerar um boleano, inteiro, float ou string
 const randomValue = `'{{random(boolean(), integer(-9999,9999), float(-9999,9999), lorem("sentences", 1))}}'`
+// obter um número aleatório entre os limites
+let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
 
 function convert(json) {
     return "<!LANGUAGE pt>\n" + parseJSON(json, 1)
@@ -12,9 +15,9 @@ function convert(json) {
 function parseJSON(json, depth) {
     let str = ""
 
-    if (!json.type.def) {
-        if (depth==1) str = "{\n" + indent(depth) + `anything: ${randomValue}\n}`
-        //else ...
+    if (json === true) {
+        if (depth==1) str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${randomValue}\n}`
+        else str = randomValue
     }
     else str = parseType(json, depth)
 
@@ -89,9 +92,8 @@ function parseStringType(json) {
 
 function parseObjectType(json, depth) {
     let str = "{\n", finalObj = {}
+    let newPatternProps = []
     let required = "required" in json ? JSON.parse(JSON.stringify(json.required)) : []
-    let minProps = "minProperties" in json ? json.minProperties : 0
-    let maxProps = json.maxProperties
 
     // adicionar uma propriedade nova ao objeto final
     let addProperty = (k,v) => finalObj[k] = parseJSON(v, depth+1)
@@ -99,7 +101,7 @@ function parseObjectType(json, depth) {
     if ("properties" in json) {
         for (let k in json.properties) {
             let req
-            if ((req = required.includes(k)) || Math.random() <= 0.9) addProperty(k, json.properties[k])
+            if ((req = required.includes(k)) || Math.random() <= 1) addProperty(k, json.properties[k])
             if (req) required.splice(required.indexOf(k), 1)
         }
     }
@@ -117,7 +119,10 @@ function parseObjectType(json, depth) {
             // produzir, no máximo, 1 propriedade aleatória respeitante da schema da chave atual do patternProperties
             if (Math.random() > 0.5) {
                 let prop = new RandExp(k).gen()
-                if (!Object.keys(finalObj).includes(prop)) addProperty(prop, json.patternProperties[k])
+                if (!Object.keys(finalObj).includes(prop)) {
+                    addProperty(prop, json.patternProperties[k])
+                    newPatternProps.push(k)
+                }
             }
         }
     }
@@ -132,14 +137,8 @@ function parseObjectType(json, depth) {
     required.map(p => finalObj[p] = randomValue)
     required = []
 
-    let finalKeys = Object.keys(finalObj)
-    // se tiver mais que maxProperties, apagar opcionais até satisfazer ser esse nr de propriedades
-    for (let i = 0; finalKeys.length > maxProps; i++) {
-        if (!json.required.includes(finalKeys[i])) {
-            delete finalObj[finalKeys[i]]
-            finalKeys.splice(i--, 1)
-        }
-    }
+    // processar as chaves de tamanho do objeto
+    parseObjectSize(json, finalObj, newPatternProps, depth)
 
     // converter o objeto final para string da DSL
     Object.keys(finalObj).map(k => str += `${indent(depth)}${k}: ${finalObj[k]},\n`)
@@ -147,6 +146,76 @@ function parseObjectType(json, depth) {
     if (str == "{\n") str = depth > 1 ? "{}" : "{\n\tDFJS_EMPTY_JSON: true\n}"
     else str = `${str.slice(0, -2)}\n${indent(depth-1)}}`
     return str
+}
+
+function parseObjectSize(json, finalObj, newPatternProps, depth) {
+    let numKeys = () => Object.keys(finalObj).length
+    let minProps = "minProperties" in json ? json.minProperties : 0
+    let maxProps = json.maxProperties
+
+    // adicionar uma propriedade nova ao objeto final
+    let addProperty = (k,v) => finalObj[k] = parseJSON(v, depth+1)
+
+    // se tiver mais que maxProperties, apagar opcionais aleatoriamente até satisfazer esse nr de propriedades
+    if (maxProps !== undefined && maxProps < numKeys()) {
+        let unrequiredKeys = Object.keys(finalObj).filter(k => !json.required.includes(k))
+        shuffle(unrequiredKeys)
+
+        let finalLen = randomize(maxProps, numKeys()-unrequiredKeys.length)
+        for (let i = 0; numKeys() != finalLen; i++) delete finalObj[unrequiredKeys[i]]
+    }
+
+    if (minProps > numKeys()) {
+        if ("properties" in json) {
+            let unrequiredProps = Object.keys(json.properties).filter(k => !json.required.includes(k) && !(k in finalObj))
+            shuffle(unrequiredProps)
+
+            for (let i = 0; minProps > numKeys() && i < unrequiredProps.length; i++) {
+                addProperty(unrequiredProps[i], json.properties[unrequiredProps[i]])
+            }
+        }
+        if ("patternProperties" in json) {
+            let patternProps = Object.keys(json.patternProperties).filter(k => !newPatternProps.includes(k))
+            
+            for (let i = 0; i < patternProps.length; i++) {
+                let prop = new RandExp(new RegExp(patternProps[i])).gen()
+                if (!Object.keys(finalObj).includes(prop)) addProperty(prop, json.patternProperties[patternProps[i]])
+            }
+        }
+        if (!("additionalProperties" in json) && !("unevaluatedProperties" in json)) {
+            while (minProps > numKeys()) {
+                addProperty(loremIpsum({count: 1, units: "words"}).toLowerCase(), true)
+            }
+        }
+        if ("additionalProperties" in json && json.additionalProperties !== false) {
+            while (minProps > numKeys()) {
+                addProperty(loremIpsum({count: 1, units: "words"}).toLowerCase(), json.additionalProperties)
+            }
+        }
+        else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) {
+            while (minProps > numKeys()) {
+                addProperty(loremIpsum({count: 1, units: "words"}).toLowerCase(), json.unevaluatedProperties)
+            }
+        }
+    }
+}
+
+function shuffle(array) {
+    let currentIndex = array.length,  randomIndex;
+  
+    // While there remain elements to shuffle...
+    while (currentIndex != 0) {
+  
+      // Pick a remaining element...
+      randomIndex = Math.floor(Math.random() * currentIndex);
+      currentIndex--;
+  
+      // And swap it with the current element.
+      [array[currentIndex], array[randomIndex]] = [
+        array[randomIndex], array[currentIndex]];
+    }
+  
+    return array;
 }
 
 module.exports = { convert }

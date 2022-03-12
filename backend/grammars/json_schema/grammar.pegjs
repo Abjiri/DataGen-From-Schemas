@@ -36,10 +36,7 @@
   function structureSchemaData(obj) {
     let schema = {type: {def: true}}
 
-    if (obj === null) {
-      obj = {type: ["string"]} // se uma subschema for {}, convenciona-se que gera uma string
-      schema.type.def = false
-    }
+    if (obj === null) return true
 
     for (let k of obj.type) schema.type[k] = {}
     delete obj.type

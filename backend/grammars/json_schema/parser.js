@@ -5184,10 +5184,7 @@ module.exports = /*
       function structureSchemaData(obj) {
         let schema = {type: {def: true}}
 
-        if (obj === null) {
-          obj = {type: ["string"]} // se uma subschema for {}, convenciona-se que gera uma string
-          schema.type.def = false
-        }
+        if (obj === null) return true
 
         for (let k of obj.type) schema.type[k] = {}
         delete obj.type
@@ -5317,10 +5314,19 @@ module.exports = /*
         return true
       }
 
-      // verificar que as chaves 'required' e 'maxProperties' não se contradizem
+      // verificar que as chaves 'required' e de tamanho do objeto não se contradizem
       function checkMaxProperties(obj) {
-        if (hasAll(["required","maxProperties"], obj))
+        if (hasAll(["required", "maxProperties"], obj))
           if (obj.maxProperties < obj.required.length) return error(`A chave 'maxProperties' define que o objeto deve ter, no máximo, ${obj.maxProperties} propriedades, contudo a chave 'required' define que há ${obj.required.length} propriedades obrigatórias!`)
+
+        if (hasAll("minProperties", obj)) {
+          if (!hasAll("patternProperties", obj) && (
+            (hasAll("additionalProperties", obj) && obj.additionalProperties === false) || 
+            (!hasAll("additionalProperties", obj) && hasAll("unevaluatedProperties", obj) && obj.unevaluatedProperties === false))) {
+              let properties = hasAll("properties", obj) ? Object.keys(obj.properties).length : 0
+              if (properties < obj.minProperties) return error(`A chave 'minProperties' define que o objeto deve ter, no mínimo, ${obj.minProperties} propriedades, contudo a schema permite um máximo de ${properties} propriedades no objeto!`)
+          }
+        }
         return true
       }
 
