@@ -101,7 +101,7 @@ function parseObjectType(json, depth) {
     if ("properties" in json) {
         for (let k in json.properties) {
             let req
-            if ((req = required.includes(k)) || Math.random() <= 1) addProperty(k, json.properties[k])
+            if ((req = required.includes(k)) || Math.random() <= 0.85) addProperty(k, json.properties[k])
             if (req) required.splice(required.indexOf(k), 1)
         }
     }
@@ -151,26 +151,19 @@ function parseObjectType(json, depth) {
 function parseObjectSize(json, finalObj, newPatternProps, depth) {
     let numKeys = () => Object.keys(finalObj).length
     let minProps = "minProperties" in json ? json.minProperties : 0
-    let maxProps = json.maxProperties
+    let maxProps = "maxProperties" in json ? json.maxProperties : minProps+3
 
     // adicionar uma propriedade nova ao objeto final
     let addProperty = (k,v) => finalObj[k] = parseJSON(v, depth+1)
 
-    // se tiver mais que maxProperties, apagar opcionais aleatoriamente até satisfazer esse nr de propriedades
-    if (maxProps !== undefined && maxProps < numKeys()) {
-        let unrequiredKeys = Object.keys(finalObj).filter(k => !json.required.includes(k))
-        shuffle(unrequiredKeys)
-
-        let finalLen = randomize(maxProps, numKeys()-unrequiredKeys.length)
-        for (let i = 0; numKeys() != finalLen; i++) delete finalObj[unrequiredKeys[i]]
-    }
-
+    // se tiver menos que minProperties, adicionar mais propriedades
     if (minProps > numKeys()) {
+        let finalLen = randomize(minProps, maxProps)
+
         if ("properties" in json) {
             let unrequiredProps = Object.keys(json.properties).filter(k => !json.required.includes(k) && !(k in finalObj))
-            shuffle(unrequiredProps)
-
-            for (let i = 0; minProps > numKeys() && i < unrequiredProps.length; i++) {
+            
+            for (let i = 0; i < unrequiredProps.length; i++) {
                 addProperty(unrequiredProps[i], json.properties[unrequiredProps[i]])
             }
         }
@@ -183,20 +176,32 @@ function parseObjectSize(json, finalObj, newPatternProps, depth) {
             }
         }
         if (!("additionalProperties" in json) && !("unevaluatedProperties" in json)) {
-            while (minProps > numKeys()) {
+            while (finalLen > numKeys()) {
                 addProperty(loremIpsum({count: 1, units: "words"}).toLowerCase(), true)
             }
         }
         if ("additionalProperties" in json && json.additionalProperties !== false) {
-            while (minProps > numKeys()) {
+            while (finalLen > numKeys()) {
                 addProperty(loremIpsum({count: 1, units: "words"}).toLowerCase(), json.additionalProperties)
             }
         }
         else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) {
-            while (minProps > numKeys()) {
+            while (finalLen > numKeys()) {
                 addProperty(loremIpsum({count: 1, units: "words"}).toLowerCase(), json.unevaluatedProperties)
             }
         }
+    }
+
+    // se tiver mais que maxProperties, apagar opcionais aleatoriamente até satisfazer esse nr de propriedades
+    if ("maxProperties" in json) {
+        let unrequiredKeys = Object.keys(finalObj).filter(k => !json.required.includes(k))
+        shuffle(unrequiredKeys)
+
+        let min = minProps > json.required.length ? minProps : json.required.length
+        let max = maxProps > numKeys() ? numKeys() : maxProps
+        
+        let finalLen = randomize(max, min)
+        for (let i = 0; numKeys() != finalLen; i++) delete finalObj[unrequiredKeys[i]]
     }
 }
 
