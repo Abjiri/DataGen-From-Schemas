@@ -159,10 +159,8 @@
 
   // verificar que a schema dada pela chave 'propertyNames' é do tipo string
   function checkPropertyNamesType(obj) {
-    if (hasAll("type", obj) && (obj.type.length > 1 || obj.type[0] != "string"))
-      return error(`Como as chaves de objetos devem ser sempre strings, está implícito que a schema dada pela chave 'propertyNames' tem sempre { "type": "string" }!`)
-    else obj.type = ["string"]
-
+    if (obj === false || (typeof obj !== "boolean" && hasAll("type", obj) && Object.keys(obj.type).some(k => !["def","string"].includes(k))))
+      return error(`Como as chaves de objetos devem ser sempre strings, está implícito que a schema dada pela chave 'propertyNames' deve ser do tipo 'string' apenas!`)
     return true
   }
 
@@ -210,7 +208,7 @@
       if (!obj.enum.length) return error("O array da chave 'enum' deve ter, no mínimo, um elemento!")
       if (obj.enum.length != [...new Set(obj.enum)].length) return error("Todos os elementos do array da chave 'enum' devem ser únicos!")
 
-      if (hasAll("type", obj)) {
+      if (hasAll("type", obj) && obj.type.length > 0) {
         for (let i = 0; i < obj.enum.length; i++) {
           let valid = false
 
@@ -389,7 +387,7 @@ object_keyword = kws_props / kw_moreProps / kw_requiredProps / kw_propertyNames 
 kws_props = QM key:$("patternProperties"/"properties") QM name_separator value:object_schemaMap {return {key, value}}
 kw_moreProps = QM key:$("additionalProperties"/"unevaluatedProperties") QM name_separator value:schema_object {return {key, value}}
 kw_requiredProps = QM key:"required" QM name_separator value:string_array {return {key, value}}
-kw_propertyNames = QM key:"propertyNames" QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {return {key, value}}
+kw_propertyNames = QM key:"propertyNames" QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {return {key, value: typeof value == "boolean" ? {type: {def: true, string: {}}} : value}}
 kws_size = QM key:$("minProperties"/"maxProperties") QM name_separator value:int {return {key, value}}
 
 // ---------- Keywords array ----------

@@ -148,7 +148,7 @@ function cleanJsonFromJsonSchema(json, depth) {
             json = cleanJsonFromJsonSchema(json[prop], depth)
             
             // o valor foi calculado com uma função do DFS_utils
-            if (typeof json == "object" && json != null) return json[Object.keys(json)[0]]
+            if (typeof json == "object" && !Array.isArray(json) && json !== null) return json[Object.keys(json)[0]]
             return json
         }
         else if (/^DFS_UTILS__/.test(prop)) json[prop] = callUtils(json, prop)

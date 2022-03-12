@@ -19,9 +19,15 @@ function parseJSON(json, depth) {
         if (depth==1) str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${randomValue}\n}`
         else str = randomValue
     }
-    else str = parseType(json, depth)
+    else str = parseGenericKeyword(json, depth)
 
     return str
+}
+
+function parseGenericKeyword(json, depth) {
+    if ("const" in json) return `gen => { return JSON.parse(${JSON.stringify(json.const)}) }`
+    if ("enum" in json) return `gen => { return gen.random(...${JSON.stringify(json.enum)}) }`
+    if ("type" in json) return parseType(json, depth)
 }
 
 function parseType(json, depth) {
@@ -39,6 +45,7 @@ function parseType(json, depth) {
             case "boolean": value = "'{{boolean()}}'"; break
             case "number": case "integer": value = json.type[type].dsl; break
             case "string": value = parseStringType(json.type.string); break
+            case "array": value = parseArrayType(json.type.array, depth+1); break
         }
 
         if (depth==1) value = `{\n${indent(depth)}DFJS_NOT_OBJECT: ${value}\n}`
@@ -203,6 +210,25 @@ function parseObjectSize(json, finalObj, newPatternProps, depth) {
         let finalLen = randomize(max, min)
         for (let i = 0; numKeys() != finalLen; i++) delete finalObj[unrequiredKeys[i]]
     }
+}
+
+function parseArrayType(json, depth) {
+    let str = "[\n", arr = [], prefixed = 0
+    let itemsSchema = "items" in json ? json.items : true
+    
+    /* let minItems = "minItems" in json ? json.minItems : 0 */
+
+    if ("prefixItems" in json) {
+        for (let i = 0; i < json.prefixItems.length; i++) arr.push(parseJSON(json.prefixItems[i], depth+1))
+        prefixed = json.prefixItems.length
+    }
+
+    /* let min = minItems >  */
+
+    // converter o array final para string da DSL
+    arr.map(x => str += `${indent(depth)}${x},\n`)
+
+    return str == "[\n" ? "[]" : `${str.slice(0, -2)}\n${indent(depth-1)}]`
 }
 
 function shuffle(array) {
