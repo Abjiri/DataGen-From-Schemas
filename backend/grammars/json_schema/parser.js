@@ -5261,7 +5261,7 @@ module.exports = /*
         return true
       }
 
-      // verificar a coerência das chaves de alcance de tipos númericos
+      // verificar a coerência das chaves de alcance de tipos númericos e string
       function checkRangeKeywords(obj) {
         let min = null, max = null, emin = null, emax = null
 
@@ -5290,14 +5290,20 @@ module.exports = /*
 
       // verificar a coerência do array de propriedades da chave 'required'
       function checkRequiredProps(obj) {
-        if (!hasAll("properties", obj) && hasAll("required", obj)) return error("Não faz sentido usar a chave 'required' sem definir um conjunto de propriedades com a chave 'properties'!")
-
-        if (hasAll(["properties","required"], obj)) {
+        if (hasAll("required", obj)) {
           if (obj.required.length != [...new Set(obj.required)].length) return error("Todos os elementos do array da chave 'required' devem ser únicos!")
           
-          let props = Object.keys(obj.properties)
-          for (let i = 0; i < obj.required.length; i++)
-            if (!props.includes(obj.required[i])) return error(`A propriedade '${obj.required[i]}' referida na chave 'required' não foi definida no conjunto de propriedades da chave 'properties'!`)
+          let properties = hasAll("properties", obj) ? Object.keys(obj.properties) : []
+          let patternProperties = hasAll("patternProperties", obj) ? Object.keys(obj.patternProperties).map(p => new RegExp(p)) : []
+
+          for (let i = 0; i < obj.required.length; i++) {
+            if (properties.includes(obj.required[i])) ;
+            else if (patternProperties.some(p => p.test(obj.required[i]))) ;
+            else if (!hasAny(["additionalProperties", "unevaluatedProperties"], obj)) ;
+            else if (hasAll("additionalProperties", obj) && obj.additionalProperties !== false) ;
+            else if (!hasAll("additionalProperties", obj) && hasAll("unevaluatedProperties", obj) && obj.unevaluatedProperties !== false) ;
+            else return error(`A propriedade '${obj.required[i]}' referida na chave 'required' não é permitida no objeto pela schema!`)
+          }
         }
         return true
       }
@@ -5478,4 +5484,3 @@ module.exports = /*
     parse:       peg$parse
   };
 })();
-

@@ -142,14 +142,20 @@
 
   // verificar a coerência do array de propriedades da chave 'required'
   function checkRequiredProps(obj) {
-    if (!hasAll("properties", obj) && hasAll("required", obj)) return error("Não faz sentido usar a chave 'required' sem definir um conjunto de propriedades com a chave 'properties'!")
-
-    if (hasAll(["properties","required"], obj)) {
+    if (hasAll("required", obj)) {
       if (obj.required.length != [...new Set(obj.required)].length) return error("Todos os elementos do array da chave 'required' devem ser únicos!")
       
-      let props = Object.keys(obj.properties)
-      for (let i = 0; i < obj.required.length; i++)
-        if (!props.includes(obj.required[i])) return error(`A propriedade '${obj.required[i]}' referida na chave 'required' não foi definida no conjunto de propriedades da chave 'properties'!`)
+      let properties = hasAll("properties", obj) ? Object.keys(obj.properties) : []
+      let patternProperties = hasAll("patternProperties", obj) ? Object.keys(obj.patternProperties).map(p => new RegExp(p)) : []
+
+      for (let i = 0; i < obj.required.length; i++) {
+        if (properties.includes(obj.required[i])) ;
+        else if (patternProperties.some(p => p.test(obj.required[i]))) ;
+        else if (!hasAny(["additionalProperties", "unevaluatedProperties"], obj)) ;
+        else if (hasAll("additionalProperties", obj) && obj.additionalProperties !== false) ;
+        else if (!hasAll("additionalProperties", obj) && hasAll("unevaluatedProperties", obj) && obj.unevaluatedProperties !== false) ;
+        else return error(`A propriedade '${obj.required[i]}' referida na chave 'required' não é permitida no objeto pela schema!`)
+      }
     }
     return true
   }
@@ -163,10 +169,19 @@
     return true
   }
 
-  // verificar que as chaves 'required' e 'maxProperties' não se contradizem
+  // verificar que as chaves 'required' e de tamanho do objeto não se contradizem
   function checkMaxProperties(obj) {
-    if (hasAll(["required","maxProperties"], obj))
+    if (hasAll(["required", "maxProperties"], obj))
       if (obj.maxProperties < obj.required.length) return error(`A chave 'maxProperties' define que o objeto deve ter, no máximo, ${obj.maxProperties} propriedades, contudo a chave 'required' define que há ${obj.required.length} propriedades obrigatórias!`)
+
+    if (hasAll("minProperties", obj)) {
+      if (!hasAll("patternProperties", obj) && (
+        (hasAll("additionalProperties", obj) && obj.additionalProperties === false) || 
+        (!hasAll("additionalProperties", obj) && hasAll("unevaluatedProperties", obj) && obj.unevaluatedProperties === false))) {
+          let properties = hasAll("properties", obj) ? Object.keys(obj.properties).length : 0
+          if (properties < obj.minProperties) return error(`A chave 'minProperties' define que o objeto deve ter, no mínimo, ${obj.minProperties} propriedades, contudo a schema permite um máximo de ${properties} propriedades no objeto!`)
+      }
+    }
     return true
   }
 

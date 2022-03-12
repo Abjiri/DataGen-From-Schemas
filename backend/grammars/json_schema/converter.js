@@ -1,22 +1,23 @@
 const RandExp = require('randexp');
 
-// Tabs de indentação
+// tabs de indentação
 const indent = depth => "\t".repeat(depth)
+// poder gerar um boleano, inteiro, float ou string
+const randomValue = `'{{random(boolean(), integer(-9999,9999), float(-9999,9999), lorem("sentences", 1))}}'`
 
-function convert(json) {console.log(json); return convertJSON(json, 1)}
+function convert(json) {
+    return "<!LANGUAGE pt>\n" + parseJSON(json, 1)
+}
 
-function convertJSON(json, depth) {
-    let str = "<!LANGUAGE pt>\n{\n"
+function parseJSON(json, depth) {
+    let str = ""
 
     if (!json.type.def) {
-        if (depth==1) str += indent(depth) + `anything: '{{random(boolean(), date("01-01-1900"), float(-9999,9999), integer(-9999,9999), guid(), lorem("paragraphs", 1))}}'\n`
+        if (depth==1) str = "{\n" + indent(depth) + `anything: ${randomValue}\n}`
         //else ...
     }
-    else str += parseType(json, depth)
+    else str = parseType(json, depth)
 
-    str += "}"
-    console.log()
-    console.log(str)
     return str
 }
 
@@ -28,20 +29,20 @@ function parseType(json, depth) {
     let type = possibleTypes[Math.floor(Math.random() * possibleTypes.length)]
     let value
 
-    if (type == "object") {}
+    if (type == "object") value = parseObjectType(json.type.object, depth)
     else {
         switch (type) {
             case "null": value = "null"; break
-            case "boolean": value = "{{boolean()}}"; break
+            case "boolean": value = "'{{boolean()}}'"; break
             case "number": case "integer": value = json.type[type].dsl; break
             case "string": value = parseStringType(json.type.string); break
         }
 
-        if (depth==1) value = "DFJS_NOT_OBJECT: " + value
+        if (depth==1) value = `{\n${indent(depth)}DFJS_NOT_OBJECT: ${value}\n}`
         else {} 
     }
 
-    return indent(depth) + value + '\n'
+    return value
 }
 
 function parseStringType(json) {
@@ -84,6 +85,68 @@ function parseStringType(json) {
     let min = "minLength" in json ? json.minLength : 0
     let max = "maxLength" in json ? json.maxLength : min+100
     return `'{{stringOfSize(${min}, ${max})}}'`
+}
+
+function parseObjectType(json, depth) {
+    let str = "{\n", finalObj = {}
+    let required = "required" in json ? JSON.parse(JSON.stringify(json.required)) : []
+    let minProps = "minProperties" in json ? json.minProperties : 0
+    let maxProps = json.maxProperties
+
+    // adicionar uma propriedade nova ao objeto final
+    let addProperty = (k,v) => finalObj[k] = parseJSON(v, depth+1)
+
+    if ("properties" in json) {
+        for (let k in json.properties) {
+            let req
+            if ((req = required.includes(k)) || Math.random() <= 0.9) addProperty(k, json.properties[k])
+            if (req) required.splice(required.indexOf(k), 1)
+        }
+    }
+    if ("patternProperties" in json) {
+        for (let k in json.patternProperties) {
+            let regex = new RegExp(k)
+
+            for (let i = 0; i < required.length; i++) {
+                if (regex.test(required[i])) {
+                    addProperty(required[i], json.patternProperties[k])
+                    required.splice(i--, 1)
+                }
+            }
+
+            // produzir, no máximo, 1 propriedade aleatória respeitante da schema da chave atual do patternProperties
+            if (Math.random() > 0.5) {
+                let prop = new RandExp(k).gen()
+                if (!Object.keys(finalObj).includes(prop)) addProperty(prop, json.patternProperties[k])
+            }
+        }
+    }
+    if ("additionalProperties" in json && json.additionalProperties !== false) {
+        required.map(p => addProperty(p, json.additionalProperties))
+        required = []
+    }
+    else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) {
+        required.map(p => addProperty(p, json.unevaluatedProperties))
+        required = []
+    }
+    required.map(p => finalObj[p] = randomValue)
+    required = []
+
+    let finalKeys = Object.keys(finalObj)
+    // se tiver mais que maxProperties, apagar opcionais até satisfazer ser esse nr de propriedades
+    for (let i = 0; finalKeys.length > maxProps; i++) {
+        if (!json.required.includes(finalKeys[i])) {
+            delete finalObj[finalKeys[i]]
+            finalKeys.splice(i--, 1)
+        }
+    }
+
+    // converter o objeto final para string da DSL
+    Object.keys(finalObj).map(k => str += `${indent(depth)}${k}: ${finalObj[k]},\n`)
+
+    if (str == "{\n") str = depth > 1 ? "{}" : "{\n\tDFJS_EMPTY_JSON: true\n}"
+    else str = `${str.slice(0, -2)}\n${indent(depth-1)}}`
+    return str
 }
 
 module.exports = { convert }
