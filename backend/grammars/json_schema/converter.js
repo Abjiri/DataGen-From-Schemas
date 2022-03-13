@@ -1,5 +1,6 @@
 const RandExp = require('randexp');
 const loremIpsum = require("lorem-ipsum").loremIpsum;
+const jsf = require('json-schema-faker');
 
 // tabs de indentação
 const indent = depth => "\t".repeat(depth)
@@ -160,12 +161,15 @@ function parseObjectSize(json, finalObj, newPatternProps, depth) {
     let minProps = "minProperties" in json ? json.minProperties : 0
     let maxProps = "maxProperties" in json ? json.maxProperties : minProps+3
 
+    let namesSchema = "propertyNames" in json ? json.propertyNames.type.string : {}
+    namesSchema.type = "string"
+
     // adicionar uma propriedade nova ao objeto final
     let addProperty = (k,v) => finalObj[k] = parseJSON(v, depth+1)
 
     // se tiver menos que minProperties, adicionar mais propriedades
     if (minProps > numKeys()) {
-        let finalLen = randomize(minProps, maxProps)
+        let finalLen = randomize(maxProps, minProps)
 
         if ("properties" in json) {
             let unrequiredProps = Object.keys(json.properties).filter(k => !json.required.includes(k) && !(k in finalObj))
@@ -182,21 +186,12 @@ function parseObjectSize(json, finalObj, newPatternProps, depth) {
                 if (!Object.keys(finalObj).includes(prop)) addProperty(prop, json.patternProperties[patternProps[i]])
             }
         }
-        if (!("additionalProperties" in json) && !("unevaluatedProperties" in json)) {
-            while (finalLen > numKeys()) {
-                addProperty(loremIpsum({count: 1, units: "words"}).toLowerCase(), true)
-            }
-        }
-        if ("additionalProperties" in json && json.additionalProperties !== false) {
-            while (finalLen > numKeys()) {
-                addProperty(loremIpsum({count: 1, units: "words"}).toLowerCase(), json.additionalProperties)
-            }
-        }
-        else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) {
-            while (finalLen > numKeys()) {
-                addProperty(loremIpsum({count: 1, units: "words"}).toLowerCase(), json.unevaluatedProperties)
-            }
-        }
+        if (!("additionalProperties" in json) && !("unevaluatedProperties" in json))
+            generateRandomProperties(finalLen, finalObj, namesSchema, true, numKeys, addProperty)
+        if ("additionalProperties" in json && json.additionalProperties !== false)
+            generateRandomProperties(finalLen, finalObj, namesSchema, json.additionalProperties, numKeys, addProperty)
+        else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) 
+            generateRandomProperties(finalLen, finalObj, namesSchema, json.unevaluatedProperties, numKeys, addProperty)
     }
 
     // se tiver mais que maxProperties, apagar opcionais aleatoriamente até satisfazer esse nr de propriedades
@@ -209,6 +204,16 @@ function parseObjectSize(json, finalObj, newPatternProps, depth) {
         
         let finalLen = randomize(max, min)
         for (let i = 0; numKeys() != finalLen; i++) delete finalObj[unrequiredKeys[i]]
+    }
+}
+
+function generateRandomProperties(finalLen, finalObj, namesSchema, valueSchema, numKeys, addProperty) {
+    let randomNameTries = 0
+    
+    while (finalLen > numKeys() && randomNameTries < 10) {
+        let key = jsf.generate(namesSchema)
+        if (key in finalObj) randomNameTries++
+        else addProperty(key, valueSchema)
     }
 }
 
