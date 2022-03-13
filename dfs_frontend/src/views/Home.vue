@@ -59,8 +59,8 @@ export default {
       let {data} = await axios.post('http://localhost:3000/api/json_schema', {json: this.input, settings: this.settings})
       //let {data} = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.input, settings: this.settings})
 
-      let dataset = data.dataset
-      this.output = typeof dataset == "string" ? dataset : "ERRO!!\n\n" + dataset.message
+      if ("dataset" in data) this.output = data.dataset
+      if ("message" in data) this.output = "ERRO!!\n\n" + data.message
     }
   }
 }

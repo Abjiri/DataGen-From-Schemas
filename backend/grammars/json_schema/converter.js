@@ -213,17 +213,36 @@ function parseObjectSize(json, finalObj, newPatternProps, depth) {
 }
 
 function parseArrayType(json, depth) {
-    let str = "[\n", arr = [], prefixed = 0
-    let itemsSchema = "items" in json ? json.items : true
+    let str = "[\n", arr = []
+    let prefixed = "prefixItems" in json ? json.prefixItems.length : 0
     
-    /* let minItems = "minItems" in json ? json.minItems : 0 */
-
-    if ("prefixItems" in json) {
-        for (let i = 0; i < json.prefixItems.length; i++) arr.push(parseJSON(json.prefixItems[i], depth+1))
-        prefixed = json.prefixItems.length
+    // determinar os limites de tamanho do array
+    let minItems, maxItems
+    if (!("minItems" in json) && !("maxItems" in json)) {
+        minItems = maxItems = prefixed
     }
+    else if ("minItems" in json && !("maxItems" in json)) {
+        minItems = json.minItems
+        maxItems = minItems > prefixed ? minItems+3 : prefixed
+    }
+    else if (!("minItems" in json) && "maxItems" in json) {
+        maxItems = json.maxItems
+        minItems = maxItems > prefixed ? prefixed : 0
+    }
+    else {
+        minItems = json.minItems
+        maxItems = json.maxItems
+    }
+    let len = randomize(maxItems, minItems)
 
-    /* let min = minItems >  */
+    let itemsSchema = "items" in json ? json.items : true
+    let containsSchema = "contains" in json ? json.contains : true
+
+    let minContains = "minContains" in json ? json.minContains : 1
+    let maxContains = "maxContains" in json ? json.maxContains : minContains
+
+    for (let i = 0; i < prefixed; i++) arr.push(parseJSON(json.prefixItems[i], depth+1))
+    for (let i = 0; i < len; i++) arr.push(parseJSON(itemsSchema, depth+1))
 
     // converter o array final para string da DSL
     arr.map(x => str += `${indent(depth)}${x},\n`)

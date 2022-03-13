@@ -5341,11 +5341,8 @@ module.exports = /*
 
       // verificar a coerência das chaves de comprimento de arrays
       function checkArrayLength(obj) {
-        if (hasAll(["prefixItems","maxItems"], obj) && obj.maxItems < obj.prefixItems.length)
-          return error(`A chave 'maxItems' define que o array deve ter, no máximo, ${obj.maxItems} elementos, contudo a chave 'prefixItems' especifica ${obj.prefixItems.length} elementos obrigatórios!`)
-
         if (hasAll(["prefixItems","minItems","items"], obj) && obj.items === false && obj.minItems > obj.prefixItems.length)
-          return error(`A chave 'minItems' define que o array deve ter, no mínimo, ${obj.minItems} elementos, contudo a chave 'prefixItems' especifica apenas ${obj.prefixItems.length} elementos obrigatórios e a chave 'items' proibe elementos extra para além desses!`)
+          return error(`A chave 'minItems' define que o array deve ter, no mínimo, ${obj.minItems} elementos, contudo a chave 'prefixItems' especifica apenas ${obj.prefixItems.length} elementos e a chave 'items' proibe elementos extra para além desses!`)
 
         if (hasAll(["minItems","maxItems"], obj) && obj.minItems > obj.maxItems) return error("O valor da chave 'minItems' deve ser <= ao da chave 'maxItems'!")
         return true
@@ -5489,4 +5486,3 @@ module.exports = /*
     parse:       peg$parse
   };
 })();
-

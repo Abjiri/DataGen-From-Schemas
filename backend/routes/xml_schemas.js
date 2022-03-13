@@ -38,7 +38,7 @@ router.post('/', (req, res) => {
 
     res.status(201).jsonp({dataset})
   } catch (err) {
-    res.status(404).jsonp(err)
+    res.status(201).jsonp(err)
   }
 });
 
