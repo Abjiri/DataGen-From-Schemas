@@ -152,6 +152,7 @@ function cleanJsonFromJsonSchema(json, depth) {
             return json
         }
         else if (/^DFS_UTILS__/.test(prop)) json[prop] = callUtils(json, prop)
+        else if (typeof json[prop] == "object" && json[prop] != null) cleanJsonFromJsonSchema(json[prop], depth+1)
     }
 
     return json
