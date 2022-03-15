@@ -1,6 +1,7 @@
 const RandExp = require('randexp');
-const loremIpsum = require("lorem-ipsum").loremIpsum;
 const jsf = require('json-schema-faker');
+const Validator = require('jsonschema').Validator;
+const validator = new Validator();
 
 // tabs de indentação
 const indent = depth => "\t".repeat(depth)
@@ -212,7 +213,7 @@ function generateRandomProperties(finalLen, finalObj, namesSchema, valueSchema, 
     
     while (finalLen > numKeys() && randomNameTries < 10) {
         let key = jsf.generate(namesSchema)
-        if (key in finalObj) randomNameTries++
+        if (key.includes(" ") || key in finalObj) randomNameTries++
         else addProperty(key, valueSchema)
     }
 }
@@ -220,15 +221,19 @@ function generateRandomProperties(finalLen, finalObj, namesSchema, valueSchema, 
 function parseArrayType(json, depth) {
     let str = "[\n", arr = []
     let prefixed = "prefixItems" in json ? json.prefixItems.length : 0
+    let additionalItems = ("items" in json && json.items !== false) || !("items" in json) && "unevaluatedItems" in json && json.unevaluatedItems !== false
     
     // determinar os limites de tamanho do array
     let minItems, maxItems
     if (!("minItems" in json) && !("maxItems" in json)) {
-        minItems = maxItems = prefixed
+        minItems = prefixed
+        maxItems = minItems + (additionalItems ? 3 : 0)
     }
     else if ("minItems" in json && !("maxItems" in json)) {
         minItems = json.minItems
-        maxItems = minItems > prefixed ? minItems+3 : prefixed
+        maxItems = prefixed
+        if (minItems > prefixed) maxItems = minItems+3
+        else if (additionalItems) maxItems = prefixed+3
     }
     else if (!("minItems" in json) && "maxItems" in json) {
         maxItems = json.maxItems
@@ -240,14 +245,22 @@ function parseArrayType(json, depth) {
     }
     let len = randomize(maxItems, minItems)
 
-    let itemsSchema = "items" in json ? json.items : true
-    let containsSchema = "contains" in json ? json.contains : true
+    /* let containsSchema = "contains" in json ? json.contains : true
+    let contained = false
 
     let minContains = "minContains" in json ? json.minContains : 1
-    let maxContains = "maxContains" in json ? json.maxContains : minContains
+    let maxContains = "maxContains" in json ? json.maxContains : minContains */
+    
+    // gerar os elementos prefixados do array
+    let prefixedLen = prefixed > len ? len : prefixed
+    for (let i = 0; i < prefixedLen; i++) arr.push(parseJSON(json.prefixItems[i], depth+1))
 
-    for (let i = 0; i < prefixed; i++) arr.push(parseJSON(json.prefixItems[i], depth+1))
-    for (let i = 0; i < len; i++) arr.push(parseJSON(itemsSchema, depth+1))
+    // gerar os restantes elementos, se forem permitidos
+    let nonPrefixedSchema = true
+    if ("items" in json && json.items !== false) nonPrefixedSchema = json.items
+    else if (additionalItems) nonPrefixedSchema = json.unevaluatedItems
+    
+    for (let i = prefixedLen; i < len; i++) arr.push(parseJSON(nonPrefixedSchema, depth+1))
 
     // converter o array final para string da DSL
     arr.map(x => str += `${indent(depth)}${x},\n`)

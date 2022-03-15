@@ -3,6 +3,7 @@
 {
   let depth = 0
   let $defs = false
+  let contains = false
   let ids = []
 
   let genericKeys = ["type","enum","const"]
@@ -64,7 +65,6 @@
         case "integer": valid = dslNumericTypes(obj.type.integer, k); break
         case "number": valid = dslNumericTypes(obj.type.number, k); break
       }
-
       if (valid !== true) return valid
     }
 
@@ -94,7 +94,7 @@
   // verificar que não se usam chaves específicas a tipos nos tipos errados
   function checkKeysByType(obj) {
     let keywords = genericKeys.concat(annotationKeys, mediaKeys, schemaKeys, structuringKeys)
-    //if (!hasAll("type", obj) && !Object.keys(obj).every(k => keywords.includes(k))) return error("Especifique o tipo deste valor através da chave 'type'!")
+    
     for (let i = 0; i < obj.type.length; i++) {
       switch (obj.type[i]) {
         case "string": keywords = keywords.concat(stringKeys); break
@@ -394,7 +394,7 @@ array_keyword = kw_items / kw_prefixItems / kw_unevaluatedItems / kw_contains / 
 kw_items = QM key:"items" QM name_separator value:schema_object {return {key, value}}
 kw_prefixItems = QM key:"prefixItems" QM name_separator value:schema_array {return {key, value}}
 kw_unevaluatedItems = QM key:"unevaluatedItems" QM name_separator value:schema_object {return {key, value}}
-kw_contains = QM key:"contains" QM name_separator value:schema_object {return {key, value}}
+kw_contains = QM key:$("contains" {contains = true}) QM name_separator value:schema_object {contains = false; return {key, value}}
 kws_mContains = QM key:$("minContains"/"maxContains") QM name_separator value:int {return {key, value}}
 kws_array_length = QM key:$("minItems"/"maxItems") QM name_separator value:int {return {key, value}}
 kw_uniqueness = QM key:"uniqueItems" QM name_separator value:boolean {return {key, value}}
@@ -450,7 +450,16 @@ schema_object
         return result;
     })? end_object
     &{ return checkSchema(members) }
-    { members = structureSchemaData(members); return validateSchemaData(members) }
+    { 
+      if (contains) {
+        if (!members.type.length) delete members.type
+        return members
+      }
+      else {
+        members = structureSchemaData(members)
+        return validateSchemaData(members)
+      }
+    }
 
 object
   = begin_object members:(
