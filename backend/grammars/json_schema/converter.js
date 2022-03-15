@@ -225,14 +225,15 @@ function parseArrayType(json, depth) {
     
     // determinar os limites de tamanho do array
     let minItems, maxItems
-    if (!("minItems" in json) && !("maxItems" in json)) {
+    if (!("minItems" in json || "maxItems" in json)) {
         minItems = prefixed
         maxItems = minItems + (additionalItems ? 3 : 0)
+        if (!prefixed && !("items" in json || "unevaluatedItems" in json)) maxItems = 3
     }
     else if ("minItems" in json && !("maxItems" in json)) {
         minItems = json.minItems
         maxItems = prefixed
-        if (minItems > prefixed) maxItems = minItems+3
+        if (!prefixed || minItems > prefixed) maxItems = minItems+3
         else if (additionalItems) maxItems = prefixed+3
     }
     else if (!("minItems" in json) && "maxItems" in json) {
@@ -259,7 +260,7 @@ function parseArrayType(json, depth) {
     let nonPrefixedSchema = true
     if ("items" in json && json.items !== false) nonPrefixedSchema = json.items
     else if (additionalItems) nonPrefixedSchema = json.unevaluatedItems
-    
+
     for (let i = prefixedLen; i < len; i++) arr.push(parseJSON(nonPrefixedSchema, depth+1))
 
     // converter o array final para string da DSL
