@@ -21,21 +21,30 @@ function parseJSON(json, depth) {
         if (depth==1) str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${randomValue}\n}`
         else str = randomValue
     }
-    else str = parseGenericKeyword(json, depth)
+    else {
+        str = parseKeywords(json, depth)
+        if (depth==1 && str[0] != "{") str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${str}\n}`
+    }
 
     return str
 }
 
-function parseGenericKeyword(json, depth) {
-    if ("const" in json) return `gen => { return JSON.parse(${JSON.stringify(json.const)}) }`
+function parseKeywords(json, depth) {
+    if ("const" in json) {
+        if (typeof json.const == "object" && json.const !== null) return `gen => { return JSON.parse(${JSON.stringify(json.const)}) }`
+        return JSON.stringify(json.const)
+    }
     if ("enum" in json) return `gen => { return gen.random(...${JSON.stringify(json.enum)}) }`
     if ("type" in json) return parseType(json, depth)
+    if (["allOf","anyOf","oneOf"].some(x => x in json)) return parseSchemaComposition(json, depth)
+}
+
+function parseSchemaComposition(json, depth) {
+    return parseJSON(json.anyOf[Math.floor(Math.random()*json.anyOf.length)], depth)
 }
 
 function parseType(json, depth) {
     let possibleTypes = Object.keys(json.type)
-    possibleTypes.splice(possibleTypes.indexOf("def"), 1)
-
     //selecionar um dos vários tipos possíveis aleatoriamente, para produzir
     let type = possibleTypes[Math.floor(Math.random() * possibleTypes.length)]
     let value

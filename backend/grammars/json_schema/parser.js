@@ -380,10 +380,6 @@ module.exports = /*
         peg$c232 = function(members) { 
               if (contains) {
                 if (!members.type.length) delete members.type
-                if ("prefixItems" in members) {
-                  Object.defineProperty(members, "items", Object.getOwnPropertyDescriptor(members, "prefixItems"));
-                  delete members["prefixItems"];
-                }
                 return members
               }
               else {
@@ -5211,12 +5207,12 @@ module.exports = /*
 
       // formatar os dados para a estrutura intermédia pretendida
       function structureSchemaData(obj) {
-        let schema = {type: {def: true}}
-
         if (obj === null) return true
+        let schema = {type: {}}
 
         for (let k of obj.type) schema.type[k] = {}
         delete obj.type
+        if (!Object.keys(schema.type).length) delete schema.type
 
         for (let k in obj) {
           if (numericKeys.includes(k)) {
@@ -5236,12 +5232,14 @@ module.exports = /*
       function validateSchemaData(obj) {
         let valid = true
 
-        for (let k in obj.type) {
-          switch (k) {
-            case "integer": valid = dslNumericTypes(obj.type.integer, k); break
-            case "number": valid = dslNumericTypes(obj.type.number, k); break
+        if ("type" in obj) {
+          for (let k in obj.type) {
+            switch (k) {
+              case "integer": valid = dslNumericTypes(obj.type.integer, k); break
+              case "number": valid = dslNumericTypes(obj.type.number, k); break
+            }
+            if (valid !== true) return valid
           }
-          if (valid !== true) return valid
         }
 
         return obj
@@ -5335,7 +5333,7 @@ module.exports = /*
 
       // verificar que a schema dada pela chave 'propertyNames' é do tipo string
       function checkPropertyNamesType(obj) {
-        if (obj === false || (typeof obj !== "boolean" && hasAll("type", obj) && Object.keys(obj.type).some(k => !["def","string"].includes(k))))
+        if (obj === false || (typeof obj !== "boolean" && hasAll("type", obj) && Object.keys(obj.type).some(k => k != "string")))
           return error(`Como as chaves de objetos devem ser sempre strings, está implícito que a schema dada pela chave 'propertyNames' deve ser do tipo 'string' apenas!`)
         return true
       }
@@ -5401,7 +5399,7 @@ module.exports = /*
 
       // verificar se o valor da chave 'const' é do tipo correto
       function checkConstType(obj) {
-        if (hasAll(["const","type"], obj)) {
+        if (hasAll("const", obj) && Object.keys(obj.type) > 0) {
           let valid = false
 
           for (let j = 0; j < obj.type.length; j++) {
@@ -5456,6 +5454,7 @@ module.exports = /*
       // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
       function dslNumericTypes(obj, type) {
         let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
+        if (multipleOf === undefined) multipleOf = 1
 
         let frac = multipleOf % 1 != 0
         let max = null, min = null

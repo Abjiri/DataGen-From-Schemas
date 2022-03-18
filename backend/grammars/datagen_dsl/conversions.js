@@ -145,7 +145,8 @@ function cleanJsonFromJsonSchema(json, depth) {
         if (prop == "DFJS_EMPTY_JSON") delete json[prop]
 
         if (prop == "DFJS_NOT_OBJECT") {
-            json = cleanJsonFromJsonSchema(json[prop], depth)
+            if (typeof json[prop] == "object" && !Array.isArray(json[prop]) && json[prop] !== null)
+                json = cleanJsonFromJsonSchema(json[prop], depth)
             
             // o valor foi calculado com uma função do DFS_utils
             if (typeof json == "object" && !Array.isArray(json) && json !== null) return json[Object.keys(json)[0]]
