@@ -9,12 +9,12 @@
   let genericKeys = ["type","enum","const"]
   let annotationKeys = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
   let mediaKeys = ["contentMediaType","contentEncoding","contentSchema"]
-  let schemaKeys = ["allOf","anyOf","oneOf","not","dependentRequired","dependentSchemas","if","then","else"]
+  let schemaKeys = ["allOf","anyOf","oneOf","not","if","then","else"]
   let structuringKeys = ["$schema","$id","$anchor","$ref","$defs"]
 
   let stringKeys = ["minLength","maxLength","pattern","format"]
   let numericKeys = ["multipleOf","minimum","exclusiveMinimum","maximum","exclusiveMaximum"]
-  let objectKeys = ["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties"]
+  let objectKeys = ["properties","patternProperties","additionalProperties","unevaluatedProperties","required","propertyNames","minProperties","maxProperties","dependentRequired","dependentSchemas"]
   let arrayKeys = ["items","prefixItems","unevaluatedItems","contains","minContains","maxContains","minItems","maxItems","uniqueItems"]
 
   // chave só permitida na raiz
@@ -38,39 +38,37 @@
     if (obj === null) return true
     let schema = {type: {}}
 
-    for (let k of obj.type) schema.type[k] = {}
+    for (let k of obj.type) {
+      if (k == "integer") {
+        if (!("number" in schema.type)) schema.type.number = {}
+        schema.type.number.integer = true
+      }
+      else schema.type[k] = {}
+    }
     delete obj.type
     if (!Object.keys(schema.type).length) delete schema.type
 
     for (let k in obj) {
-      if (numericKeys.includes(k)) {
-        if ("integer" in schema.type) schema.type.integer[k] = obj[k]
-        if ("number" in schema.type) schema.type.number[k] = obj[k]
+      if (["if","then","else"].includes(k)) {
+        for (let key in obj[k].type) {
+          if (!(key in schema.type)) schema.type[key] = {}
+          schema.type[key][k] = obj[k].type[key]
+        }
       }
+      else if (numericKeys.includes(k)) schema.type.number[k] = obj[k]
       else if (stringKeys.includes(k)) schema.type.string[k] = obj[k]
       else if (objectKeys.includes(k)) schema.type.object[k] = obj[k]
       else if (arrayKeys.includes(k)) schema.type.array[k] = obj[k]
       else schema[k] = obj[k]
     }
 
-    return schema
-  }
-
-  // validar todas as chaves de cada tipo entre si, para garantir que são coerentes
-  function validateSchemaData(obj) {
-    let valid = true
-
-    if ("type" in obj) {
-      for (let k in obj.type) {
-        switch (k) {
-          case "integer": valid = dslNumericTypes(obj.type.integer, k); break
-          case "number": valid = dslNumericTypes(obj.type.number, k); break
-        }
-        if (valid !== true) return valid
-      }
+    // verificar a coerência das chaves numéricas
+    if ("type" in schema && "number" in schema.type) {
+      let valid = dslNumericTypes(schema.type.number)
+      if (valid !== true) return valid
     }
 
-    return obj
+    return schema
   }
 
   // determinar o tipo do valor, se a chave 'type' não for especificada
@@ -87,7 +85,7 @@
         if (arrayKeys.includes(k)) type.push("array")
       }
 
-      obj.type = type
+      obj.type = [...new Set(type)]
     }
 
     return obj
@@ -251,21 +249,16 @@
 
   // verificar que todas as propriedades referidas na chave 'dependentRequired' são válidas
   function checkDependentRequired(obj) {
-    if (hasAll(["properties","dependentRequired"], obj)) {
+    if (hasAll("dependentRequired", obj)) {
       let props = Object.keys(obj.properties)
 
       for (let key in obj.dependentRequired) {
-        if (!props.includes(key)) return error(`A propriedade '${key}' referida na chave 'dependentRequired' é inválida porque não foi definida na chave 'properties'!`)
-
         // remover propriedades repetidas
         obj.dependentRequired[key] = [...new Set(obj.dependentRequired[key])]
         let array_value = obj.dependentRequired[key]
 
         // se tiver a propriedade dependente dela mesma, remover porque é redundante
         if (array_value.includes(key)) obj.dependentRequired[key].splice(obj.dependentRequired[key].indexOf(key), 1)
-
-        for (let i = 0; i < array_value.length; i++)
-          if (!props.includes(array_value[i])) return error(`A propriedade '${array_value[i]}' definida como obrigatória na presença da propriedade '${key}', na chave 'dependentRequired', é inválida porque não foi definida na chave 'properties'!`)
       }
     }
     return true
@@ -280,13 +273,14 @@
   }
 
   // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
-  function dslNumericTypes(obj, type) {
+  function dslNumericTypes(obj) {
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
     if (multipleOf === undefined) multipleOf = 1
 
     let frac = multipleOf % 1 != 0
     let max = null, min = null
     let upper = null, lower = null
+    let int_multiples = []
 
     if (maximum !== undefined) max = maximum
     if (exclusiveMaximum !== undefined) max = exclusiveMaximum - (frac ? 0.0000000001 : 1)
@@ -297,7 +291,18 @@
     if (max !== null && min !== null) {
       upper = Math.floor(max/multipleOf)
       lower = Math.ceil(min/multipleOf)
-      if (upper - lower < 0) return error(`Não existem múltiplos do número '${multipleOf}' no intervalo de valores especificado com as chaves de alcance!`)
+      let dif = upper - lower
+      
+      if (dif < 0) return error(`Não existem múltiplos do número '${multipleOf}' no intervalo de valores especificado com as chaves de alcance!`)
+      else if (frac && "integer" in obj) {
+        let decimal_part = parseFloat((multipleOf % 1).toFixed(4))
+
+        for (let i = lower; i <= upper; i++) {
+          if ((decimal_part * i) % 1 == 0) int_multiples.push(i)
+        }
+
+        if (!int_multiples.length) return error(`Não existem múltiplos inteiros do número '${multipleOf}' no intervalo de valores especificado com as chaves de alcance!`)
+      }
     }
     else if (max !== null) {
       upper = Math.floor(max/multipleOf)
@@ -308,9 +313,10 @@
       upper = lower + 100
     }
 
-    if (!Object.keys(obj).length) obj.dsl = `'{{${type == "integer" ? "integer" : "float"}(-1000,1000)}}'`
+    if (!Object.keys(obj).length) obj.dsl = `'{{${"integer" in obj ? "integer" : "float"}(-1000,1000)}}'`
     else if (upper === null) obj.dsl = `'{{multipleOf(${multipleOf})}}'`
-    else obj.dsl = `gen => { return gen.integer(${lower}, ${upper}) * ${multipleOf} }`
+    else if (int_multiples.length > 0) obj.dsl = `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${multipleOf} }`
+    else obj.dsl = `gen => { return gen.integer(${lower},${upper}) * ${multipleOf} }`
 
     return true
   }
@@ -458,10 +464,7 @@ schema_object
         if (!members.type.length) delete members.type
         return members
       }
-      else {
-        members = structureSchemaData(members)
-        return validateSchemaData(members)
-      }
+      else return structureSchemaData(members)
     }
 
 object

@@ -15,6 +15,7 @@ function convert(json) {
 }
 
 function parseJSON(json, depth) {
+    console.log(JSON.stringify(json))
     let str = ""
 
     if (json === true) {
@@ -109,18 +110,29 @@ function parseStringType(json) {
 }
 
 function parseObjectType(json, depth) {
-    let str = "{\n", finalObj = {}
+    let str = "{\n", obj = {}
     let newPatternProps = []
     let required = "required" in json ? JSON.parse(JSON.stringify(json.required)) : []
+    let dependent = "dependentRequired" in json ? json.dependentRequired : {}
 
     // adicionar uma propriedade nova ao objeto final
-    let addProperty = (k,v) => finalObj[k] = parseJSON(v, depth+1)
+    let addProperty = (k,v) => obj[k] = parseJSON(v, depth+1)
 
     if ("properties" in json) {
         for (let k in json.properties) {
             let req
-            if ((req = required.includes(k)) || Math.random() <= 0.85) addProperty(k, json.properties[k])
+            if ((req = required.includes(k)) || Math.random() <= 0.85) {
+                addProperty(k, json.properties[k])
+                if (k in dependent) required = required.concat(dependent[k].filter(x => !(x in obj)))
+            }
             if (req) required.splice(required.indexOf(k), 1)
+        }
+
+        for (let k in json.properties) {
+            if (!(k in obj) && required.includes(k)) {
+                addProperty(k, json.properties[k])
+                required.splice(required.indexOf(k), 1)
+            }
         }
     }
     if ("patternProperties" in json) {
@@ -137,7 +149,7 @@ function parseObjectType(json, depth) {
             // produzir, no máximo, 1 propriedade aleatória respeitante da schema da chave atual do patternProperties
             if (Math.random() > 0.5) {
                 let prop = new RandExp(k).gen()
-                if (!Object.keys(finalObj).includes(prop)) {
+                if (!Object.keys(obj).includes(prop)) {
                     addProperty(prop, json.patternProperties[k])
                     newPatternProps.push(k)
                 }
@@ -152,22 +164,22 @@ function parseObjectType(json, depth) {
         required.map(p => addProperty(p, json.unevaluatedProperties))
         required = []
     }
-    required.map(p => finalObj[p] = randomValue)
+    required.map(p => obj[p] = randomValue)
     required = []
 
     // processar as chaves de tamanho do objeto
-    parseObjectSize(json, finalObj, newPatternProps, depth)
+    parseObjectSize(json, obj, newPatternProps, depth)
 
     // converter o objeto final para string da DSL
-    Object.keys(finalObj).map(k => str += `${indent(depth)}${k}: ${finalObj[k]},\n`)
+    Object.keys(obj).map(k => str += `${indent(depth)}${k}: ${obj[k]},\n`)
 
     if (str == "{\n") str = "{\n" + indent(depth) + "DFJS_EMPTY_JSON: true\n" + indent(depth-1) + "}"
     else str = `${str.slice(0, -2)}\n${indent(depth-1)}}`
     return str
 }
 
-function parseObjectSize(json, finalObj, newPatternProps, depth) {
-    let numKeys = () => Object.keys(finalObj).length
+function parseObjectSize(json, obj, newPatternProps, depth) {
+    let numKeys = () => Object.keys(obj).length
     let minProps = "minProperties" in json ? json.minProperties : 0
     let maxProps = "maxProperties" in json ? json.maxProperties : minProps+3
 
@@ -175,14 +187,14 @@ function parseObjectSize(json, finalObj, newPatternProps, depth) {
     namesSchema.type = "string"
 
     // adicionar uma propriedade nova ao objeto final
-    let addProperty = (k,v) => finalObj[k] = parseJSON(v, depth+1)
+    let addProperty = (k,v) => obj[k] = parseJSON(v, depth+1)
 
     // se tiver menos que minProperties, adicionar mais propriedades
     if (minProps > numKeys() || (!numKeys() && !["properties","patternProperties","additionalProperties","unevaluatedProperties","required"].some(x => x in json))) {
         let finalLen = randomize(maxProps, minProps)
 
         if ("properties" in json) {
-            let unrequiredProps = Object.keys(json.properties).filter(k => !json.required.includes(k) && !(k in finalObj))
+            let unrequiredProps = Object.keys(json.properties).filter(k => !json.required.includes(k) && !(k in obj))
             
             for (let i = 0; i < unrequiredProps.length; i++) {
                 addProperty(unrequiredProps[i], json.properties[unrequiredProps[i]])
@@ -193,20 +205,20 @@ function parseObjectSize(json, finalObj, newPatternProps, depth) {
             
             for (let i = 0; i < patternProps.length; i++) {
                 let prop = new RandExp(new RegExp(patternProps[i])).gen()
-                if (!Object.keys(finalObj).includes(prop)) addProperty(prop, json.patternProperties[patternProps[i]])
+                if (!Object.keys(obj).includes(prop)) addProperty(prop, json.patternProperties[patternProps[i]])
             }
         }
         if (!("additionalProperties" in json || "unevaluatedProperties" in json))
-            generateRandomProperties(finalLen, finalObj, namesSchema, true, numKeys, addProperty)
+            generateRandomProperties(finalLen, obj, namesSchema, true, numKeys, addProperty)
         else if ("additionalProperties" in json && json.additionalProperties !== false)
-            generateRandomProperties(finalLen, finalObj, namesSchema, json.additionalProperties, numKeys, addProperty)
+            generateRandomProperties(finalLen, obj, namesSchema, json.additionalProperties, numKeys, addProperty)
         else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) 
-            generateRandomProperties(finalLen, finalObj, namesSchema, json.unevaluatedProperties, numKeys, addProperty)
+            generateRandomProperties(finalLen, obj, namesSchema, json.unevaluatedProperties, numKeys, addProperty)
     }
 
     // se tiver mais que maxProperties, apagar opcionais aleatoriamente até satisfazer esse nr de propriedades
     if ("maxProperties" in json) {
-        let unrequiredKeys = Object.keys(finalObj).filter(k => !("required" in json) || !json.required.includes(k))
+        let unrequiredKeys = Object.keys(obj).filter(k => !("required" in json) || !json.required.includes(k))
         shuffle(unrequiredKeys)
 
         let requiredLen = "required" in json ? json.required.length : 0
@@ -214,18 +226,18 @@ function parseObjectSize(json, finalObj, newPatternProps, depth) {
         let max = maxProps > numKeys() ? numKeys() : maxProps
         
         let finalLen = randomize(max, min)
-        for (let i = 0; numKeys() != finalLen; i++) delete finalObj[unrequiredKeys[i]]
+        for (let i = 0; numKeys() != finalLen; i++) delete obj[unrequiredKeys[i]]
     }
 }
 
-function generateRandomProperties(finalLen, finalObj, namesSchema, valueSchema, numKeys, addProperty) {
+function generateRandomProperties(finalLen, obj, namesSchema, valueSchema, numKeys, addProperty) {
     let randomNameTries = 0
     
     while (finalLen > numKeys() && randomNameTries < 10) {
         let key = jsf.generate(namesSchema)
         if (!("pattern" in namesSchema) && key.includes(" ")) key = key.replace(/ /g,'')
 
-        if (!key.length || key.includes(" ") || key in finalObj) randomNameTries++
+        if (!key.length || key.includes(" ") || key in obj) randomNameTries++
         else addProperty(key, valueSchema)
     }
 }
