@@ -3,7 +3,7 @@
 {
   let depth = 0
   let $defs = false
-  let contains = false
+  let current_key = ""
   let ids = []
 
   let genericKeys = ["type","enum","const"]
@@ -64,7 +64,7 @@
 
     // verificar a coerência das chaves numéricas
     if ("type" in schema && "number" in schema.type) {
-      let valid = dslNumericTypes(schema.type.number)
+      let valid = dslNumericTypes(schema.type.number, 0)
       if (valid !== true) return valid
     }
 
@@ -273,7 +273,7 @@
   }
 
   // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
-  function dslNumericTypes(obj) {
+  function dslNumericTypes(obj, nesting) {
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
     if (multipleOf === undefined) multipleOf = 1
 
@@ -313,11 +313,46 @@
       upper = lower + 100
     }
 
-    if (!Object.keys(obj).length) obj.dsl = `'{{${"integer" in obj ? "integer" : "float"}(-1000,1000)}}'`
-    else if (upper === null) obj.dsl = `'{{multipleOf(${multipleOf})}}'`
-    else if (int_multiples.length > 0) obj.dsl = `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${multipleOf} }`
-    else obj.dsl = `gen => { return gen.integer(${lower},${upper}) * ${multipleOf} }`
+    let dsl = `gen => {\n{depth${nesting}}let num = gen.`
+    if (nesting > 0) dsl = `{depth${nesting}}let final = gen.`
 
+    if (!Object.keys(obj).length) {
+      if (current_key == "if") dsl = "if (true)"
+      else dsl += `${"integer" in obj ? "integer" : "float"}(-1000,1000)`
+    }
+    else if (upper === null) {
+      if (current_key == "if") dsl = `if (num % ${multipleOf} == 0)`
+      else dsl += `multipleOf(${multipleOf})`
+    }
+    else if (int_multiples.length > 0) {
+      if (current_key == "if") dsl = `if (${JSON.stringify(int_multiples.map(x => x*multipleOf))}.includes(num))`
+      else dsl += `random(...${JSON.stringify(int_multiples)}) * ${multipleOf}`
+    }
+    else {
+      if (current_key == "if") dsl = `if (gen.range(${lower},${upper}).concat(${upper}).map(x => x*${multipleOf}).includes(num))`
+      else dsl += `integer(${lower},${upper}) * ${multipleOf}`
+    }
+
+    if ("if" in obj) {
+      if ("then" in obj) dsl += `\n{depth${nesting}}${obj.if.dsl} {}`
+      else dsl += `\n{depth${nesting}}if (!(${obj.if.dsl.slice(4)}) {}`
+      dsl = dsl.slice(0,-1) + `\n`
+    }
+    if ("then" in obj) {
+      let then_obj = Object.assign(JSON.parse(JSON.stringify(obj)), obj.then)
+
+      delete then_obj.if
+      delete then_obj.then
+      if ("else" in then_obj) delete then_obj.else
+      
+      let valid = dslNumericTypes(then_obj, nesting+1)
+      if (valid !== true) return valid
+
+      dsl += then_obj.dsl
+    }
+
+    if (current_key != "if") dsl += `\n{depth${nesting}}return ${nesting>0 ? `final` : "num"}\n{depth${nesting-1}}}`
+    obj.dsl = dsl
     return true
   }
 }
@@ -403,7 +438,7 @@ array_keyword = kw_items / kw_prefixItems / kw_unevaluatedItems / kw_contains / 
 kw_items = QM key:"items" QM name_separator value:schema_object {return {key, value}}
 kw_prefixItems = QM key:"prefixItems" QM name_separator value:schema_array {return {key, value}}
 kw_unevaluatedItems = QM key:"unevaluatedItems" QM name_separator value:schema_object {return {key, value}}
-kw_contains = QM key:$("contains" {contains = true}) QM name_separator value:schema_object {contains = false; return {key, value}}
+kw_contains = QM key:$("contains" {current_key = "contains"}) QM name_separator value:schema_object {current_key = ""; return {key, value}}
 kws_mContains = QM key:$("minContains"/"maxContains") QM name_separator value:int {return {key, value}}
 kws_array_length = QM key:$("minItems"/"maxItems") QM name_separator value:int {return {key, value}}
 kw_uniqueness = QM key:"uniqueItems" QM name_separator value:boolean {return {key, value}}
@@ -433,7 +468,7 @@ conditionalSubschemas_keyword = kw_dependentRequired / kw_dependentSchemas / kw_
 
 kw_dependentRequired = QM key:"dependentRequired" QM name_separator value:object_arrayOfStringsMap {return {key, value}}
 kw_dependentSchemas = QM key:"dependentSchemas" QM name_separator value:object_schemaMap {return {key, value}}
-kw_ifThenElse = QM key:("if"/"then"/"else") QM name_separator value:schema_object {return {key, value}}
+kw_ifThenElse = QM key:$(k:("if"/"then"/"else") {current_key = k}) QM name_separator value:schema_object {current_key = ""; return {key, value}}
 
 // ---------- Keywords structuring ----------
 
@@ -460,7 +495,7 @@ schema_object
     })? end_object
     &{ return checkSchema(members) }
     { 
-      if (contains) {
+      if (current_key == "contains") {
         if (!members.type.length) delete members.type
         return members
       }

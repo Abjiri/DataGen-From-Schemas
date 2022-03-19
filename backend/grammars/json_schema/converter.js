@@ -55,9 +55,18 @@ function parseType(json, depth) {
         switch (type) {
             case "null": value = "null"; break
             case "boolean": value = "'{{boolean()}}'"; break
-            case "number": case "integer": value = json.type[type].dsl; break
             case "string": value = parseStringType(json.type.string); break
             case "array": value = parseArrayType(json.type.array, depth+1); break
+            case "number": 
+                value = json.type[type].dsl
+                console.log(value)
+
+                for (let i = -1; ; i++) {
+                    let regex = new RegExp(`{depth${i}}`, "g")
+                    if (regex.test(value)) {console.log("match"); value = value.replace(regex, indent(depth+i+1))}
+                    else break
+                }
+                break
         }
 
         if (depth==1) value = `{\n${indent(depth)}DFJS_NOT_OBJECT: ${value}\n}`
