@@ -334,12 +334,11 @@
     }
 
     if ("if" in obj) {
-      if ("then" in obj) dsl += `\n{depth${nesting}}${obj.if.dsl} {}`
-      else dsl += `\n{depth${nesting}}if (!(${obj.if.dsl.slice(4)}) {}`
-      dsl = dsl.slice(0,-1) + `\n`
+      dsl += `\n{depth${nesting}}${obj.if.dsl} {}`
+      if ("then" in obj) dsl = dsl.slice(0,-1) + `\n`
     }
     if ("then" in obj) {
-      let then_obj = Object.assign(JSON.parse(JSON.stringify(obj)), obj.then)
+      let then_obj = Object.assign(JSON.parse(JSON.stringify(obj)), obj.if, obj.then)
 
       delete then_obj.if
       delete then_obj.then
@@ -350,8 +349,21 @@
 
       dsl += then_obj.dsl
     }
+    if ("else" in obj) {
+      let else_obj = Object.assign(JSON.parse(JSON.stringify(obj)), obj.else)
 
-    if (current_key != "if") dsl += `\n{depth${nesting}}return ${nesting>0 ? `final` : "num"}\n{depth${nesting-1}}}`
+      delete else_obj.if
+      delete else_obj.else
+      if ("then" in else_obj) delete else_obj.then
+      
+      let valid = dslNumericTypes(else_obj, nesting+1)
+      if (valid !== true) return valid
+
+      dsl += `\n{depth${nesting}}else {}`
+      dsl = dsl.slice(0,-1) + "\n" + else_obj.dsl
+    }
+
+    if (current_key != "if") dsl += `\n{depth${nesting}}return ${nesting>0 ? "final" : "num"}\n{depth${nesting-1}}}`
     obj.dsl = dsl
     return true
   }

@@ -15,7 +15,6 @@ function convert(json) {
 }
 
 function parseJSON(json, depth) {
-    console.log(JSON.stringify(json))
     let str = ""
 
     if (json === true) {
@@ -59,11 +58,10 @@ function parseType(json, depth) {
             case "array": value = parseArrayType(json.type.array, depth+1); break
             case "number": 
                 value = json.type[type].dsl
-                console.log(value)
 
                 for (let i = -1; ; i++) {
                     let regex = new RegExp(`{depth${i}}`, "g")
-                    if (regex.test(value)) {console.log("match"); value = value.replace(regex, indent(depth+i+1))}
+                    if (regex.test(value)) value = value.replace(regex, indent(depth+i+1))
                     else break
                 }
                 break
