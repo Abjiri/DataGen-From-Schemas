@@ -29,8 +29,8 @@
   // fazer todas as verificações necessárias para garantir que a schema está bem escrita
   function checkSchema(s) {
     s = determineType(s)
-    return checkKeysByType(s) && checkRangeKeywords(s) && checkRequiredProps(s) && checkMaxProperties(s) && checkContains(s) && 
-           checkArrayLength(s) && checkEnumArray(s) && checkConstType(s) && checkDependentRequired(s) && checkIfThenElse(s) && checkContentSchema(s)
+    return checkKeysByType(s) && checkRangeKeywords(s) && checkDependentRequired(s) && checkRequiredProps(s) && checkMaxProperties(s) && 
+           checkContains(s) && checkArrayLength(s) && checkEnumArray(s) && checkConstType(s) && checkIfThenElse(s) && checkContentSchema(s)
   }
 
   // formatar os dados para a estrutura intermédia pretendida
@@ -252,8 +252,6 @@
   // verificar que todas as propriedades referidas na chave 'dependentRequired' são válidas
   function checkDependentRequired(obj) {
     if (hasAll("dependentRequired", obj)) {
-      let props = Object.keys(obj.properties)
-
       for (let key in obj.dependentRequired) {
         // remover propriedades repetidas
         obj.dependentRequired[key] = [...new Set(obj.dependentRequired[key])]
@@ -261,6 +259,13 @@
 
         // se tiver a propriedade dependente dela mesma, remover porque é redundante
         if (array_value.includes(key)) obj.dependentRequired[key].splice(obj.dependentRequired[key].indexOf(key), 1)
+      }
+
+      if (hasAll("required", obj)) {
+        for (let i = 0; i < obj.required.length; i++) {
+          let k = obj.required[i]
+          if (k in obj.dependentRequired) obj.required = obj.required.concat(obj.dependentRequired[k].filter(x => !obj.required.includes(x)))
+        }
       }
     }
     return true
@@ -490,7 +495,7 @@ structuring_keyword = kw_schema / kw_id / kw_anchor / kw_ref / kw_defs
 
 kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return {key, value}}
 schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM
-               &{return v == "https://json-schema.org/draft/2020-12/schema" ? true : error("Esta ferramenta implementa apenas a sintaxe do draft 2020-12!"))} {return v}
+               &{return v == "https://json-schema.org/draft/2020-12/schema" ? true : error("Esta ferramenta implementa apenas a sintaxe do draft 2020-12!")} {return v}
 
 kw_id = QM key:"$id" QM name_separator value:string &{return atRoot(key) && newId(value)} {ids.push(value); return {key, value}}
 kw_anchor = QM key:"$anchor" QM name_separator value:anchor {return {key, value}}

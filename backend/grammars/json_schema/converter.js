@@ -118,11 +118,6 @@ function parseStringType(json) {
 
 function parseObjectType(json, depth) {
     let str = "{\n", obj = {}
-    if ("dependentRequired" in json && "required" in json) {
-      for (let i = 0; i < json.required.length; i++) {
-        if (json.required[i] in json.dependentRequired) json.required = json.required.concat(json.dependentRequired[json.required[i]].filter(x => !json.required.includes(x)))
-      }
-    }
     let required = "required" in json ? json.required.length : 0
     let {minProps, maxProps, size} = objectSize(json, required)
     
@@ -248,29 +243,7 @@ function parseArrayType(json, depth) {
     let str = "[\n", arr = []
     let prefixed = "prefixItems" in json ? json.prefixItems.length : 0
     let additionalItems = ("items" in json && json.items !== false) || !("items" in json) && "unevaluatedItems" in json && json.unevaluatedItems !== false
-    
-    // determinar os limites de tamanho do array
-    let minItems, maxItems
-    if (!("minItems" in json || "maxItems" in json)) {
-        minItems = prefixed
-        maxItems = minItems + (additionalItems ? 3 : 0)
-        if (!prefixed && !("items" in json || "unevaluatedItems" in json)) maxItems = 3
-    }
-    else if ("minItems" in json && !("maxItems" in json)) {
-        minItems = json.minItems
-        maxItems = prefixed
-        if (!prefixed || minItems > prefixed) maxItems = minItems+3
-        else if (additionalItems) maxItems = prefixed+3
-    }
-    else if (!("minItems" in json) && "maxItems" in json) {
-        maxItems = json.maxItems
-        minItems = maxItems > prefixed ? prefixed : 0
-    }
-    else {
-        minItems = json.minItems
-        maxItems = json.maxItems
-    }
-    let len = randomize(maxItems, minItems)
+    let len = arrayLen(json, prefixed, additionalItems)
 
     /* let containsSchema = "contains" in json ? json.contains : true
     let contained = false
@@ -293,6 +266,33 @@ function parseArrayType(json, depth) {
     arr.map(x => str += `${indent(depth)}${x},\n`)
 
     return str == "[\n" ? "[]" : `${str.slice(0, -2)}\n${indent(depth-1)}]`
+}
+
+// determinar um tamanho aleatório para o array a gerar, dentro dos limites estabelecidos
+function arrayLen(json, prefixed, additionalItems) {
+    let minItems, maxItems
+    
+    if (!("minItems" in json || "maxItems" in json)) {
+        minItems = prefixed
+        maxItems = minItems + (additionalItems ? 3 : 0)
+        if (!prefixed && !("items" in json || "unevaluatedItems" in json)) maxItems = 3
+    }
+    else if ("minItems" in json && !("maxItems" in json)) {
+        minItems = json.minItems
+        maxItems = prefixed
+        if (!prefixed || minItems > prefixed) maxItems = minItems+3
+        else if (additionalItems) maxItems = prefixed+3
+    }
+    else if (!("minItems" in json) && "maxItems" in json) {
+        maxItems = json.maxItems
+        minItems = maxItems > prefixed ? prefixed : 0
+    }
+    else {
+        minItems = json.minItems
+        maxItems = json.maxItems
+    }
+    
+    return randomize(maxItems, minItems)
 }
 
 module.exports = { convert }
