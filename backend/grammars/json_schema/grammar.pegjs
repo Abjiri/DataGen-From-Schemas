@@ -140,6 +140,8 @@
   // verificar a coerência do array de propriedades da chave 'required'
   function checkRequiredProps(obj) {
     if (hasAll("required", obj)) {
+      if (!obj.required.length) {delete obj.required; return true}
+
       if (obj.required.length != [...new Set(obj.required)].length) return error("Todos os elementos do array da chave 'required' devem ser únicos!")
       
       let properties = hasAll("properties", obj) ? Object.keys(obj.properties) : []
@@ -487,7 +489,8 @@ kw_ifThenElse = QM key:$(k:("if"/"then"/"else") {current_key = k}) QM name_separ
 structuring_keyword = kw_schema / kw_id / kw_anchor / kw_ref / kw_defs
 
 kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return {key, value}}
-schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM {return v}
+schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM
+               &{return v == "https://json-schema.org/draft/2020-12/schema" ? true : error("Esta ferramenta implementa apenas a sintaxe do draft 2020-12!"))} {return v}
 
 kw_id = QM key:"$id" QM name_separator value:string &{return atRoot(key) && newId(value)} {ids.push(value); return {key, value}}
 kw_anchor = QM key:"$anchor" QM name_separator value:anchor {return {key, value}}

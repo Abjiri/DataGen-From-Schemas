@@ -118,64 +118,56 @@ function parseStringType(json) {
 
 function parseObjectType(json, depth) {
     let str = "{\n", obj = {}
-    let newPatternProps = []
-    let required = "required" in json ? JSON.parse(JSON.stringify(json.required)) : []
-    let dependent = "dependentRequired" in json ? json.dependentRequired : {}
+    if ("dependentRequired" in json && "required" in json) {
+      for (let i = 0; i < json.required.length; i++) {
+        if (json.required[i] in json.dependentRequired) json.required = json.required.concat(json.dependentRequired[json.required[i]].filter(x => !json.required.includes(x)))
+      }
+    }
+    let required = "required" in json ? json.required.length : 0
+    let {minProps, maxProps, size} = objectSize(json, required)
+    
+    // gerar as propriedades required
+    if (required > 0) addProperties(json, obj, json.required, depth)
 
     // adicionar uma propriedade nova ao objeto final
     let addProperty = (k,v) => obj[k] = parseJSON(v, depth+1)
+    
+    for (let i = required; i < size; ) {
+        if ("properties" in json && Object.keys(json.properties).length > 0) {
+            let k = Object.keys(json.properties)[0]
 
-    if ("properties" in json) {
-        for (let k in json.properties) {
-            let req
-            if ((req = required.includes(k)) || Math.random() <= 0.85) {
-                addProperty(k, json.properties[k])
-                if (k in dependent) required = required.concat(dependent[k].filter(x => !(x in obj)))
-            }
-            if (req) required.splice(required.indexOf(k), 1)
-        }
+            if ("dependentRequired" in json && k in json.dependentRequired) {
+                let new_required = [k].concat(json.dependentRequired[k].filter(x => !(x in obj)))
 
-        for (let k in json.properties) {
-            if (!(k in obj) && required.includes(k)) {
-                addProperty(k, json.properties[k])
-                required.splice(required.indexOf(k), 1)
-            }
-        }
-    }
-    if ("patternProperties" in json) {
-        for (let k in json.patternProperties) {
-            let regex = new RegExp(k)
-
-            for (let i = 0; i < required.length; i++) {
-                if (regex.test(required[i])) {
-                    addProperty(required[i], json.patternProperties[k])
-                    required.splice(i--, 1)
+                for (let j = 1; j < new_required.length; j++) {
+                    if (new_required[j] in json.dependentRequired) new_required = new_required.concat(json.dependentRequired[new_required[j]].filter(x => !(x in obj)))
                 }
-            }
 
-            // produzir, no máximo, 1 propriedade aleatória respeitante da schema da chave atual do patternProperties
-            if (Math.random() > 0.5) {
-                let prop = new RandExp(k).gen()
-                if (!Object.keys(obj).includes(prop)) {
-                    addProperty(prop, json.patternProperties[k])
-                    newPatternProps.push(k)
-                }
+                let final_len = i + new_required.length
+                if (final_len >= minProps && final_len <= maxProps) { addProperties(json, obj, new_required, depth); break }
+                else if (final_len < minProps) {addProperties(json, obj, new_required, depth); i += new_required.length}
+                else delete json.properties[k]
+            }
+            else {
+                addProperty(k, json.properties[k])
+                delete json.properties[k]
+                i++
             }
         }
+        // produzir, no máximo, 1 propriedade aleatória respeitante da schema da chave atual do patternProperties
+        else if ("patternProperties" in json && Object.keys(json.patternProperties).length > 0) {
+            let k = Object.keys(json.patternProperties)[0]
+            let prop = new RandExp(k).gen()
+            if (!(prop in obj) && Math.random() < 0.5) addProperty(prop, json.patternProperties[k])
+            delete json.patternProperties[k]
+        }
+        else if (!("additionalProperties" in json || "unevaluatedProperties" in json))
+            { nonRequired_randomProps(json, obj, size, true, addProperty); break }
+        else if ("additionalProperties" in json && json.additionalProperties !== false)
+            { nonRequired_randomProps(json, obj, size, json.additionalProperties, addProperty); break }
+        else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) 
+            { nonRequired_randomProps(json, obj, size, json.unevaluatedProperties, addProperty); break }
     }
-    if ("additionalProperties" in json && json.additionalProperties !== false) {
-        required.map(p => addProperty(p, json.additionalProperties))
-        required = []
-    }
-    else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) {
-        required.map(p => addProperty(p, json.unevaluatedProperties))
-        required = []
-    }
-    required.map(p => obj[p] = randomValue)
-    required = []
-
-    // processar as chaves de tamanho do objeto
-    parseObjectSize(json, obj, newPatternProps, depth)
 
     // converter o objeto final para string da DSL
     Object.keys(obj).map(k => str += `${indent(depth)}${k}: ${obj[k]},\n`)
@@ -185,62 +177,65 @@ function parseObjectType(json, depth) {
     return str
 }
 
-function parseObjectSize(json, obj, newPatternProps, depth) {
-    let numKeys = () => Object.keys(obj).length
-    let minProps = "minProperties" in json ? json.minProperties : 0
-    let maxProps = "maxProperties" in json ? json.maxProperties : minProps+3
+// determinar um tamanho aleatório para o objeto a gerar, dentro dos limites estabelecidos
+function objectSize(json, required) {
+    let additional = ("additionalProperties" in json && json.additionalProperties !== false) || !("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false
+    let properties = "properties" in json ? Object.keys(json.properties).length : 0
 
-    let namesSchema = "propertyNames" in json ? json.propertyNames.type.string : {"minLength": 3, "maxLength": 10}
-    namesSchema.type = "string"
-
-    // adicionar uma propriedade nova ao objeto final
-    let addProperty = (k,v) => obj[k] = parseJSON(v, depth+1)
-
-    // se tiver menos que minProperties, adicionar mais propriedades
-    if (minProps > numKeys() || (!numKeys() && !["properties","patternProperties","additionalProperties","unevaluatedProperties","required"].some(x => x in json))) {
-        let finalLen = randomize(maxProps, minProps)
-
-        if ("properties" in json) {
-            let unrequiredProps = Object.keys(json.properties).filter(k => !json.required.includes(k) && !(k in obj))
-            
-            for (let i = 0; i < unrequiredProps.length; i++) {
-                addProperty(unrequiredProps[i], json.properties[unrequiredProps[i]])
-            }
-        }
-        if ("patternProperties" in json) {
-            let patternProps = Object.keys(json.patternProperties).filter(k => !newPatternProps.includes(k))
-            
-            for (let i = 0; i < patternProps.length; i++) {
-                let prop = new RandExp(new RegExp(patternProps[i])).gen()
-                if (!Object.keys(obj).includes(prop)) addProperty(prop, json.patternProperties[patternProps[i]])
-            }
-        }
-        if (!("additionalProperties" in json || "unevaluatedProperties" in json))
-            generateRandomProperties(finalLen, obj, namesSchema, true, numKeys, addProperty)
-        else if ("additionalProperties" in json && json.additionalProperties !== false)
-            generateRandomProperties(finalLen, obj, namesSchema, json.additionalProperties, numKeys, addProperty)
-        else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) 
-            generateRandomProperties(finalLen, obj, namesSchema, json.unevaluatedProperties, numKeys, addProperty)
+    let minProps, maxProps
+    if (!("minProperties" in json || "maxProperties" in json)) {
+        minProps = "required" in json ? required : ("properties" in json ? properties : 0)
+        maxProps = minProps + (additional ? 3 : 0)
+        if (!required && !properties && !("patternProperties" in json || "additionalProperties" in json || "unevaluatedProperties" in json)) maxProps = 3
+        if (minProps == maxProps && required > 0 && (!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps += 3
+        if (!maxProps) maxProps = 3
+    }
+    else if ("minProperties" in json && !("maxProperties" in json)) {
+        minProps = json.minProperties
+        maxProps = properties > required ? properties : required
+        if (!maxProps || maxProps < minProps) maxProps = minProps+3
+        else if (additional) maxProps += 3
+    }
+    else if (!("minProperties" in json) && "maxProperties" in json) {
+        maxProps = json.maxProperties
+        minProps = required
+    }
+    else {
+        minProps = json.minProperties
+        maxProps = json.maxProperties
     }
 
-    // se tiver mais que maxProperties, apagar opcionais aleatoriamente até satisfazer esse nr de propriedades
-    if ("maxProperties" in json) {
-        let unrequiredKeys = Object.keys(obj).filter(k => !("required" in json) || !json.required.includes(k))
-        shuffle(unrequiredKeys)
+    return {maxProps, minProps, size: randomize(maxProps, minProps)}
+}
 
-        let requiredLen = "required" in json ? json.required.length : 0
-        let min = minProps > requiredLen ? minProps : requiredLen
-        let max = maxProps > numKeys() ? numKeys() : maxProps
-        
-        let finalLen = randomize(max, min)
-        for (let i = 0; numKeys() != finalLen; i++) delete obj[unrequiredKeys[i]]
+// adicionar um conjunto de propriedades ao objeto final
+function addProperties(json, obj, props, depth) {
+    // adicionar uma propriedade nova
+    let addProperty = (k,v) => obj[k] = parseJSON(v, depth+1)
+    
+    for (let i = 0; i < props.length; i++) {
+        let k = props[i]
+
+        if ("properties" in json && k in json.properties) { addProperty(k, json.properties[k]); delete json.properties[k] }
+        else if ("patternProperties" in json) {
+            for (let j in json.patternProperties) {
+                let regex = new RegExp(j)
+                if (regex.test(k)) addProperty(k, json.patternProperties[j])
+            }
+        }
+        else if ("additionalProperties" in json && json.additionalProperties !== false) addProperty(k, json.additionalProperties)
+        else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) addProperty(k, json.unevaluatedProperties)
+        else obj[k] = randomValue
     }
 }
 
-function generateRandomProperties(finalLen, obj, namesSchema, valueSchema, numKeys, addProperty) {
+// adicionar propriedades aleatórias ao objeto até ter o tamanho pretendido
+function nonRequired_randomProps(json, obj, size, valueSchema, addProperty) {
     let randomNameTries = 0
+    let namesSchema = "propertyNames" in json ? json.propertyNames.type.string : {"minLength": 3, "maxLength": 10}
+    namesSchema.type = "string"
     
-    while (finalLen > numKeys() && randomNameTries < 10) {
+    while (size > Object.keys(obj).length && randomNameTries < 10) {
         let key = jsf.generate(namesSchema)
         if (!("pattern" in namesSchema) && key.includes(" ")) key = key.replace(/ /g,'')
 
@@ -298,24 +293,6 @@ function parseArrayType(json, depth) {
     arr.map(x => str += `${indent(depth)}${x},\n`)
 
     return str == "[\n" ? "[]" : `${str.slice(0, -2)}\n${indent(depth-1)}]`
-}
-
-function shuffle(array) {
-    let currentIndex = array.length,  randomIndex;
-  
-    // While there remain elements to shuffle...
-    while (currentIndex != 0) {
-  
-      // Pick a remaining element...
-      randomIndex = Math.floor(Math.random() * currentIndex);
-      currentIndex--;
-  
-      // And swap it with the current element.
-      [array[currentIndex], array[randomIndex]] = [
-        array[randomIndex], array[currentIndex]];
-    }
-  
-    return array;
 }
 
 module.exports = { convert }
