@@ -1529,7 +1529,8 @@ local_var = "this" char:"."? key:local_var_code_key {
     return path
   }
 
-gen_call = "gen." key:code_key ARGS_START args:(gen_call / local_var / not_parentheses)* ARGS_STOP {
+gen_call = "gen.pattern(" ws quotation_mark arg:$[^"]+ quotation_mark ws ")" { return `gen.genAPI.pattern("${arg}")` }
+         / "gen." key:code_key ARGS_START args:(gen_call / local_var / not_parentheses)* ARGS_STOP {
     args = args.join("").split(",")
     
     var split = [], build = "", i = 0

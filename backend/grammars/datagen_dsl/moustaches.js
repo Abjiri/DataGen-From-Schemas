@@ -392,8 +392,6 @@ function xsd_dateTime(base, max, min, list, i) {
     return str.slice(0,-1)
 }
 
-console.log(pattern("^(?=[a-zA-Z_][-_.a-zA-Z0-9]*)[a-zA-Z_][-_.a-zA-Z0-9]*$", 0))
-
 function xsd_duration(max, min, list, i) {
     let str = ""
 
