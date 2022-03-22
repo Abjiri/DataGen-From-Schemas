@@ -62,7 +62,7 @@
     var path = ""
     var join = args.join(",")
 
-    if (key in genAPI) {
+    if (key in genAPI || ["xsd_gDay","xsd_gMonth","xsd_gYear","xsd_gMonthDay","xsd_gYearMonth"].includes(key)) {
       if (key == "index") {
         if (genAPI["index"](0, queue[queue.length-1], struct_types, array_indexes, 0) === false) errors.push({
           message: 'Não faz sentido invocar a função "index" aqui porque não está dentro de nenhum array!',
@@ -104,6 +104,23 @@
       }
       if (key == "stringOfSize") {
         if (args.length == 1) join += ",null"
+      }
+      if (key == "xsd_gDay") {
+        if (!join.length) join = '1,31,2,""'
+      }
+      if (key == "xsd_gMonth") {
+        if (!join.length) join = '1,12,2,""'
+      }
+      if (key == "xsd_gYear") {
+        key = "formattedInteger"
+        if (!join.length) join = '0,2020,4,""'
+      }
+      if (["xsd_gMonthDay","xsd_gYearMonth"].includes(key)) {
+        key = "xsd_complexGType"
+        if (args.length == 2) join = JSON.stringify(key) + "," + join + ',{"max":1,"min":1}'
+      }
+      if (key == "xsd_duration") {
+        if (args.length == 2) join += ',{"max":1,"min":1}'
       }
 
       path = "genAPI." + key
@@ -900,22 +917,22 @@ gen_moustaches
       data: fillArray("gen", null, "hexBinary", [len])
     }
   }
-  / "xsd_gDay(" ws min:gDay ws "," ws max:gDay ws ")" {
+  / "xsd_gDay(" ws args:(min:gDay ws "," ws max:gDay ws {return {min, max}})? ")" {
     return {
       model: {type: "string", required: true},
-      data: fillArray("gen", null, "formattedInteger", [min, max, 2, ""]).map(x => "---" + x)
+      data: fillArray("gen", null, "formattedInteger", (args===null ? [1,31] : [args.min, args.max]).concat([2, ""])).map(x => "---" + x)
     }
   }
-  / "xsd_gMonth(" ws min:gMonth ws "," ws max:gMonth ws ")" {
+  / "xsd_gMonth(" ws args:(min:gMonth ws "," ws max:gMonth ws {return {min, max}})? ")" {
     return {
       model: {type: "string", required: true},
-      data: fillArray("gen", null, "formattedInteger", [min, max, 2, ""]).map(x => "--" + x)
+      data: fillArray("gen", null, "formattedInteger", (args===null ? [1,12] : [args.min, args.max]).concat([2, ""])).map(x => "--" + x)
     }
   }
-  / "xsd_gYear(" ws min:gYear ws "," ws max:gYear ws ")" {
+  / "xsd_gYear(" ws args:(min:gYear ws "," ws max:gYear ws {return {min, max}})? ")" {
     return {
       model: {type: "string", required: true},
-      data: fillArray("gen", null, "formattedInteger", [min, max, 4, ""])
+      data: fillArray("gen", null, "formattedInteger", (args===null ? [0,2020] : [args.min, args.max]).concat([4, ""]))
     }
   }
   / "xsd_gMonthDay(" ws min:gMonthDay ws "," ws max:gMonthDay ws list:("," ws l:xsd_list_arg ws { return l })? ")" {
@@ -1544,6 +1561,8 @@ gen_call = "gen.pattern(" ws quotation_mark arg:$[^"]+ quotation_mark ws ")" { r
     }
 
     var obj = getApiPath(key, split.map(x => x.trim()))
+    if (obj.path.startsWith("genAPI.xsd_gDay")) return `"---" + gen.${obj.path.replace("xsd_gDay", "formattedInteger")}(${obj.args})`
+    if (obj.path.startsWith("genAPI.xsd_gMonth")) return `"--" + gen.${obj.path.replace("xsd_gMonth", "formattedInteger")}(${obj.args})`
     return `gen.${obj.path}(${obj.args})`
   }
 
