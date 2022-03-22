@@ -75,7 +75,7 @@ function parseType(json, depth) {
 }
 
 function parseStringType(json) {
-    if ("pattern" in json) return "'" + new RandExp(json.pattern).gen() + "'"
+    if ("pattern" in json) return `'{{pattern("${json.pattern}")}}'`
 
     if ("format" in json) {
         let minDate = {date: ["01/01/1950", "00:00:00"], neg: false}
@@ -91,11 +91,7 @@ function parseStringType(json) {
                 return `gen => { return gen.stringOfSize(5,20).replace(/[^a-zA-Z]/g, '').toLowerCase() + "@" + gen.random("gmail","yahoo","hotmail","outlook") + ".com" }`
 
             case "hostname": case "idn-hostname":
-                return `gen => {
-                    let subdomains = gen.random(...gen.range(1,5)), hostname = ""
-                    for (let i = 0; i < subdomains; i++) hostname += gen.stringOfSize(3,10).replace(/[^a-zA-Z]/g, '').toLowerCase() + "."
-                    return hostname.slice(0,-1)
-                }`
+                return `gen => { return Array.apply(null, Array(gen.random(...gen.range(1,5)))).map(x => gen.stringOfSize(3,10).replace(/[^a-zA-Z]/g, '').toLowerCase()).join(".") }`
 
             case "ipv4": return `'{{pattern("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")}}'`
             case "ipv6": return `'{{pattern("^((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}))|:)))$")}}'`
@@ -240,7 +236,7 @@ function nonRequired_randomProps(json, obj, size, valueSchema, addProperty) {
 }
 
 function parseArrayType(json, depth) {
-    let str = "[\n", arr = []
+    let arr = []
     let prefixed = "prefixItems" in json ? json.prefixItems.length : 0
     let additionalItems = ("items" in json && json.items !== false) || !("items" in json) && "unevaluatedItems" in json && json.unevaluatedItems !== false
     let len = arrayLen(json, prefixed, additionalItems)
@@ -253,19 +249,41 @@ function parseArrayType(json, depth) {
     
     // gerar os elementos prefixados do array
     let prefixedLen = prefixed > len ? len : prefixed
-    for (let i = 0; i < prefixedLen; i++) arr.push(parseJSON(json.prefixItems[i], depth+1))
+    for (let i = 0; i < prefixedLen; i++) arr.push(parseJSON(json.prefixItems[i], depth))
 
     // gerar os restantes elementos, se forem permitidos
     let nonPrefixedSchema = true
     if ("items" in json && json.items !== false) nonPrefixedSchema = json.items
     else if (additionalItems) nonPrefixedSchema = json.unevaluatedItems
 
-    for (let i = prefixedLen; i < len; i++) arr.push(parseJSON(nonPrefixedSchema, depth+1))
+    for (let i = prefixedLen; i < len; i++) arr.push(parseJSON(nonPrefixedSchema, depth))
+
+    let convertItem = x => {
+        if (x == "null") return x
+        if (/^'{{/.test(x)) return "gen." + x.slice(3,-3)
+        if (/^gen => { return/.test(x)) return x.split("return ")[1].slice(0,-2)
+    }
 
     // converter o array final para string da DSL
-    arr.map(x => str += `${indent(depth)}${x},\n`)
+    if ("uniqueItems" in json && !arr.some(x => /^({\n|\[|gen => {\n\t*\/\/uniqueItems)/.test(x))) {
+        let str = `gen => {
+${indent(depth)}//uniqueItems
+${indent(depth)}let arr = []
+${indent(depth)}for (let i = 0; i < ${arr.length}; i++) {
+${indent(depth+1)}for (let j = 0; j < 10; j++) {
+${indent(depth+2)}let newItem${arr.map((x,i) => `\n${indent(depth+2)}if (i==${i}) newItem = ${convertItem(x)}`).join("")}
+${indent(depth+2)}if (!arr.includes(newItem) || j==9) {arr.push(newItem); break}
+${indent(depth+1)}}\n${indent(depth)}}
+${indent(depth)}return arr
+${indent(depth-1)}}`
 
-    return str == "[\n" ? "[]" : `${str.slice(0, -2)}\n${indent(depth-1)}]`
+        return str
+    }
+    else {
+        let str = "[\n"
+        arr.map(x => str += `${indent(depth)}${x},\n`)
+        return str == "[\n" ? "[]" : `${str.slice(0, -2)}\n${indent(depth-1)}]`
+    }
 }
 
 // determinar um tamanho aleatório para o array a gerar, dentro dos limites estabelecidos

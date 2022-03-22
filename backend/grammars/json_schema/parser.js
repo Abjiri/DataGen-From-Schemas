@@ -2349,6 +2349,9 @@ module.exports = /*
               s0 = peg$parsekws_mContains();
               if (s0 === peg$FAILED) {
                 s0 = peg$parsekws_array_length();
+                if (s0 === peg$FAILED) {
+                  s0 = peg$parsekw_uniqueness();
+                }
               }
             }
           }
@@ -5515,7 +5518,7 @@ module.exports = /*
           upper = lower + 100
         }
 
-        let dsl = `gen => {\n{depth${nesting}}let num = gen.`
+        /* let dsl = `gen => {\n{depth${nesting}}let num = gen.`
         if (nesting > 0) dsl = `{depth${nesting}}let final = gen.`
 
         if (!Object.keys(obj).length) {
@@ -5566,7 +5569,12 @@ module.exports = /*
         }
 
         if (current_key != "if") dsl += `\n{depth${nesting}}return ${nesting>0 ? "final" : "num"}\n{depth${nesting-1}}}`
-        obj.dsl = dsl
+        obj.dsl = dsl */
+
+        if (!Object.keys(obj).length) obj.dsl = `'{{${"integer" in obj ? "integer" : "float"}(-1000,1000)}}'`
+        else if (upper === null) obj.dsl = `'{{multipleOf(${multipleOf})}}'`
+        else if (int_multiples.length > 0) obj.dsl = `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${multipleOf} }`
+        else obj.dsl = `gen => { return gen.integer(${lower},${upper}) * ${multipleOf} }`
         return true
       }
 
