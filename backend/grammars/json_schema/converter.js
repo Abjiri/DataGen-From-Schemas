@@ -258,15 +258,20 @@ function parseArrayType(json, depth) {
 
     for (let i = prefixedLen; i < len; i++) arr.push(parseJSON(nonPrefixedSchema, depth))
 
-    let convertItem = x => {
-        if (x == "null") return x
-        if (/^'{{/.test(x)) return "gen." + x.slice(3,-3)
-        if (/^gen => { return/.test(x)) return x.split("return ")[1].slice(0,-2)
-    }
-
     // converter o array final para string da DSL
-    if ("uniqueItems" in json && !arr.some(x => /^({\n|\[|gen => {\n\t*\/\/uniqueItems)/.test(x))) {
-        let str = `gen => {
+    if (!("uniqueItems" in json && !arr.some(x => /^({\n|\[|gen => {\n\t*\/\/uniqueItems)/.test(x)))) {
+        let str = "[\n"
+        arr.map(x => str += `${indent(depth)}${x},\n`)
+        return str == "[\n" ? "[]" : `${str.slice(0, -2)}\n${indent(depth-1)}]`
+    }
+    else {
+        let convertItem = x => {
+            if (x == "null") return x
+            if (/^'{{/.test(x)) return "gen." + x.slice(3,-3)
+            if (/^gen => { return/.test(x)) return x.split("return ")[1].slice(0,-2)
+        }
+
+        return `gen => {
 ${indent(depth)}//uniqueItems
 ${indent(depth)}let arr = []
 ${indent(depth)}for (let i = 0; i < ${arr.length}; i++) {
@@ -276,13 +281,6 @@ ${indent(depth+2)}if (!arr.includes(newItem) || j==9) {arr.push(newItem); break}
 ${indent(depth+1)}}\n${indent(depth)}}
 ${indent(depth)}return arr
 ${indent(depth-1)}}`
-
-        return str
-    }
-    else {
-        let str = "[\n"
-        arr.map(x => str += `${indent(depth)}${x},\n`)
-        return str == "[\n" ? "[]" : `${str.slice(0, -2)}\n${indent(depth-1)}]`
     }
 }
 
