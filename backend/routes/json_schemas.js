@@ -54,7 +54,6 @@ let refs = []
 
 function resolve_refs(json, original_json, schema_id) {
   let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
-  console.log(keys)
 
   for (let i = 0; i < keys.length; i++) {
     let k = keys[i]

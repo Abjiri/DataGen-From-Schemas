@@ -622,7 +622,7 @@ int "integer"
 
 string "string" = QM chars:char* QM {return chars.join("")}
 anchor "anchor" = QM value:$([a-zA-Z][a-zA-Z0-9\-\_\:\.]*) QM {return value}
-schema_id = QM "https://datagen.di.uminho.pt"? "/json-schemas/" id:$([^"]+) QM {return id}
+schema_id = QM "https://datagen.di.uminho.pt"? id:$("/json-schemas/" [^"]+) QM {return id}
 schema_ref = QM "https://datagen.di.uminho.pt"? ref:$(("#" / "/json-schemas/") [^"]+) QM {refs[refs.length-1].push(ref); return ref}
 
 char
