@@ -6,6 +6,7 @@
   let ids = []
   let refs = []
   let subschemas = []
+  let anon_schemas = 0
 
   let genericKeys = ["type","enum","const"]
   let annotationKeys = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
@@ -530,7 +531,7 @@ schema_object
 
       let new_refs = refs.pop()
       if ("$id" in schema || !refs.length) {
-        let id = "$id" in schema ? schema.$id : ""
+        let id = "$id" in schema ? schema.$id : ("anon" + ++anon_schemas)
         subschemas.push({id, schema, refs: new_refs})
       }
       else refs.push(refs.pop().concat(new_refs))

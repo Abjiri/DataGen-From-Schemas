@@ -5,13 +5,15 @@ const dslParser = require('../grammars/datagen_dsl/parser')
 const jsonParser = require('../grammars/json_schema/parser')
 
 const dslConverter = require('../grammars/datagen_dsl/conversions')
-const jsonConverter = require('../grammars/json_schema/converter');
+const jsonConverter = require('../grammars/json_schema/converter')
+
+let copy = x => JSON.parse(JSON.stringify(x))
+let refs = []
 
 // POST para gerar um dataset a partir de um XML schema
 router.post('/', (req, res) => {
   try {
     let schemas = req.body.json.split("\n\n")
-    console.log(schemas)
 
     // extrair dados da schema
     let data = schemas.map(x => jsonParser.parse(x))
@@ -21,11 +23,22 @@ router.post('/', (req, res) => {
     for (let i = data.length-1; i >= 0; i--) {
       for (let j = 0; j < data[i].subschemas.length; j++) {
         let subschema = data[i].subschemas[j]
-        if (subschema.refs.length > 0) resolve_refs(subschema.schema, subschema.schema, subschema.id)
+        
+        if (subschema.refs.length > 0) {
+          let resolved = resolve_refs(subschema.schema, subschema.schema, subschema.id, subschema.refs)
+          if (resolved !== true) return res.status(201).jsonp({message: resolved})
+        }
+        
+        // guardar schemas que podem ser referenciadas e/ou ainda têm referências por resolver
+        if (!(/^anon\d+/.test(subschema.id) && !subschema.refs.length)) refs.push(subschema)
       }
     }
+    
+    let crossRefs = check_crossRefs()
+    if (crossRefs !== true) return res.status(201).jsonp({message: crossRefs})
+
     console.log("--------------------")
-    console.log(JSON.stringify(data))
+    console.log(JSON.stringify(refs))
 
     // criar modelo DSL a partir dos dados da schemas
     let model = jsonConverter.convert(data[0].schema)
@@ -48,54 +61,72 @@ router.post('/', (req, res) => {
   }
 });
 
-let base_uri = "https://datagen.di.uminho.pt/json-schemas"
-let copy = x => JSON.parse(JSON.stringify(x))
-let refs = []
-
-function resolve_refs(json, original_json, schema_id) {
+function resolve_refs(json, original_json, schema_id, schema_refs) {
   let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
 
   for (let i = 0; i < keys.length; i++) {
     let k = keys[i]
 
     if (k == "$ref") {
-      let schema
-      if (json[k].startsWith(base_uri)) json[k] = json[k].replace(base_uri, "")
-      if (schema_id.length > 0 && json[k].startsWith(schema_id)) json[k] = json[k].replace(schema_id, "#")
+      let schema, ref = json[k]
+      if (ref.startsWith(schema_id)) ref = ref.replace(schema_id, "#")
 
-      if (json[k] == "#" || json[k] == schema_id) {}
-      else if (/^#\//.test(json[k])) schema = getLocalRef(json[k].split("/"), copy(original_json))
-      else schema = getForeignRef(json[k].split("/"))
+      if (ref == "#" || ref == schema_id) {}
+      else if (/^#\//.test(ref)) {
+        schema = getLocalRef(ref.split("/"), copy(original_json))
+        if (schema === false) return `A $ref '${json[k]}' é inválida!`
+      }
+      else if (/^#/.test(ref)) return `A $ref '${json[k]}' é inválida!`
+      else schema = getForeignRef(ref.split("/"))
 
       if (schema !== null) {
+        schema_refs.splice(schema_refs.findIndex(x => x == json[k]), 1)
         delete json[k]
         Object.assign(json, schema)
       }
     }
-    else if (typeof json[k] === 'object' && json[k] !== null) resolve_refs(json[k], original_json, schema_id)
+    else if (typeof json[k] === 'object' && json[k] !== null) {
+      let resolved = resolve_refs(json[k], original_json, schema_id, schema_refs)
+      if (resolved !== true) return resolved
+    }
   }
+
+  return true
 }
 
 function getLocalRef(ref, json) {
-  console.log("getLocalRef")
   for (let i = 1; i < ref.length; i++) {
     if (ref[i] in json) json = json[ref[i]]
     else if ("type" in json) {
       if ("object" in json.type && ref[i] in json.type.object) json = json.type.object[ref[i]]
       else if ("array" in json.type && ref[i] in json.type.array) json = json.type.array[ref[i]]
-      else {} // REFERENCIA INVALIDA
+      else return false
     }
-    else {} // REFERENCIA INVALIDA
+    else return false
   }
 
   if (typeof json == "boolean" || typeof json === 'object' && !Array.isArray(json) && json !== null) return json
-  else {} // REFERENCIA INVALIDA
+  return false
 }
 
-/* function getForeignRef(ref) {
-  let schemaIndex = refs.indexOf(refs.id == "/" + ref[0])
+function check_crossRefs() {
+  let refs_map = refs.reduce((acc, cur) => {acc[cur.id] = cur.refs; return acc}, {})
   
-  if (schemaIndex )
-} */
+  for (let k in refs_map) {
+    for (let i = 0; i < refs_map[k].length; i++) {
+      let ref = refs_map[k][i]
+
+      // loop infinito de recursividade
+      if (ref in refs_map && refs_map[ref].includes(k)) return `Existe um ciclo infinito de recursividade entre as schemas '${k}' e '${ref}'!`
+    }
+  }
+
+  return true
+}
+
+function getForeignRef(ref) {
+  console.log("foreign ref")
+  return null
+}
 
 module.exports = router;
