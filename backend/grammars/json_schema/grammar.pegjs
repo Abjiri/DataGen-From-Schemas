@@ -1,11 +1,11 @@
 // Gramática de JSON Schema para "DataGen from Schemas" -----
 
 {
-  let depth = 0
-  let $defs = false
+  let depth = []
   let current_key = ""
   let ids = []
   let refs = []
+  let subschemas = []
 
   let genericKeys = ["type","enum","const"]
   let annotationKeys = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
@@ -19,7 +19,7 @@
   let arrayKeys = ["items","prefixItems","unevaluatedItems","contains","minContains","maxContains","minItems","maxItems","uniqueItems"]
 
   // chave só permitida na raiz
-  const atRoot = kw => (($defs && depth==3) || depth==1) ? true : error(`A chave '${kw}' só é permitida ao nível da raiz!`)
+  const atRoot = kw => !depth[depth.length-1] ? true : error(`A chave '${kw}' só é permitida ao nível da raiz da (sub)schema!`)
   // todos os ids devem ser únicos
   const newId = id => !ids.includes(id) ? true : error(`Todas as propriedades '$id' devem ser únicas! Há mais do que uma (sub)schema cujo '$id' é '${id}'.`)
   // verificar se objeto tem todas as propriedades em questão
@@ -37,7 +37,7 @@
   // formatar os dados para a estrutura intermédia pretendida
   function structureSchemaData(obj) {
     if (obj === null) return true
-    let schema = {type: {}}, $id = ""
+    let schema = {type: {}}
 
     for (let k of obj.type) {
       if (k == "integer") {
@@ -50,8 +50,7 @@
     if (!Object.keys(schema.type).length) delete schema.type
 
     for (let k in obj) {
-      if (k == "$id") $id = obj[k]
-      else if (["if","then","else"].includes(k)) {
+      if (["if","then","else"].includes(k)) {
         for (let key in obj[k].type) {
           if (!(key in schema.type)) schema.type[key] = {}
           schema.type[key][k] = obj[k].type[key]
@@ -70,7 +69,6 @@
       if (valid !== true) return valid
     }
 
-    if ($id.length > 0) refs.push({uri_absolute: $id, uri_relative: $id.replace("https://datagen.di.uminho.pt",""), schema})
     return schema
   }
 
@@ -386,12 +384,12 @@
 
 // ----- Dialect -----
 
-Dialect = ws value:schema_object ws {return value}
+Dialect = ws schema:schema_object ws {return {schema, subschemas}}
 
-begin_array     = ws "[" ws
-begin_object    = ws "{" ws {depth++}
-end_array       = ws "]" ws
-end_object      = ws "}" ws {depth--}
+begin_array     = ws "[" ws {depth[depth.length-1]++}
+begin_object    = ws "{" ws {depth[depth.length-1]++}
+end_array       = ws "]" ws {depth[depth.length-1]--}
+end_object      = ws "}" ws {depth[depth.length-1]--}
 name_separator  = ws ":" ws
 value_separator = ws "," ws
 
@@ -507,27 +505,37 @@ schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https:/
 
 kw_id = QM key:"$id" QM name_separator value:schema_id &{return atRoot(key) && newId(value)} {ids.push(value); return {key, value}}
 kw_anchor = QM key:"$anchor" QM name_separator value:anchor {return {key, value}}
-kw_ref = QM key:"$ref" QM name_separator value:string {return {key, value}}
-kw_defs = QM key:$("$defs" {$defs = true}) QM name_separator value:object_schemaMap {$defs = false; return {key, value}}
+kw_ref = QM key:"$ref" QM name_separator value:schema_ref {return {key, value}}
+kw_defs = QM key:"$defs" QM name_separator value:object_schemaMap {return {key, value}}
 
 
 // ----- Objetos -----
 
 schema_object
   = boolean /
-    begin_object members:(
+    (ws "{" ws {depth.push(0); refs.push([])}) members:(
       head:keyword tail:(value_separator m:keyword { return m; })* {
         var result = {};
         [head].concat(tail).forEach(el => {result[el.key] = el.value});
         return result;
-    })? end_object
+    })? (ws "}" ws {depth.pop()})
     &{ return checkSchema(members) }
     { 
+      let schema
       if (current_key == "contains") {
         if (!members.type.length) delete members.type
-        return members
+        schema = members
       }
-      else return structureSchemaData(members)
+      else schema = structureSchemaData(members)
+
+      let new_refs = refs.pop()
+      if ("$id" in schema || !refs.length) {
+        let id = "$id" in schema ? schema.$id : ""
+        subschemas.push({id, schema, refs: new_refs})
+      }
+      else refs.push(refs.pop().concat(new_refs))
+
+      return schema
     }
 
 object
@@ -614,7 +622,8 @@ int "integer"
 
 string "string" = QM chars:char* QM {return chars.join("")}
 anchor "anchor" = QM value:$([a-zA-Z][a-zA-Z0-9\-\_\:\.]*) QM {return value}
-schema_id = QM uri:("https://datagen.di.uminho.pt/json-schemas/" [^"]+) QM {return uri}
+schema_id = QM "https://datagen.di.uminho.pt"? "/json-schemas/" id:$([^"]+) QM {return id}
+schema_ref = QM "https://datagen.di.uminho.pt"? ref:$(("#" / "/json-schemas/") [^"]+) QM {refs[refs.length-1].push(ref); return ref}
 
 char
   = unescaped

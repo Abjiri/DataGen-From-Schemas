@@ -19,16 +19,16 @@ router.post('/', (req, res) => {
     console.log('schema parsed')
 
     for (let i = data.length-1; i >= 0; i--) {
-      if (typeof data[i] == "object") {
-        let id = "$id" in data[i] ? data[i].$id.replace(base_uri, "") : null
-        resolve_refs(data[i], data[i], id)
+      for (let j = 0; j < data[i].subschemas.length; j++) {
+        let subschema = data[i].subschemas[j]
+        if (subschema.refs.length > 0) resolve_refs(subschema.schema, subschema.schema, subschema.id)
       }
     }
     console.log("--------------------")
     console.log(JSON.stringify(data))
 
     // criar modelo DSL a partir dos dados da schemas
-    let model = jsonConverter.convert(data[0])
+    let model = jsonConverter.convert(data[0].schema)
     console.log('modelo criado')
     console.log(model)
     // gerar dataset
@@ -50,9 +50,11 @@ router.post('/', (req, res) => {
 
 let base_uri = "https://datagen.di.uminho.pt/json-schemas"
 let copy = x => JSON.parse(JSON.stringify(x))
+let refs = []
 
 function resolve_refs(json, original_json, schema_id) {
   let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
+  console.log(keys)
 
   for (let i = 0; i < keys.length; i++) {
     let k = keys[i]
@@ -60,21 +62,23 @@ function resolve_refs(json, original_json, schema_id) {
     if (k == "$ref") {
       let schema
       if (json[k].startsWith(base_uri)) json[k] = json[k].replace(base_uri, "")
+      if (schema_id.length > 0 && json[k].startsWith(schema_id)) json[k] = json[k].replace(schema_id, "#")
 
-      if (json[k] == "#") {}
-      else if (/^#\//.test(json[k])) schema = getLocalRef(json[k], copy(original_json))
-      else {}
+      if (json[k] == "#" || json[k] == schema_id) {}
+      else if (/^#\//.test(json[k])) schema = getLocalRef(json[k].split("/"), copy(original_json))
+      else schema = getForeignRef(json[k].split("/"))
 
-      delete json[k]
-      Object.assign(json, schema)
+      if (schema !== null) {
+        delete json[k]
+        Object.assign(json, schema)
+      }
     }
-    else if (typeof json[k] === 'object' && json[k] !== null) resolve_refs(json[k], original_json)
+    else if (typeof json[k] === 'object' && json[k] !== null) resolve_refs(json[k], original_json, schema_id)
   }
 }
 
 function getLocalRef(ref, json) {
-  ref = ref.split("/")
-
+  console.log("getLocalRef")
   for (let i = 1; i < ref.length; i++) {
     if (ref[i] in json) json = json[ref[i]]
     else if ("type" in json) {
@@ -88,5 +92,11 @@ function getLocalRef(ref, json) {
   if (typeof json == "boolean" || typeof json === 'object' && !Array.isArray(json) && json !== null) return json
   else {} // REFERENCIA INVALIDA
 }
+
+/* function getForeignRef(ref) {
+  let schemaIndex = refs.indexOf(refs.id == "/" + ref[0])
+  
+  if (schemaIndex )
+} */
 
 module.exports = router;
