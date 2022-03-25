@@ -34,11 +34,20 @@ router.post('/', (req, res) => {
       }
     }
     
-    let crossRefs = check_crossRefs()
-    if (crossRefs !== true) return res.status(201).jsonp({message: crossRefs})
+    /* let crossRefs = check_crossRefs()
+    if (typeof crossRefs == "string") return res.status(201).jsonp({message: crossRefs})
+
+    for (let i = 0; i < crossRefs.length; i++) {
+      let subschema = refs[crossRefs[i]]
+      
+      if (subschema.refs.length > 0) {
+        let resolved = resolve_refs(subschema.schema, subschema.schema, subschema.id, subschema.refs)
+        if (resolved !== true) return res.status(201).jsonp({message: resolved})
+      }
+    }
 
     console.log("--------------------")
-    console.log(JSON.stringify(refs))
+    console.log(JSON.stringify(refs)) */
 
     // criar modelo DSL a partir dos dados da schemas
     let model = jsonConverter.convert(data[0].schema)
@@ -68,19 +77,21 @@ function resolve_refs(json, original_json, schema_id, schema_refs) {
     let k = keys[i]
 
     if (k == "$ref") {
-      let schema, ref = json[k]
+      let schema = null, ref = json[k], nested_ref = false
       if (ref.startsWith(schema_id)) ref = ref.replace(schema_id, "#")
 
       if (ref == "#" || ref == schema_id) {}
       else if (/^#\//.test(ref)) {
         schema = getLocalRef(ref.split("/"), copy(original_json))
         if (schema === false) return `A $ref '${json[k]}' é inválida!`
+        if (schema !== true && "$ref" in schema) {nested_ref = true; i--}
       }
       else if (/^#/.test(ref)) return `A $ref '${json[k]}' é inválida!`
       else schema = getForeignRef(ref.split("/"))
 
       if (schema !== null) {
-        schema_refs.splice(schema_refs.findIndex(x => x == json[k]), 1)
+        if (nested_ref) schema_refs[schema_refs.findIndex(x => x == json[k])] = schema.$ref
+        else schema_refs.splice(schema_refs.findIndex(x => x == json[k]), 1)
         delete json[k]
         Object.assign(json, schema)
       }
@@ -111,6 +122,7 @@ function getLocalRef(ref, json) {
 
 function check_crossRefs() {
   let refs_map = refs.reduce((acc, cur) => {acc[cur.id] = cur.refs; return acc}, {})
+  console.log("refs_map:",refs_map)
   
   for (let k in refs_map) {
     for (let i = 0; i < refs_map[k].length; i++) {
@@ -121,7 +133,17 @@ function check_crossRefs() {
     }
   }
 
-  return true
+  let ids = Object.keys(refs_map)
+  let queue = ids.filter(k => !refs_map[k].length)
+
+  while (queue.length !== ids.length) {
+    for (let i = 0; i < ids.length; i++) {
+      if (!queue.includes(ids[i]) && refs_map[ids[i]].every(x => queue.includes(x))) queue.push(ids[i])
+    }
+  }
+
+  console.log("queue:",queue)
+  return queue
 }
 
 function getForeignRef(ref) {
