@@ -10,17 +10,25 @@ const jsonConverter = require('../grammars/json_schema/converter');
 // POST para gerar um dataset a partir de um XML schema
 router.post('/', (req, res) => {
   try {
+    let schemas = req.body.json.split("\n\n")
+    console.log(schemas)
+
     // extrair dados da schema
-    let data = jsonParser.parse(req.body.json)
+    let data = schemas.map(x => jsonParser.parse(x))
     console.log(JSON.stringify(data))
     console.log('schema parsed')
 
-    resolve_refs(data, data)
+    for (let i = data.length-1; i >= 0; i--) {
+      if (typeof data[i] == "object") {
+        let id = "$id" in data[i] ? data[i].$id.replace(base_uri, "") : null
+        resolve_refs(data[i], data[i], id)
+      }
+    }
     console.log("--------------------")
     console.log(JSON.stringify(data))
 
     // criar modelo DSL a partir dos dados da schemas
-    let model = jsonConverter.convert(data)
+    let model = jsonConverter.convert(data[0])
     console.log('modelo criado')
     console.log(model)
     // gerar dataset
@@ -43,7 +51,7 @@ router.post('/', (req, res) => {
 let base_uri = "https://datagen.di.uminho.pt/json-schemas"
 let copy = x => JSON.parse(JSON.stringify(x))
 
-function resolve_refs(json, original_json) {
+function resolve_refs(json, original_json, schema_id) {
   let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
 
   for (let i = 0; i < keys.length; i++) {
@@ -51,9 +59,11 @@ function resolve_refs(json, original_json) {
 
     if (k == "$ref") {
       let schema
+      if (json[k].startsWith(base_uri)) json[k] = json[k].replace(base_uri, "")
 
       if (json[k] == "#") {}
       else if (/^#\//.test(json[k])) schema = getLocalRef(json[k], copy(original_json))
+      else {}
 
       delete json[k]
       Object.assign(json, schema)
