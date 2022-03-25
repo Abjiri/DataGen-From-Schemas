@@ -5,6 +5,7 @@
   let $defs = false
   let current_key = ""
   let ids = []
+  let refs = []
 
   let genericKeys = ["type","enum","const"]
   let annotationKeys = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
@@ -36,7 +37,7 @@
   // formatar os dados para a estrutura intermédia pretendida
   function structureSchemaData(obj) {
     if (obj === null) return true
-    let schema = {type: {}}
+    let schema = {type: {}}, $id = ""
 
     for (let k of obj.type) {
       if (k == "integer") {
@@ -49,7 +50,8 @@
     if (!Object.keys(schema.type).length) delete schema.type
 
     for (let k in obj) {
-      if (["if","then","else"].includes(k)) {
+      if (k == "$id") $id = obj[k]
+      else if (["if","then","else"].includes(k)) {
         for (let key in obj[k].type) {
           if (!(key in schema.type)) schema.type[key] = {}
           schema.type[key][k] = obj[k].type[key]
@@ -68,6 +70,7 @@
       if (valid !== true) return valid
     }
 
+    if ($id.length > 0) refs.push({uri_absolute: $id, uri_relative: $id.replace("https://datagen.di.uminho.pt",""), schema})
     return schema
   }
 
@@ -502,7 +505,7 @@ kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoo
 schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM
                &{return v == "https://json-schema.org/draft/2020-12/schema" ? true : error("Esta ferramenta implementa apenas a sintaxe do draft 2020-12!")} {return v}
 
-kw_id = QM key:"$id" QM name_separator value:string &{return atRoot(key) && newId(value)} {ids.push(value); return {key, value}}
+kw_id = QM key:"$id" QM name_separator value:schema_id &{return atRoot(key) && newId(value)} {ids.push(value); return {key, value}}
 kw_anchor = QM key:"$anchor" QM name_separator value:anchor {return {key, value}}
 kw_ref = QM key:"$ref" QM name_separator value:string {return {key, value}}
 kw_defs = QM key:$("$defs" {$defs = true}) QM name_separator value:object_schemaMap {$defs = false; return {key, value}}
@@ -611,6 +614,7 @@ int "integer"
 
 string "string" = QM chars:char* QM {return chars.join("")}
 anchor "anchor" = QM value:$([a-zA-Z][a-zA-Z0-9\-\_\:\.]*) QM {return value}
+schema_id = QM uri:("https://datagen.di.uminho.pt/json-schemas/" [^"]+) QM {return uri}
 
 char
   = unescaped

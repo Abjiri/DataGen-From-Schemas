@@ -12,8 +12,12 @@ router.post('/', (req, res) => {
   try {
     // extrair dados da schema
     let data = jsonParser.parse(req.body.json)
-    //console.log(JSON.stringify(data))
+    console.log(JSON.stringify(data))
     console.log('schema parsed')
+
+    resolve_refs(data, data)
+    console.log("--------------------")
+    console.log(JSON.stringify(data))
 
     // criar modelo DSL a partir dos dados da schemas
     let model = jsonConverter.convert(data)
@@ -35,5 +39,44 @@ router.post('/', (req, res) => {
     res.status(201).jsonp(err)
   }
 });
+
+let base_uri = "https://datagen.di.uminho.pt/json-schemas"
+let copy = x => JSON.parse(JSON.stringify(x))
+
+function resolve_refs(json, original_json) {
+  let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
+
+  for (let i = 0; i < keys.length; i++) {
+    let k = keys[i]
+
+    if (k == "$ref") {
+      let schema
+
+      if (json[k] == "#") {}
+      else if (/^#\//.test(json[k])) schema = getLocalRef(json[k], copy(original_json))
+
+      delete json[k]
+      Object.assign(json, schema)
+    }
+    else if (typeof json[k] === 'object' && json[k] !== null) resolve_refs(json[k], original_json)
+  }
+}
+
+function getLocalRef(ref, json) {
+  ref = ref.split("/")
+
+  for (let i = 1; i < ref.length; i++) {
+    if (ref[i] in json) json = json[ref[i]]
+    else if ("type" in json) {
+      if ("object" in json.type && ref[i] in json.type.object) json = json.type.object[ref[i]]
+      else if ("array" in json.type && ref[i] in json.type.array) json = json.type.array[ref[i]]
+      else {} // REFERENCIA INVALIDA
+    }
+    else {} // REFERENCIA INVALIDA
+  }
+
+  if (typeof json == "boolean" || typeof json === 'object' && !Array.isArray(json) && json !== null) return json
+  else {} // REFERENCIA INVALIDA
+}
 
 module.exports = router;
