@@ -71,37 +71,28 @@ router.post('/', (req, res) => {
 });
 
 function resolve_refs(json, original_json, schema_id, schema_refs) {
-  let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
+  for (let i = 0; i < schema_refs.length; i++) {
+    let ref = schema_refs[i].$ref
+    let schema = null, nested_ref = false
+    if (ref.startsWith(schema_id)) ref = ref.replace(schema_id, "#")
+    console.log("ref:",ref)
 
-  for (let i = 0; i < keys.length; i++) {
-    let k = keys[i]
-
-    if (k == "$ref") {
-      let schema = null, ref = json[k], nested_ref = false
-      if (ref.startsWith(schema_id)) ref = ref.replace(schema_id, "#")
-
-      if (ref == "#" || ref == schema_id) {}
-      else if (/^#\//.test(ref)) {
-        schema = getLocalRef(ref.split("/"), copy(original_json))
-        if (schema === false) return `A $ref '${json[k]}' é inválida!`
-        if (schema !== true && "$ref" in schema) {nested_ref = true; i--}
-      }
-      else if (/^#/.test(ref)) return `A $ref '${json[k]}' é inválida!`
-      else schema = getForeignRef(ref.split("/"))
-
-      if (schema !== null) {
-        if (nested_ref) schema_refs[schema_refs.findIndex(x => x == json[k])] = schema.$ref
-        else schema_refs.splice(schema_refs.findIndex(x => x == json[k]), 1)
-        delete json[k]
-        Object.assign(json, schema)
-      }
+    if (ref == "#" || ref == schema_id) {}
+    else if (/^#\//.test(ref)) {
+      schema = getLocalRef(ref.split("/"), copy(original_json))
+      if (schema === false) return `A $ref '${json[k]}' é inválida!`
+      if (schema !== true && "$ref" in schema) nested_ref = true
     }
-    else if (typeof json[k] === 'object' && json[k] !== null) {
-      let resolved = resolve_refs(json[k], original_json, schema_id, schema_refs)
-      if (resolved !== true) return resolved
+    else if (/^#/.test(ref)) return `A $ref '${json[k]}' é inválida!`
+    else schema = getForeignRef(ref.split("/"))
+
+    if (schema !== null) {
+      delete schema_refs[i].$ref
+      Object.assign(schema_refs[i--], schema)
+      if (!nested_ref) schema_refs.splice(i+1, 1)
     }
   }
-
+  
   return true
 }
 

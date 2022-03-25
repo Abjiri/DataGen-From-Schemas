@@ -529,7 +529,10 @@ schema_object
       }
       else schema = structureSchemaData(members)
 
+      if ("$ref" in schema) refs[refs.length-1].push(schema)
       let new_refs = refs.pop()
+
+      // guardar subschema se tiver um id ou se for a própria schema
       if ("$id" in schema || !refs.length) {
         let id = "$id" in schema ? schema.$id : ("anon" + ++anon_schemas)
         subschemas.push({id, schema, refs: new_refs})
@@ -624,7 +627,7 @@ int "integer"
 string "string" = QM chars:char* QM {return chars.join("")}
 anchor "anchor" = QM value:$([a-zA-Z][a-zA-Z0-9\-\_\:\.]*) QM {return value}
 schema_id = QM "https://datagen.di.uminho.pt"? id:$("/json-schemas/" [^"]+) QM {return id}
-schema_ref = QM "https://datagen.di.uminho.pt"? ref:$(("#" / "/json-schemas/") [^"]+) QM {refs[refs.length-1].push(ref); return ref}
+schema_ref = QM "https://datagen.di.uminho.pt"? ref:$(("#" / "/json-schemas/") [^"]+) QM {return ref}
 
 char
   = unescaped

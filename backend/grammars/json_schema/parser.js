@@ -387,7 +387,10 @@ module.exports = /*
               }
               else schema = structureSchemaData(members)
 
+              if ("$ref" in schema) refs[refs.length-1].push(schema)
               let new_refs = refs.pop()
+
+              // guardar subschema se tiver um id ou se for a própria schema
               if ("$id" in schema || !refs.length) {
                 let id = "$id" in schema ? schema.$id : ("anon" + ++anon_schemas)
                 subschemas.push({id, schema, refs: new_refs})
@@ -449,7 +452,7 @@ module.exports = /*
         peg$c281 = function(id) {return id},
         peg$c282 = "#",
         peg$c283 = peg$literalExpectation("#", false),
-        peg$c284 = function(ref) {refs[refs.length-1].push(ref); return ref},
+        peg$c284 = function(ref) {return ref},
         peg$c285 = "\"",
         peg$c286 = peg$literalExpectation("\"", false),
         peg$c287 = "\\",
