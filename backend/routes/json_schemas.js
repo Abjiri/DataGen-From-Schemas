@@ -7,7 +7,6 @@ const jsonParser = require('../grammars/json_schema/parser')
 const dslConverter = require('../grammars/datagen_dsl/conversions')
 const jsonConverter = require('../grammars/json_schema/converter')
 
-let copy = x => JSON.parse(JSON.stringify(x))
 let refs = []
 
 // POST para gerar um dataset a partir de um XML schema
@@ -17,7 +16,7 @@ router.post('/', (req, res) => {
 
     // extrair dados da schema
     let data = schemas.map(x => jsonParser.parse(x))
-    console.log(JSON.stringify(data))
+    //console.log(JSON.stringify(data))
     console.log('schema parsed')
 
     for (let i = data.length-1; i >= 0; i--) {
@@ -25,7 +24,7 @@ router.post('/', (req, res) => {
         let subschema = data[i].subschemas[j]
         
         if (subschema.refs.length > 0) {
-          let resolved = resolve_refs(subschema.schema, subschema.schema, subschema.id, subschema.refs)
+          let resolved = resolve_localRefs(subschema.schema, subschema.id, subschema.refs)
           if (resolved !== true) return res.status(201).jsonp({message: resolved})
         }
         
@@ -34,20 +33,8 @@ router.post('/', (req, res) => {
       }
     }
     
-    /* let crossRefs = check_crossRefs()
-    if (typeof crossRefs == "string") return res.status(201).jsonp({message: crossRefs})
-
-    for (let i = 0; i < crossRefs.length; i++) {
-      let subschema = refs[crossRefs[i]]
-      
-      if (subschema.refs.length > 0) {
-        let resolved = resolve_refs(subschema.schema, subschema.schema, subschema.id, subschema.refs)
-        if (resolved !== true) return res.status(201).jsonp({message: resolved})
-      }
-    }
-
-    console.log("--------------------")
-    console.log(JSON.stringify(refs)) */
+    let crossRefs = resolve_foreignRefs()
+    if (crossRefs !== true) return res.status(201).jsonp({message: crossRefs})
 
     // criar modelo DSL a partir dos dados da schemas
     let model = jsonConverter.convert(data[0].schema)
@@ -70,21 +57,20 @@ router.post('/', (req, res) => {
   }
 });
 
-function resolve_refs(json, original_json, schema_id, schema_refs) {
+
+function resolve_localRefs(json, schema_id, schema_refs) {
   for (let i = 0; i < schema_refs.length; i++) {
     let ref = schema_refs[i].$ref
     let schema = null, nested_ref = false
     if (ref.startsWith(schema_id)) ref = ref.replace(schema_id, "#")
-    console.log("ref:",ref)
 
     if (ref == "#" || ref == schema_id) {}
     else if (/^#\//.test(ref)) {
-      schema = getLocalRef(ref.split("/"), copy(original_json))
-      if (schema === false) return `A $ref '${json[k]}' é inválida!`
+      schema = replace_ref(ref.split("/"), json)
+      if (schema === false) return `A $ref '${schema_refs[i].$ref}' é inválida!`
       if (schema !== true && "$ref" in schema) nested_ref = true
     }
-    else if (/^#/.test(ref)) return `A $ref '${json[k]}' é inválida!`
-    else schema = getForeignRef(ref.split("/"))
+    else if (/^#/.test(ref)) return `A $ref '${schema_refs[i].$ref}' é inválida!`
 
     if (schema !== null) {
       delete schema_refs[i].$ref
@@ -96,24 +82,8 @@ function resolve_refs(json, original_json, schema_id, schema_refs) {
   return true
 }
 
-function getLocalRef(ref, json) {
-  for (let i = 1; i < ref.length; i++) {
-    if (ref[i] in json) json = json[ref[i]]
-    else if ("type" in json) {
-      if ("object" in json.type && ref[i] in json.type.object) json = json.type.object[ref[i]]
-      else if ("array" in json.type && ref[i] in json.type.array) json = json.type.array[ref[i]]
-      else return false
-    }
-    else return false
-  }
-
-  if (typeof json == "boolean" || typeof json === 'object' && !Array.isArray(json) && json !== null) return json
-  return false
-}
-
-function check_crossRefs() {
-  let refs_map = refs.reduce((acc, cur) => {acc[cur.id] = cur.refs; return acc}, {})
-  console.log("refs_map:",refs_map)
+function resolve_foreignRefs() {
+  let refs_map = refs.reduce((acc, cur) => {acc[cur.id] = cur.refs.map(x => x.$ref); return acc}, {})
   
   for (let k in refs_map) {
     for (let i = 0; i < refs_map[k].length; i++) {
@@ -128,18 +98,49 @@ function check_crossRefs() {
   let queue = ids.filter(k => !refs_map[k].length)
 
   while (queue.length !== ids.length) {
-    for (let i = 0; i < ids.length; i++) {
-      if (!queue.includes(ids[i]) && refs_map[ids[i]].every(x => queue.includes(x))) queue.push(ids[i])
-    }
+    Object.keys(refs_map).filter(k => !queue.includes(k)).map(id => {
+      let parsedIndexes = []
+
+      for (let i = 0; i < refs_map[id].length; i++) {
+        let ref = refs_map[id][i], schema, nested_ref = false
+
+        if (queue.includes(ref)) {
+          let ref_id = queue[queue.findIndex(x => ref.startsWith(x))]
+
+          schema = replace_ref(ref.replace(ref_id, "#").split("/"), refs[refs.findIndex(x => x.id == ref)].schema)
+          if (schema === false) return `A $ref '${refs_map[id][i]}' é inválida!`
+          if (schema !== true && "$ref" in schema) nested_ref = true
+
+          let refs_elem = refs[refs.findIndex(x => x.id == id)]
+          delete refs_elem.refs[i].$ref
+          Object.assign(refs_elem.refs[i], schema)
+
+          if (nested_ref) i--
+          else parsedIndexes.push(i) 
+        }
+      }
+
+      parsedIndexes.map(i => refs_map[id].splice(i, 1))
+      if (!refs_map[id].length) queue.push(id)
+    })
   }
 
-  console.log("queue:",queue)
-  return queue
+  return true
 }
 
-function getForeignRef(ref) {
-  console.log("foreign ref")
-  return null
+function replace_ref(ref, json) {
+  for (let i = 1; i < ref.length; i++) {
+    if (ref[i] in json) json = json[ref[i]]
+    else if ("type" in json) {
+      if ("object" in json.type && ref[i] in json.type.object) json = json.type.object[ref[i]]
+      else if ("array" in json.type && ref[i] in json.type.array) json = json.type.array[ref[i]]
+      else return false
+    }
+    else return false
+  }
+
+  if (typeof json == "boolean" || typeof json === 'object' && !Array.isArray(json) && json !== null) return json
+  return false
 }
 
 module.exports = router;

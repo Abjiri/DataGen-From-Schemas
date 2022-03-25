@@ -393,6 +393,7 @@ module.exports = /*
               // guardar subschema se tiver um id ou se for a própria schema
               if ("$id" in schema || !refs.length) {
                 let id = "$id" in schema ? schema.$id : ("anon" + ++anon_schemas)
+                if ("$id" in schema) delete schema.$id
                 subschemas.push({id, schema, refs: new_refs})
               }
               else refs.push(refs.pop().concat(new_refs))
