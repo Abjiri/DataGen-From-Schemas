@@ -10,7 +10,7 @@ const randomValue = `'{{random(boolean(), integer(-9999,9999), float(-9999,9999)
 // obter um número aleatório entre os limites
 let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
 // clonar um valor
-let copy = x => JSON.parse(JSON.stringify(x))
+let clone = x => JSON.parse(JSON.stringify(x))
 
 function convert(json) {
     return "<!LANGUAGE pt>\n" + parseJSON(json, 1)
@@ -51,7 +51,7 @@ function parseType(json, depth) {
     let type = possibleTypes[Math.floor(Math.random() * possibleTypes.length)]
     let value
 
-    if (type == "object") value = parseObjectType(copy(json.type.object), depth)
+    if (type == "object") value = parseObjectType(clone(json.type.object), depth)
     else {
         switch (type) {
             case "null": value = "null"; break
@@ -125,11 +125,14 @@ function parseObjectType(json, depth) {
     // adicionar uma propriedade nova ao objeto final
     let addProperty = (k,v) => obj[k] = parseJSON(v, depth+1)
     
+    // para verificar se é preciso fazer a propriedade recursiva ASAP ou se se pode fazer pela ordem natural
+    let recursive_index = ("recursive" in json && json.recursive.key == "properties") ? (Object.keys(json.properties).findIndex(x => x == json.recursive.prop) + 1) : 0
+
     for (let i = required; i < size; ) {
-        if ("recursive" in json) {
-            if (!(json.recursive in obj)) {
-                addProperty(json.recursive, json.properties[json.recursive])
-                delete json.properties[json.recursive]
+        if ("recursive" in json && json.recursive.key == "properties" && i + recursive_index > size) {
+            if (!(json.recursive.prop in obj)) {
+                addProperty(json.recursive.prop, json.properties[json.recursive.prop])
+                delete json.properties[json.recursive.prop]
                 i++
             }
             delete json.recursive
@@ -207,7 +210,7 @@ function objectSize(json, required) {
     }
 
     if ("recursive" in json) {
-        if ("required" in json && json.required.includes(json.recursive)) ;
+        if ("required" in json && json.recursive.key == "properties" && json.required.includes(json.recursive.prop)) ;
         else if ("maxProperties" in json) {
             if (json.maxProperties > required && minProps <= required) minProps = required + 1
         }
@@ -249,7 +252,7 @@ function nonRequired_randomProps(json, obj, size, valueSchema, addProperty) {
         if (!("pattern" in namesSchema) && key.includes(" ")) key = key.replace(/ /g,'')
 
         if (!key.length || key.includes(" ") || key in obj) randomNameTries++
-        else addProperty(key, valueSchema)
+        else addProperty(key, clone(valueSchema))
     }
 }
 

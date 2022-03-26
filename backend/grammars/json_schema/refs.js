@@ -61,17 +61,16 @@ function resolve_recursiveRefs(json, schema_id, schema_ref, recursiv) {
 	let recursiv_type
 	if (typeof ref_path[ref_path.length-1] == "number") recursiv_type = "schema_array"
 	else {
-		let type_index
 		for (let i = ref_path.length-1; i >= 0; i--) {
-			if (ref_path[i] == "type") {type_index = ref_path.length - i; break}
+			if (ref_path[i] == "type") {
+				recursiv_type = ref_path[i+1]
+				if (recursiv_type == "object") recursiv_type += "_" + ref_path[i+2]
+				break
+			}
 		}
-
-		if (type_index == 3) recursiv_type = "array"
-		if (type_index == 4) recursiv_type = "object"
 	}
-	console.log("recursiv_type:",recursiv_type)
 
-	let recFlag_depth = ref_path.length - (recursiv_type == "array" ? 1 : 2)
+	let recFlag_depth = ref_path.length - ((recursiv_type == "array" || (/^object_[^p]/.test(recursiv_type))) ? 1 : 2)
 	for (let i = 0; i < occurs; i++) {
 		// garantir que tem o limite inferior de recursividade manualmente, impedindo que gere arrays/objetos vazios que não tenham recursividade
 		ref_path.map((x,j) => {
@@ -80,7 +79,7 @@ function resolve_recursiveRefs(json, schema_id, schema_ref, recursiv) {
 				let offset
 				if (recursiv_type == "schema_array") offset = ref_path[j+1] + 1
 				if (recursiv_type == "array") offset = "prefixItems" in json ? (json.prefixItems.length + 1) : 1
-				if (recursiv_type == "object") offset = ref_path[ref_path.length-1]
+				if (recursiv_type.startsWith("object")) offset = {key: ref_path[ref_path.length-2], prop: ref_path[ref_path.length-1]}
 
 				json.recursive = offset
 			}
@@ -103,7 +102,7 @@ function resolve_recursiveRefs(json, schema_id, schema_ref, recursiv) {
 			delete json[path_end[0]]
 		}
 		// recursividade de tipos 'object'
-		if (recursiv_type == "object") {
+		if (recursiv_type.startsWith("object")) {
 			ref_path.map(x => json = json[x])
 			delete json[path_end]
 		}
