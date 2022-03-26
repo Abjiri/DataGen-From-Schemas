@@ -9,6 +9,8 @@ const indent = depth => "\t".repeat(depth)
 const randomValue = `'{{random(boolean(), integer(-9999,9999), float(-9999,9999), lorem("sentences", 1))}}'`
 // obter um número aleatório entre os limites
 let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
+// clonar um valor
+let copy = x => JSON.parse(JSON.stringify(x))
 
 function convert(json) {
     return "<!LANGUAGE pt>\n" + parseJSON(json, 1)
@@ -49,7 +51,7 @@ function parseType(json, depth) {
     let type = possibleTypes[Math.floor(Math.random() * possibleTypes.length)]
     let value
 
-    if (type == "object") value = parseObjectType(json.type.object, depth)
+    if (type == "object") value = parseObjectType(copy(json.type.object), depth)
     else {
         switch (type) {
             case "null": value = "null"; break
@@ -306,6 +308,13 @@ function arrayLen(json, prefixed, additionalItems) {
     else {
         minItems = json.minItems
         maxItems = json.maxItems
+    }
+
+    if ("recursive" in json) {
+        if ("maxItems" in json) {
+            if (json.maxItems > 0 && !minItems) minItems = 1
+        }
+        else if (!minItems && (prefixed > 0 || additionalItems)) minItems = 1
     }
     
     return randomize(maxItems, minItems)

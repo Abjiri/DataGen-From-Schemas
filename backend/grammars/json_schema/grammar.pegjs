@@ -196,10 +196,17 @@
 
   // verificar a coerência das chaves de comprimento de arrays
   function checkArrayLength(obj) {
+    if (hasAll(["minItems","maxItems"], obj) && obj.minItems > obj.maxItems) return error("O valor da chave 'minItems' deve ser <= ao da chave 'maxItems'!")
+
+    if (("items" in obj && obj.items === false) || (!hasAll("items", obj) && hasAll("unevaluatedItems", obj) && obj.unevaluatedItems === false)) {
+      let prefixed = hasAll("prefixItems", obj) ? obj.prefixItems.length : 0
+      if (hasAll("minItems", obj) && obj.minItems > prefixed) return error(`A chave 'minItems' define que o array deve ter, no mínimo, ${obj.minItems} elementos, contudo a schema não permite mais de ${prefixed} elementos!`)
+      if (hasAll("maxItems", obj) && obj.maxItems > prefixed) obj.maxItems = prefixed
+    }
+
     if (hasAll(["prefixItems","minItems","items"], obj) && obj.items === false && obj.minItems > obj.prefixItems.length)
       return error(`A chave 'minItems' define que o array deve ter, no mínimo, ${obj.minItems} elementos, contudo a chave 'prefixItems' especifica apenas ${obj.prefixItems.length} elementos e a chave 'items' proibe elementos extra para além desses!`)
 
-    if (hasAll(["minItems","maxItems"], obj) && obj.minItems > obj.maxItems) return error("O valor da chave 'minItems' deve ser <= ao da chave 'maxItems'!")
     return true
   }
 
@@ -529,17 +536,18 @@ schema_object
       }
       else schema = structureSchemaData(members)
 
-      if ("$ref" in schema) refs[refs.length-1].push(schema)
-      let new_refs = refs.pop()
+      if (typeof schema != "boolean") {
+        if ("$ref" in schema) refs[refs.length-1].push(schema)
+        let new_refs = refs.pop()
 
-      // guardar subschema se tiver um id ou se for a própria schema
-      if ("$id" in schema || !refs.length) {
-        let id = "$id" in schema ? schema.$id : ("anon" + ++anon_schemas)
-        if ("$id" in schema) delete schema.$id
-        subschemas.push({id, schema, refs: new_refs})
+        // guardar subschema se tiver um id ou se for a própria schema
+        if ("$id" in schema || !refs.length) {
+          let id = "$id" in schema ? schema.$id : ("anon" + ++anon_schemas)
+          if ("$id" in schema) delete schema.$id
+          subschemas.push({id, schema, refs: new_refs})
+        }
+        else refs.push(refs.pop().concat(new_refs))
       }
-      else refs.push(refs.pop().concat(new_refs))
-
       return schema
     }
 
@@ -627,8 +635,8 @@ int "integer"
 
 string "string" = QM chars:char* QM {return chars.join("")}
 anchor "anchor" = QM value:$([a-zA-Z][a-zA-Z0-9\-\_\:\.]*) QM {return value}
-schema_id = QM "https://datagen.di.uminho.pt"? id:$("/json-schemas/" [^"]+) QM {return id}
-schema_ref = QM "https://datagen.di.uminho.pt"? ref:$(("#" / "/json-schemas/") [^"]+) QM {return ref}
+schema_id = QM "https://datagen.di.uminho.pt"? id:$("/json-schemas" ("/" [^/"]+)+) QM {return id}
+schema_ref = QM "https://datagen.di.uminho.pt"? ref:$("#" (("/" [^/"]+)+)? / ("/json-schemas" ("/" [^/"]+)+)) QM {return ref}
 
 char
   = unescaped
