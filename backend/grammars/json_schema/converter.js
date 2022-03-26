@@ -126,7 +126,15 @@ function parseObjectType(json, depth) {
     let addProperty = (k,v) => obj[k] = parseJSON(v, depth+1)
     
     for (let i = required; i < size; ) {
-        if ("properties" in json && Object.keys(json.properties).length > 0) {
+        if ("recursive" in json) {
+            if (!(json.recursive in obj)) {
+                addProperty(json.recursive, json.properties[json.recursive])
+                delete json.properties[json.recursive]
+                i++
+            }
+            delete json.recursive
+        }
+        else if ("properties" in json && Object.keys(json.properties).length > 0) {
             let k = Object.keys(json.properties)[0]
 
             if ("dependentRequired" in json && k in json.dependentRequired) {
@@ -138,7 +146,7 @@ function parseObjectType(json, depth) {
 
                 let final_len = i + new_required.length
                 if (final_len >= minProps && final_len <= maxProps) { addProperties(json, obj, new_required, depth); break }
-                else if (final_len < minProps) {addProperties(json, obj, new_required, depth); i += new_required.length}
+                else if (final_len < minProps) { addProperties(json, obj, new_required, depth); i += new_required.length }
                 else delete json.properties[k]
             }
             else {
@@ -151,7 +159,7 @@ function parseObjectType(json, depth) {
         else if ("patternProperties" in json && Object.keys(json.patternProperties).length > 0) {
             let k = Object.keys(json.patternProperties)[0]
             let prop = new RandExp(k).gen()
-            if (!(prop in obj) && Math.random() < 0.5) addProperty(prop, json.patternProperties[k])
+            if (!(prop in obj) && Math.random() < 0.5) { addProperty(prop, json.patternProperties[k]); i++ }
             delete json.patternProperties[k]
         }
         else if (!("additionalProperties" in json || "unevaluatedProperties" in json))
@@ -196,6 +204,14 @@ function objectSize(json, required) {
     else {
         minProps = json.minProperties
         maxProps = json.maxProperties
+    }
+
+    if ("recursive" in json) {
+        if ("required" in json && json.required.includes(json.recursive)) ;
+        else if ("maxProperties" in json) {
+            if (json.maxProperties > required && minProps <= required) minProps = required + 1
+        }
+        else if (minProps <= required && (properties > required || (!("additionalProperties" in json || "unevaluatedProperties" in json) || additional))) minProps = required + 1
     }
 
     return {maxProps, minProps, size: randomize(maxProps, minProps)}
@@ -312,9 +328,9 @@ function arrayLen(json, prefixed, additionalItems) {
 
     if ("recursive" in json) {
         if ("maxItems" in json) {
-            if (json.maxItems > 0 && !minItems) minItems = 1
+            if (json.maxItems > 0 && minItems < json.recursive && maxItems >= json.recursive) minItems = json.recursive
         }
-        else if (!minItems && (prefixed > 0 || additionalItems)) minItems = 1
+        else if (minItems < json.recursive && (prefixed >= json.recursive || additionalItems)) minItems = json.recursive
     }
     
     return randomize(maxItems, minItems)

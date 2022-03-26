@@ -58,24 +58,55 @@ function resolve_recursiveRefs(json, schema_id, schema_ref, recursiv) {
 	delete schema_ref.$ref
 	let json_copy = copy(json)
 
+	let recursiv_type
+	if (typeof ref_path[ref_path.length-1] == "number") recursiv_type = "schema_array"
+	else {
+		let type_index
+		for (let i = ref_path.length-1; i >= 0; i--) {
+			if (ref_path[i] == "type") {type_index = ref_path.length - i; break}
+		}
+
+		if (type_index == 3) recursiv_type = "array"
+		if (type_index == 4) recursiv_type = "object"
+	}
+	console.log("recursiv_type:",recursiv_type)
+
+	let recFlag_depth = ref_path.length - (recursiv_type == "array" ? 1 : 2)
 	for (let i = 0; i < occurs; i++) {
-		let recFlag_depth = ref_path.length - (typeof ref_path[ref_path.length-1] == "number" ? 2 : 1)
 		// garantir que tem o limite inferior de recursividade manualmente, impedindo que gere arrays/objetos vazios que não tenham recursividade
-		ref_path.map((x,j) => {if (i < recursiv.LOWER && j == recFlag_depth) json.recursive = true; json = json[x]})
+		ref_path.map((x,j) => {
+			if (i < recursiv.LOWER && j == recFlag_depth) {
+				// nr de elementos/props que é necessário gerar para garantir que inclui a referência recursiva
+				let offset
+				if (recursiv_type == "schema_array") offset = ref_path[j+1] + 1
+				if (recursiv_type == "array") offset = "prefixItems" in json ? (json.prefixItems.length + 1) : 1
+				if (recursiv_type == "object") offset = ref_path[ref_path.length-1]
+
+				json.recursive = offset
+			}
+			json = json[x]
+		})
 		Object.assign(json, copy(json_copy))
 	}
 
 	let path_end = ref_path.pop()
-	
-	// ref recursiva feita no elemento de um array de schema (prefixItems, allOf, anyOf, oneOf)
-	if (typeof path_end == "number") {
+
+	if (recursiv_type == "schema_array") {
 		ref_path.map(x => json = json[x])
 		json.splice(path_end, 1)
 	}
 	else {
-		path_end = ref_path.splice(ref_path.length-3, ref_path.length)
-		ref_path.map(x => json = json[x])
-		delete json[path_end[0]]
+		// recursividade de tipos 'array'
+		if (recursiv_type == "array") {
+			path_end = ref_path.splice(ref_path.length-3, ref_path.length)
+			ref_path.map(x => json = json[x])
+			delete json[path_end[0]]
+		}
+		// recursividade de tipos 'object'
+		if (recursiv_type == "object") {
+			ref_path.map(x => json = json[x])
+			delete json[path_end]
+		}
 	}
 
 	return true
