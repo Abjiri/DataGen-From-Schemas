@@ -12,7 +12,7 @@ const {resolve_refs} = require('../grammars/json_schema/refs')
 // POST para gerar um dataset a partir de um XML schema
 router.post('/', (req, res) => {
   try {
-    let schemas = req.body.json.split("\n\n")
+    let schemas = req.body.json.split("\n\n\n")
 
     // extrair dados da schema
     let data = schemas.map(x => jsonParser.parse(x))

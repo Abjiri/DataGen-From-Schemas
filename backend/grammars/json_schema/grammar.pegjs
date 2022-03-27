@@ -7,6 +7,7 @@
   let refs = []
   let subschemas = []
   let anon_schemas = 0
+  let propertyNames_refs = []
 
   let genericKeys = ["type","enum","const"]
   let annotationKeys = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
@@ -164,7 +165,7 @@
   // verificar que a schema dada pela chave 'propertyNames' é do tipo string
   function checkPropertyNamesType(obj) {
     if (obj === false || (typeof obj !== "boolean" && hasAll("type", obj) && Object.keys(obj.type).some(k => k != "string")))
-      return error(`Como as chaves de objetos devem ser sempre strings, está implícito que a schema dada pela chave 'propertyNames' deve ser do tipo 'string' apenas!`)
+      return error(`Como as chaves de objetos devem ser sempre strings, está implícito que a schema dada pela chave 'propertyNames' deve ser do tipo 'string' (apenas)!`)
     return true
   }
 
@@ -392,7 +393,7 @@
 
 // ----- Dialect -----
 
-Dialect = ws schema:schema_object ws {return {schema, subschemas}}
+Dialect = ws schema:schema_object ws {return {schema, subschemas, pn_refs: propertyNames_refs}}
 
 begin_array     = ws "[" ws {depth[depth.length-1]++}
 begin_object    = ws "{" ws {depth[depth.length-1]++}
@@ -461,7 +462,7 @@ object_keyword = kws_props / kw_moreProps / kw_requiredProps / kw_propertyNames 
 kws_props = QM key:$("patternProperties"/"properties") QM name_separator value:object_schemaMap {return {key, value}}
 kw_moreProps = QM key:$("additionalProperties"/"unevaluatedProperties") QM name_separator value:schema_object {return {key, value}}
 kw_requiredProps = QM key:"required" QM name_separator value:string_array {return {key, value}}
-kw_propertyNames = QM key:"propertyNames" QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {return {key, value: typeof value == "boolean" ? {type: {def: true, string: {}}} : value}}
+kw_propertyNames = QM key:$("propertyNames" {current_key = "propertyNames"}) QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {current_key = ""; return {key, value: typeof value == "boolean" ? {type: {def: true, string: {}}} : value}}
 kws_size = QM key:$("minProperties"/"maxProperties") QM name_separator value:int {return {key, value}}
 
 // ---------- Keywords array ----------
@@ -636,7 +637,7 @@ int "integer"
 string "string" = QM chars:char* QM {return chars.join("")}
 anchor "anchor" = QM value:$([a-zA-Z][a-zA-Z0-9\-\_\:\.]*) QM {return value}
 schema_id = QM "https://datagen.di.uminho.pt"? id:$("/json-schemas" ("/" [^/"]+)+) QM {return id}
-schema_ref = QM "https://datagen.di.uminho.pt"? ref:$("#" (("/" [^/"]+)+)? / ("/json-schemas" ("/" [^/"]+)+)) QM {return ref}
+schema_ref = QM "https://datagen.di.uminho.pt"? ref:$("#" (("/" [^/"]+)+)? / ("/json-schemas" ("/" [^/"]+)+)) QM {if (current_key == "propertyNames") propertyNames_refs.push(ref); return ref}
 
 char
   = unescaped

@@ -8,7 +8,7 @@ function resolve_refs(data, settings) {
 			let subschema = data[i].subschemas[j]
 			
 			if (subschema.refs.length > 0) {
-				let resolved = resolve_localRefs(subschema.schema, subschema.id, subschema.refs, settings.RECURSIV)
+				let resolved = resolve_localRefs(subschema.schema, subschema.id, subschema.refs, data[i].pn_refs, settings.RECURSIV)
 				if (resolved !== true) return resolved
 			}
 			
@@ -17,12 +17,12 @@ function resolve_refs(data, settings) {
 		}
 	}
 
-	let crossRefs = resolve_foreignRefs(refs)
+	let crossRefs = resolve_foreignRefs(refs, data.reduce((a,c) => a.concat(c.pn_refs), []))
 	if (crossRefs !== true) return crossRefs
 	return true
 }
   
-function resolve_localRefs(json, schema_id, schema_refs, recursiv) {
+function resolve_localRefs(json, schema_id, schema_refs, pn_refs, recursiv) {
 	for (let i = 0; i < schema_refs.length; i++) {
 		let ref = schema_refs[i].$ref
 		let schema = null, nested_ref = false
@@ -40,6 +40,11 @@ function resolve_localRefs(json, schema_id, schema_refs, recursiv) {
 		else if (/^#/.test(ref)) return `A $ref '${schema_refs[i].$ref}' é inválida!`
 
 		if (schema !== null) {
+      if (pn_refs.includes(schema_refs[i].$ref)) {
+        if (typeof schema == "boolean" || !("type" in schema) || Object.keys(schema.type).some(k => k != "string"))
+          return `A $ref '${schema_refs[i].$ref}' é inválida para a chave 'propertyNames', pois a sua schema deve ser do tipo 'string' (apenas)!`
+      }
+
 			delete schema_refs[i].$ref
 			Object.assign(schema_refs[i--], schema)
 			if (!nested_ref) schema_refs.splice(i+1, 1)
@@ -49,7 +54,7 @@ function resolve_localRefs(json, schema_id, schema_refs, recursiv) {
 	return true
 }
   
-function resolve_foreignRefs(refs) {
+function resolve_foreignRefs(refs, pn_refs) {
     let refs_map = refs.reduce((acc, cur) => {acc[cur.id] = cur.refs.map(x => x.$ref); return acc}, {})
     
     for (let k in refs_map) {
@@ -77,11 +82,14 @@ function resolve_foreignRefs(refs) {
           if (ref_id_index == -1) return `A $ref '${refs_map[id][i]}' é inválida!`
           else {
             let ref_id = queue[ref_id_index]
-            ref = ref.replace(ref_id, "#")
+            schema = replace_ref(ref.replace(ref_id, "#").split("/"), refs[refs.findIndex(x => x.id == ref_id)].schema)
 
-            schema = replace_ref(ref.split("/"), refs[refs.findIndex(x => x.id == ref_id)].schema)
             if (schema === false) return `A $ref '${refs_map[id][i]}' é inválida!`
-            if (schema !== true && "$ref" in schema) nested_ref = true
+            else if (schema !== true && "$ref" in schema) nested_ref = true
+            else if (pn_refs.includes(refs_map[id][i])) {
+              if (typeof schema == "boolean" || !("type" in schema) || Object.keys(schema.type).some(k => k != "string"))
+                return `A $ref '${refs_map[id][i]}' é inválida para a chave 'propertyNames', pois a sua schema deve ser do tipo 'string' (apenas)!`
+            }
   
             let refs_elem = refs[refs.findIndex(x => x.id == id)]
             delete refs_elem.refs[i].$ref
@@ -101,6 +109,13 @@ function resolve_foreignRefs(refs) {
 }
   
 function replace_ref(ref, json) {
+  // verificar que a ref está a apontar para uma schema
+  if (ref.length > 1) {
+    if (["additionalProperties","unevaluatedProperties","propertyNames","items","unevaluatedItems","contains","contentSchema","not","if","then","else"].includes(ref[ref.length-1])) ;
+    else if (["properties","patternProperties","dependentSchemas","$defs"].includes(ref[ref.length-2])) ;
+    else return false
+  }
+
 	for (let i = 1; i < ref.length; i++) {
 		if (ref[i] in json) json = json[ref[i]]
 		else if ("type" in json) {
