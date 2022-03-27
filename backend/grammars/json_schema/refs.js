@@ -65,12 +65,14 @@ function resolve_foreignRefs(refs) {
     let queue = ids.filter(k => !refs_map[k].length)
   
     while (queue.length !== ids.length) {
-	    ids.filter(k => !queue.includes(k)).map(id => {
-        let parsedIndexes = []
+      let unparsed_ids = ids.filter(k => !queue.includes(k))
+
+      for (let k = 0; k < unparsed_ids.length; k++) {
+        let id = unparsed_ids[k], parsedIndexes = []
   
         for (let i = 0; i < refs_map[id].length; i++) {
           let ref = refs_map[id][i], schema, nested_ref = false
-          let ref_id_index = queue.findIndex(x => ref.startsWith(x))
+          let ref_id_index = queue.findIndex(x => ref == x || ref.startsWith(x + "/"))
 
           if (ref_id_index == -1) return `A $ref '${refs_map[id][i]}' é inválida!`
           else {
@@ -92,7 +94,7 @@ function resolve_foreignRefs(refs) {
   
         parsedIndexes.reverse().map(i => refs_map[id].splice(i, 1))
         if (!refs_map[id].length) queue.push(id)
-      })
+      }
     }
   
     return true
