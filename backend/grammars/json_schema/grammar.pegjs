@@ -4,9 +4,10 @@
   let depth = []
   let current_key = ""
   let ids = []
-  let refs = []
   let subschemas = []
   let anon_schemas = 0
+  let refs = []
+  let anchors = []
   let propertyNames_refs = []
 
   let genericKeys = ["type","enum","const"]
@@ -522,7 +523,7 @@ kw_defs = QM key:"$defs" QM name_separator value:object_schemaMap {return {key, 
 
 schema_object
   = boolean /
-    (ws "{" ws {depth.push(0); refs.push([])}) members:(
+    (ws "{" ws {depth.push(0); refs.push([]); anchors.push({})}) members:(
       head:keyword tail:(value_separator m:keyword { return m; })* {
         var result = {};
         [head].concat(tail).forEach(el => {result[el.key] = el.value});
@@ -539,15 +540,25 @@ schema_object
 
       if (typeof schema != "boolean") {
         if ("$ref" in schema) refs[refs.length-1].push(schema)
+        if ("$anchor" in schema) {
+          let anchor_name = schema.$anchor
+          delete schema.$anchor
+          anchors[anchors.length-1][anchor_name] = schema
+        }
+
         let new_refs = refs.pop()
+        let new_anchors = anchors.pop()
 
         // guardar subschema se tiver um id ou se for a própria schema
         if ("$id" in schema || !refs.length) {
           let id = "$id" in schema ? schema.$id : ("anon" + ++anon_schemas)
           if ("$id" in schema) delete schema.$id
-          subschemas.push({id, schema, refs: new_refs})
+          subschemas.push({id, schema, refs: new_refs, anchors: new_anchors})
         }
-        else refs.push(refs.pop().concat(new_refs))
+        else {
+          refs.push(refs.pop().concat(new_refs))
+          Object.assign(anchors[anchors.length-1], new_anchors)
+        }
       }
       return schema
     }
@@ -635,9 +646,12 @@ int "integer"
 // ----- Strings -----
 
 string "string" = QM chars:char* QM {return chars.join("")}
-anchor "anchor" = QM value:$([a-zA-Z][a-zA-Z0-9\-\_\:\.]*) QM {return value}
+anchor "anchor" = QM value:anchor_value QM {return value}
 schema_id = QM "https://datagen.di.uminho.pt"? id:$("/json-schemas" ("/" [^/"]+)+) QM {return id}
-schema_ref = QM "https://datagen.di.uminho.pt"? ref:$("#" (("/" [^/"]+)+)? / ("/json-schemas" ("/" [^/"]+)+)) QM {if (current_key == "propertyNames") propertyNames_refs.push(ref); return ref}
+schema_ref "$ref" = QM "https://datagen.di.uminho.pt"? ref:$("#" ref_segment / ("/json-schemas/" [^/"]+ ref_segment)) QM {if (current_key == "propertyNames") propertyNames_refs.push(ref); return ref}
+
+anchor_value = $([a-zA-Z][a-zA-Z0-9\-\_\:\.]*)
+ref_segment = "#" anchor_value / ("/" [^/#"]+)*
 
 char
   = unescaped

@@ -1,28 +1,29 @@
 let copy = x => JSON.parse(JSON.stringify(x))
 
 function resolve_refs(data, settings) {
-	let refs = []
+	let refs = [], anchors = {}
 
 	for (let i = data.length-1; i >= 0; i--) {
 		for (let j = 0; j < data[i].subschemas.length; j++) {
 			let subschema = data[i].subschemas[j]
 			
 			if (subschema.refs.length > 0) {
-				let resolved = resolve_localRefs(subschema.schema, subschema.id, subschema.refs, data[i].pn_refs, settings.RECURSIV)
+				let resolved = resolve_localRefs(subschema.schema, subschema.id, subschema.refs, subschema.anchors, data[i].pn_refs, settings.RECURSIV)
 				if (resolved !== true) return resolved
 			}
 			
 			// guardar schemas que podem ser referenciadas e/ou ainda têm referências por resolver
 			if (!(/^anon\d+/.test(subschema.id) && !subschema.refs.length)) refs.push(subschema)
+      anchors[subschema.id] = subschema.anchors
 		}
 	}
 
-	let crossRefs = resolve_foreignRefs(refs, data.reduce((a,c) => a.concat(c.pn_refs), []))
+	let crossRefs = resolve_foreignRefs(refs, anchors, data.reduce((a,c) => a.concat(c.pn_refs), []))
 	if (crossRefs !== true) return crossRefs
 	return true
 }
   
-function resolve_localRefs(json, schema_id, schema_refs, pn_refs, recursiv) {
+function resolve_localRefs(json, schema_id, schema_refs, schema_anchors, pn_refs, recursiv) {
 	for (let i = 0; i < schema_refs.length; i++) {
 		let ref = schema_refs[i].$ref
 		let schema = null, nested_ref = false
@@ -32,6 +33,12 @@ function resolve_localRefs(json, schema_id, schema_refs, pn_refs, recursiv) {
 			resolve_recursiveRefs(json, schema_id, schema_refs[i], recursiv)
 			schema_refs.splice(i--, 1)
 		}
+    else if (/^##[a-zA-Z][a-zA-Z0-9\-\_\:\.]*/.test(ref)) {
+      ref = ref.slice(2)
+      if (!(ref in schema_anchors)) return `A $ref '${schema_refs[i].$ref}' é inválida!`
+      schema = schema_anchors[ref]
+      if ("$ref" in schema) nested_ref = true
+    }
 		else if (/^#\//.test(ref)) {
 			schema = replace_ref(ref.split("/"), json)
 			if (schema === false) return `A $ref '${schema_refs[i].$ref}' é inválida!`
@@ -54,7 +61,7 @@ function resolve_localRefs(json, schema_id, schema_refs, pn_refs, recursiv) {
 	return true
 }
   
-function resolve_foreignRefs(refs, pn_refs) {
+function resolve_foreignRefs(refs, anchors, pn_refs) {
     let refs_map = refs.reduce((acc, cur) => {acc[cur.id] = cur.refs.map(x => x.$ref); return acc}, {})
     
     for (let k in refs_map) {
@@ -77,18 +84,28 @@ function resolve_foreignRefs(refs, pn_refs) {
   
         for (let i = 0; i < refs_map[id].length; i++) {
           let ref = refs_map[id][i], schema, nested_ref = false
-          let ref_id_index = queue.findIndex(x => ref == x || ref.startsWith(x + "/"))
+          let ref_id_index = queue.findIndex(x => ref == x || ref.startsWith(x + "/") || ref.startsWith(x + "#"))
 
           if (ref_id_index == -1) return `A $ref '${refs_map[id][i]}' é inválida!`
           else {
             let ref_id = queue[ref_id_index]
-            schema = replace_ref(ref.replace(ref_id, "#").split("/"), refs[refs.findIndex(x => x.id == ref_id)].schema)
+            ref = ref.replace(ref_id, "#")
 
-            if (schema === false) return `A $ref '${refs_map[id][i]}' é inválida!`
-            else if (schema !== true && "$ref" in schema) nested_ref = true
-            else if (pn_refs.includes(refs_map[id][i])) {
-              if (typeof schema == "boolean" || !("type" in schema) || Object.keys(schema.type).some(k => k != "string"))
-                return `A $ref '${refs_map[id][i]}' é inválida para a chave 'propertyNames', pois a sua schema deve ser do tipo 'string' (apenas)!`
+            if (/^##[a-zA-Z][a-zA-Z0-9\-\_\:\.]*/.test(ref)) {
+              ref = ref.slice(2)
+              if (!(ref in anchors[ref_id])) return `A $ref '${refs_map[id][i]}' é inválida!`
+              schema = anchors[ref_id][ref]
+              if ("$ref" in schema) nested_ref = true
+            }
+            else {
+              schema = replace_ref(ref.split("/"), refs[refs.findIndex(x => x.id == ref_id)].schema)
+
+              if (schema === false) return `A $ref '${refs_map[id][i]}' é inválida!`
+              else if (schema !== true && "$ref" in schema) nested_ref = true
+              else if (pn_refs.includes(refs_map[id][i])) {
+                if (typeof schema == "boolean" || !("type" in schema) || Object.keys(schema.type).some(k => k != "string"))
+                  return `A $ref '${refs_map[id][i]}' é inválida para a chave 'propertyNames', pois a sua schema deve ser do tipo 'string' (apenas)!`
+              }
             }
   
             let refs_elem = refs[refs.findIndex(x => x.id == id)]
