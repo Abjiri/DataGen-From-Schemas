@@ -65,16 +65,19 @@ function resolve_foreignRefs(refs) {
     let queue = ids.filter(k => !refs_map[k].length)
   
     while (queue.length !== ids.length) {
-      Object.keys(refs_map).filter(k => !queue.includes(k)).map(id => {
+	    ids.filter(k => !queue.includes(k)).map(id => {
         let parsedIndexes = []
   
         for (let i = 0; i < refs_map[id].length; i++) {
           let ref = refs_map[id][i], schema, nested_ref = false
-  
-          if (queue.includes(ref)) {
-            let ref_id = queue[queue.findIndex(x => ref.startsWith(x))]
-  
-            schema = replace_ref(ref.replace(ref_id, "#").split("/"), refs[refs.findIndex(x => x.id == ref)].schema)
+          let ref_id_index = queue.findIndex(x => ref.startsWith(x))
+
+          if (ref_id_index == -1) return `A $ref '${refs_map[id][i]}' é inválida!`
+          else {
+            let ref_id = queue[ref_id_index]
+            ref = ref.replace(ref_id, "#")
+
+            schema = replace_ref(ref.split("/"), refs[refs.findIndex(x => x.id == ref_id)].schema)
             if (schema === false) return `A $ref '${refs_map[id][i]}' é inválida!`
             if (schema !== true && "$ref" in schema) nested_ref = true
   
@@ -87,7 +90,7 @@ function resolve_foreignRefs(refs) {
           }
         }
   
-        parsedIndexes.map(i => refs_map[id].splice(i, 1))
+        parsedIndexes.reverse().map(i => refs_map[id].splice(i, 1))
         if (!refs_map[id].length) queue.push(id)
       })
     }
@@ -96,7 +99,6 @@ function resolve_foreignRefs(refs) {
 }
   
 function replace_ref(ref, json) {
-	console.log("replace ref")
 	for (let i = 1; i < ref.length; i++) {
 		if (ref[i] in json) json = json[ref[i]]
 		else if ("type" in json) {
