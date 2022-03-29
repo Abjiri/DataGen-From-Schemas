@@ -14,7 +14,7 @@ function resolve_refs(data, settings) {
 			
 			// guardar schemas que podem ser referenciadas e/ou ainda têm referências por resolver
 			if (!(/^anon\d+/.test(subschema.id) && !subschema.refs.length)) refs.push(subschema)
-      anchors[subschema.id] = subschema.anchors
+      		anchors[subschema.id] = subschema.anchors
 		}
 	}
 
@@ -26,35 +26,54 @@ function resolve_refs(data, settings) {
 function resolve_localRefs(json, schema_id, schema_refs, schema_anchors, pn_refs, recursiv) {
 	for (let i = 0; i < schema_refs.length; i++) {
 		let ref = schema_refs[i].$ref
-		let schema = null, nested_ref = false
+		let schema = null, nested_ref = false, undirect_recursive = false
 		if (ref.startsWith(schema_id)) ref = ref.replace(schema_id, "#")
 
 		if (ref == "#") {
-			resolve_recursiveRefs(json, schema_id, schema_refs[i], recursiv)
+			resolve_recursiveRefs(json, schema_refs[i].$ref, schema_refs[i], recursiv)
 			schema_refs.splice(i--, 1)
 		}
-    else if (/^##[a-zA-Z][a-zA-Z0-9\-\_\:\.]*/.test(ref)) {
-      ref = ref.slice(2)
-      if (!(ref in schema_anchors)) return `A $ref '${schema_refs[i].$ref}' é inválida!`
-      schema = schema_anchors[ref]
-      if ("$ref" in schema) nested_ref = true
-    }
+		else if (/^##[a-zA-Z][a-zA-Z0-9\-\_\:\.]*/.test(ref)) {
+			ref = ref.slice(2)
+			if (!(ref in schema_anchors)) return `A $ref '${schema_refs[i].$ref}' é inválida!`
+			schema = schema_anchors[ref]
+			if ("$ref" in schema) nested_ref = true
+		}
 		else if (/^#\//.test(ref)) {
 			schema = replace_ref(ref.split("/"), json)
+			
 			if (schema === false) return `A $ref '${schema_refs[i].$ref}' é inválida!`
-			if (schema !== true && "$ref" in schema) nested_ref = true
+			if (schema !== true) {
+				// ref a apontar para schema com outra ref (não recursivo)
+				if ("$ref" in schema) {
+					if (schema.$ref == schema_refs[i].$ref) return `A $ref '${schema_refs[i].$ref}' é inválida! Uma referência não pode apontar para a sua própria schema!`
+					nested_ref = true
+				}
+				// ref recursiva não direta (aponta para uma schema que contém a própria ref algures na sua estrutura)
+				else undirect_recursive = get_refPath(schema, schema_refs[i].$ref, [], 0)
+			}
 		}
 		else if (/^#/.test(ref)) return `A $ref '${schema_refs[i].$ref}' é inválida!`
 
 		if (schema !== null) {
-      if (pn_refs.includes(schema_refs[i].$ref)) {
-        if (typeof schema == "boolean" || !("type" in schema) || Object.keys(schema.type).some(k => k != "string"))
-          return `A $ref '${schema_refs[i].$ref}' é inválida para a chave 'propertyNames', pois a sua schema deve ser do tipo 'string' (apenas)!`
-      }
+      		if (pn_refs.includes(schema_refs[i].$ref)) {
+        		if (typeof schema == "boolean" || !("type" in schema) || Object.keys(schema.type).some(k => k != "string"))
+          			return `A $ref '${schema_refs[i].$ref}' é inválida para a chave 'propertyNames', pois a sua schema deve ser do tipo 'string' (apenas)!`
+      		}
 
-			delete schema_refs[i].$ref
-			Object.assign(schema_refs[i--], schema)
-			if (!nested_ref) schema_refs.splice(i+1, 1)
+			if (undirect_recursive !== false) {
+				let schema_ref = schema
+				undirect_recursive.map(x => schema_ref = schema_ref[x])
+				schema_ref.$ref = "#"
+				
+				resolve_recursiveRefs(schema, "#", schema_ref, recursiv)
+				schema_refs.splice(i--, 1)
+			}
+			else {
+				delete schema_refs[i].$ref
+				Object.assign(schema_refs[i--], schema)
+				if (!nested_ref) schema_refs.splice(i+1, 1)
+			}
 		}
 	}
 	
@@ -127,11 +146,11 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
   
 function replace_ref(ref, json) {
   // verificar que a ref está a apontar para uma schema
-  if (ref.length > 1) {
-    if (["additionalProperties","unevaluatedProperties","propertyNames","items","unevaluatedItems","contains","contentSchema","not","if","then","else"].includes(ref[ref.length-1])) ;
-    else if (["properties","patternProperties","dependentSchemas","$defs"].includes(ref[ref.length-2])) ;
-    else return false
-  }
+  	if (ref.length > 1) {
+		if (["additionalProperties","unevaluatedProperties","propertyNames","items","unevaluatedItems","contains","contentSchema","not","if","then","else"].includes(ref[ref.length-1])) ;
+		else if (["properties","patternProperties","dependentSchemas","$defs"].includes(ref[ref.length-2])) ;
+		else return false
+  	}
 
 	for (let i = 1; i < ref.length; i++) {
 		if (ref[i] in json) json = json[ref[i]]
@@ -147,11 +166,11 @@ function replace_ref(ref, json) {
 	return false
 }
 
-function resolve_recursiveRefs(json, schema_id, schema_ref, recursiv) {
+function resolve_recursiveRefs(json, ref, schema_ref, recursiv) {
 	Object.keys(recursiv).map(k => recursiv[k] = parseInt(recursiv[k]))
 
 	let occurs = Math.floor(Math.random() * ((recursiv.UPPER+1) - recursiv.LOWER) + recursiv.LOWER)
-	let ref_path = get_refPath(json, schema_id, [], 0)
+	let ref_path = get_refPath(json, ref, [], 0)
 
 	delete schema_ref.$ref
 	let json_copy = copy(json)
@@ -194,42 +213,50 @@ function resolve_recursiveRefs(json, schema_id, schema_ref, recursiv) {
 
 		// remover o elemento do array e, se o array ficar vazio, o array em si
 		json[schema_arr].splice(path_end, 1)
-		if (!json[schema_arr].length) delete json[schema_arr]
+		
+		if (!json[schema_arr].length) {
+			delete json[schema_arr]
 
-		if (ref_path[ref_path.length-1] == "array") {
-			path_end = ref_path.splice(ref_path.length-3, ref_path.length)
-			ref_path.map(x => json_pointer = json_pointer[x])
-			delete json_pointer[path_end[0]]
+			if (ref_path[ref_path.length-1] == "array") {
+				path_end = ref_path.splice(ref_path.length-3, ref_path.length)
+				ref_path.map(x => json_pointer = json_pointer[x])
+				delete json_pointer[path_end[0]]
+			}
 		}
 	}
 	else {
 		// recursividade de tipos 'array'
 		if (recursiv_type == "array") {
-			path_end = ref_path.splice(ref_path.length-3, ref_path.length)
+			if (ref_path.length < 3) path_end = [path_end]
+			else path_end = ref_path.splice(ref_path.length-3, ref_path.length)
+
 			ref_path.map(x => json = json[x])
 			delete json[path_end[0]]
 		}
 		// recursividade de tipos 'object'
 		if (recursiv_type.startsWith("object")) {
+			let obj_keyword = ref_path.pop()
 			ref_path.map(x => json = json[x])
-			delete json[path_end]
+			
+			delete json[obj_keyword][path_end]
+			if (!Object.keys(json[obj_keyword]).length) delete json[obj_keyword]
 		}
 	}
 
 	return true
 }
 
-function get_refPath(json, schema_id, path, depth) {
-  let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
+function get_refPath(json, ref, path, depth) {
+  	let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
 	
-  for (let i = 0; i < keys.length; i++) {
-    let k = keys[i]
+  	for (let i = 0; i < keys.length; i++) {
+    	let k = keys[i]
 
-    if (k == "$ref" && (json[k] == "#" || json[k] == schema_id)) return !depth ? path : true
+    	if (k == "$ref" && json[k] == ref) return !depth ? path : true
 		else if (typeof json[k] === 'object' && json[k] !== null) {
 			path.push(k)
 
-			if (get_refPath(json[k], schema_id, path, depth+1) === false) path.pop()
+			if (get_refPath(json[k], ref, path, depth+1) === false) path.pop()
 			else return !depth ? path : true
 		}
 	}

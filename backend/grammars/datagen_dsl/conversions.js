@@ -122,11 +122,9 @@ function cleanJsonFromJsonSchema(json, depth) {
         let prop = keys[i]
         
         if (prop == "DFJS_EMPTY_JSON") delete json[prop]
-
-        if (prop == "DFJS_NOT_OBJECT") {
-            if (typeof json[prop] == "object" && !Array.isArray(json[prop]) && json[prop] !== null) 
-                json = cleanJsonFromJsonSchema(json[prop], depth)
-            return json
+        else if (prop == "DFJS_NOT_OBJECT") {
+            if (typeof json[prop] == "object" && json[prop] !== null) json[prop] = cleanJsonFromJsonSchema(json[prop], depth)
+            return json[prop]
         }
         else if (typeof json[prop] == "object" && json[prop] != null) cleanJsonFromJsonSchema(json[prop], depth+1)
     }

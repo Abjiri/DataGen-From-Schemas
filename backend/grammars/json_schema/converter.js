@@ -118,7 +118,7 @@ function parseObjectType(json, depth) {
     let str = "{\n", obj = {}
     let required = "required" in json ? json.required.length : 0
     let {minProps, maxProps, size} = objectSize(json, required)
-    
+
     // gerar as propriedades required
     if (required > 0) addProperties(json, obj, json.required, depth)
 
@@ -171,6 +171,7 @@ function parseObjectType(json, depth) {
             { nonRequired_randomProps(json, obj, size, json.additionalProperties, addProperty); break }
         else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) 
             { nonRequired_randomProps(json, obj, size, json.unevaluatedProperties, addProperty); break }
+        else break
     }
 
     // converter o objeto final para string da DSL
@@ -190,9 +191,13 @@ function objectSize(json, required) {
     if (!("minProperties" in json || "maxProperties" in json)) {
         minProps = "required" in json ? required : ("properties" in json ? properties : 0)
         maxProps = minProps + (additional ? 3 : 0)
-        if (!required && !properties && !("patternProperties" in json || "additionalProperties" in json || "unevaluatedProperties" in json)) maxProps = 3
-        if (minProps == maxProps && required > 0 && (!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps += 3
-        if (!maxProps) maxProps = 3
+
+        if (!required && !properties && !("patternProperties" in json)) {
+            if (!(!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps = 0
+            else maxProps = 3
+        }
+        else if (minProps == maxProps && required > 0 && (!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps += 3
+        else if (!maxProps) maxProps = 3
     }
     else if ("minProperties" in json && !("maxProperties" in json)) {
         minProps = json.minProperties
