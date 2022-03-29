@@ -189,8 +189,18 @@ function resolve_recursiveRefs(json, schema_id, schema_ref, recursiv) {
 	let path_end = ref_path.pop()
 
 	if (recursiv_type == "schema_array") {
+		let schema_arr = ref_path.pop(), json_pointer = json
 		ref_path.map(x => json = json[x])
-		json.splice(path_end, 1)
+
+		// remover o elemento do array e, se o array ficar vazio, o array em si
+		json[schema_arr].splice(path_end, 1)
+		if (!json[schema_arr].length) delete json[schema_arr]
+
+		if (ref_path[ref_path.length-1] == "array") {
+			path_end = ref_path.splice(ref_path.length-3, ref_path.length)
+			ref_path.map(x => json_pointer = json_pointer[x])
+			delete json_pointer[path_end[0]]
+		}
 	}
 	else {
 		// recursividade de tipos 'array'
