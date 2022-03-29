@@ -100,14 +100,18 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
 
       for (let k = 0; k < unparsed_ids.length; k++) {
         let id = unparsed_ids[k], parsedIndexes = []
+		let nested_refs = []
   
         for (let i = 0; i < refs_map[id].length; i++) {
           let ref = refs_map[id][i], schema, nested_ref = false
-          let ref_id_index = queue.findIndex(x => ref == x || ref.startsWith(x + "/") || ref.startsWith(x + "#"))
+		  nested_refs.push(ref)
+
+		  let subschema_list = !queue.length ? ids : queue
+          let ref_id_index = subschema_list.findIndex(x => ref == x || ref.startsWith(x + "/") || ref.startsWith(x + "#"))
 
           if (ref_id_index == -1) return `A $ref '${refs_map[id][i]}' é inválida!`
           else {
-            let ref_id = queue[ref_id_index]
+            let ref_id = subschema_list[ref_id_index]
             ref = ref.replace(ref_id, "#")
 
             if (/^##[a-zA-Z][a-zA-Z0-9\-\_\:\.]*/.test(ref)) {
@@ -120,7 +124,10 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
               schema = replace_ref(ref.split("/"), refs[refs.findIndex(x => x.id == ref_id)].schema)
 
               if (schema === false) return `A $ref '${refs_map[id][i]}' é inválida!`
-              else if (schema !== true && "$ref" in schema) nested_ref = true
+              else if (schema !== true && "$ref" in schema) {
+				  nested_ref = true
+				  if (nested_refs.includes(schema.$ref)) return `Existe um ciclo infinito de recursividade entre as schemas '${nested_refs[0]}' e '${nested_refs[1]}'!`
+			  }
               else if (pn_refs.includes(refs_map[id][i])) {
                 if (typeof schema == "boolean" || !("type" in schema) || Object.keys(schema.type).some(k => k != "string"))
                   return `A $ref '${refs_map[id][i]}' é inválida para a chave 'propertyNames', pois a sua schema deve ser do tipo 'string' (apenas)!`
@@ -131,8 +138,14 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
             delete refs_elem.refs[i].$ref
             Object.assign(refs_elem.refs[i], schema)
   
-            if (nested_ref) i--
-            else parsedIndexes.push(i) 
+            if (nested_ref) {
+				refs_map[id][i] = schema.$ref
+				i--
+			}
+            else {
+				parsedIndexes.push(i)
+				nested_refs = []
+			}
           }
         }
   

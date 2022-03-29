@@ -21,7 +21,6 @@ router.post('/', (req, res) => {
     
     let resolved = resolve_refs(data, req.body.settings)
     if (resolved !== true) return res.status(201).jsonp({message: resolved})
-    //console.log(JSON.stringify(data[0].schema))
 
     // criar modelo DSL a partir dos dados da schemas
     let model = jsonConverter.convert(data[0].schema)
