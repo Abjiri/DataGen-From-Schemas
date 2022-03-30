@@ -178,12 +178,23 @@ function parseObjectType(json, only_req, depth) {
                 i++
 
                 if (k in depSchemas) {
-                    let schema = parseObjectType(depSchemas[k].type.object, true, depth)
-                    let new_required = "required" in depSchemas[k].type.object ? depSchemas[k].type.object.required : []
-    
-                    new_required.map(x => {obj[x] = schema[x]; delete schema[x]})
-                    if (Object.keys(schema).length > 0) depSchemas_objects.push(schema)
-                    i += new_required.length
+                    let new_depSchemas_props = [k]
+
+                    for (let j = 0; j < new_depSchemas_props.length; j++) {
+                        let p = new_depSchemas_props[j]
+
+                        let schema = parseObjectType(depSchemas[p].type.object, true, depth)
+                        let new_required = "required" in depSchemas[p].type.object ? depSchemas[p].type.object.required : []
+        
+                        new_required.map(x => {
+                            obj[x] = schema[x]
+                            delete schema[x]
+                            if (x in depSchemas) new_depSchemas_props.push(x)
+                        })
+                        
+                        if (Object.keys(schema).length > 0) depSchemas_objects.push(schema)
+                        i += new_required.length
+                    }
                 }
             }
         }
@@ -266,16 +277,28 @@ function addProperties(json, obj, props, depSchemas, depSchemas_objects, depth) 
     for (let i = 0; i < props.length; i++) {
         let k = props[i]
 
-        if ("properties" in json && k in json.properties) {
+        if (k in obj) ;
+        else if ("properties" in json && k in json.properties) {
             addProperty(k, json.properties[k])
             delete json.properties[k]
-
+            
             if (k in depSchemas) {
-                let schema = parseObjectType(depSchemas[k], true, depth)
-                let required = Object.keys(schema).filter(x => obj.required.includes(x))
+                let new_depSchemas_props = [k]
 
-                required.map(x => {obj[x] = schema[x]; delete schema[x]})
-                if (Object.keys(schema).length > 0) depSchemas_objects.push(schema)
+                for (let j = 0; j < new_depSchemas_props.length; j++) {
+                    let p = new_depSchemas_props[j]
+
+                    let schema = parseObjectType(depSchemas[p].type.object, true, depth)
+                    let new_required = "required" in depSchemas[p].type.object ? depSchemas[p].type.object.required : []
+    
+                    new_required.map(x => {
+                        obj[x] = schema[x]
+                        delete schema[x]
+                        if (x in depSchemas) new_depSchemas_props.push(x)
+                    })
+                    
+                    if (Object.keys(schema).length > 0) depSchemas_objects.push(schema)
+                }
             }
         }
         else if ("patternProperties" in json) {
