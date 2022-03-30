@@ -33,7 +33,7 @@
   // fazer todas as verificações necessárias para garantir que a schema está bem escrita
   function checkSchema(s) {
     s = determineType(s)
-    return checkKeysByType(s) && checkRangeKeywords(s) && checkDependentRequired(s) && checkRequiredProps(s) && checkMaxProperties(s) && 
+    return checkKeysByType(s) && checkRangeKeywords(s) && checkDependentRequired(s) && checkDependentSchemas(s) && checkRequiredProps(s) && checkMaxProperties(s) && 
            checkContains(s) && checkArrayLength(s) && checkEnumArray(s) && checkConstType(s) && checkIfThenElse(s) && checkContentSchema(s)
   }
 
@@ -279,6 +279,27 @@
         }
       }
     }
+    return true
+  }
+
+  function checkDependentSchemas(obj) {
+    if (hasAll("dependentSchemas", obj)) {
+      for (let k in obj.dependentSchemas) {
+        if ("type" in obj.dependentSchemas[k]) {
+          let type_keys = Object.keys(obj.dependentSchemas[k].type)
+          if (type_keys.length > 1 || type_keys[0] != "object") return error(`As subschemas especificadas na chave 'dependentSchemas' deve ser do tipo 'object' (apenas), visto que são aplicadas a uma schema desse mesmo tipo!`)
+
+          if (hasAll("required", obj)) {
+            let subschema = obj.dependentSchemas[k].type.object
+            if (obj.required.includes(k)) {
+              if (hasAll("required", subschema)) obj.required = obj.required.concat(subschema.required.filter(x => !obj.required.includes(x)))
+            }
+          }
+        }
+        //else verificar que as subschemas são do tipo object também
+      }
+    }
+
     return true
   }
 

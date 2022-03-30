@@ -3,6 +3,11 @@ const jsf = require('json-schema-faker');
 const Validator = require('jsonschema').Validator;
 const validator = new Validator();
 
+let SETTINGS = {
+    prob_patternProperty: 0.8,
+    random_props: false
+}
+
 // tabs de indentação
 const indent = depth => "\t".repeat(depth)
 // poder gerar um boleano, inteiro, float ou string
@@ -38,11 +43,12 @@ function parseKeywords(json, depth) {
     }
     if ("enum" in json) return `gen => { return gen.random(...${JSON.stringify(json.enum)}) }`
     if ("type" in json) return parseType(json, depth)
+    if ("default" in json) return JSON.stringify(json.default)
     if (["allOf","anyOf","oneOf"].some(x => x in json)) return parseSchemaComposition(json, depth)
 }
 
 function parseSchemaComposition(json, depth) {
-    return parseJSON(json.anyOf[Math.floor(Math.random()*json.anyOf.length)], depth)
+    if ("oneOf" in json) return parseJSON(json.oneOf[Math.floor(Math.random()*json.oneOf.length)], depth)
 }
 
 function parseType(json, depth) {
@@ -51,7 +57,7 @@ function parseType(json, depth) {
     let type = possibleTypes[Math.floor(Math.random() * possibleTypes.length)]
     let value
 
-    if (type == "object") value = parseObjectType(clone(json.type.object), depth)
+    if (type == "object") value = parseObjectType(clone(json.type.object), false, depth)
     else {
         switch (type) {
             case "null": value = "null"; break
@@ -70,7 +76,6 @@ function parseType(json, depth) {
         }
 
         if (depth==1) value = `{\n${indent(depth)}DFJS_NOT_OBJECT: ${value}\n}`
-        else {} 
     }
 
     return value
@@ -114,13 +119,17 @@ function parseStringType(json) {
     return `'{{stringOfSize(${min}, ${max})}}'`
 }
 
-function parseObjectType(json, depth) {
+function parseObjectType(json, only_req, depth) {
     let str = "{\n", obj = {}
     let required = "required" in json ? json.required.length : 0
     let {minProps, maxProps, size} = objectSize(json, required)
+    
+    let depSchemas = "dependentSchemas" in json ? json.dependentSchemas : {}
+    let depSchemas_objects = []
 
     // gerar as propriedades required
-    if (required > 0) addProperties(json, obj, json.required, depth)
+    if (required > 0) addProperties(json, obj, json.required, depSchemas, depSchemas_objects, depth)
+    if (only_req && Object.keys(obj).length >= minProps) return obj
 
     // adicionar uma propriedade nova ao objeto final
     let addProperty = (k,v) => obj[k] = parseJSON(v, depth+1)
@@ -129,6 +138,8 @@ function parseObjectType(json, depth) {
     let recursive_index = ("recursive" in json && json.recursive.key == "properties") ? (Object.keys(json.properties).findIndex(x => x == json.recursive.prop) + 1) : 0
 
     for (let i = required; i < size; ) {
+        if (only_req && Object.keys(obj).length >= minProps) return obj
+
         if ("recursive" in json && json.recursive.key == "properties" && i + recursive_index > size) {
             if (!(json.recursive.prop in obj)) {
                 addProperty(json.recursive.prop, json.properties[json.recursive.prop])
@@ -136,6 +147,15 @@ function parseObjectType(json, depth) {
                 i++
             }
             delete json.recursive
+        }
+        else if (depSchemas_objects.length > 0 && Math.random() > 0.5) {
+            let schema_index = Math.floor(Math.random() * depSchemas_objects.length)
+            let props = Object.keys(depSchemas_objects[schema_index])
+            let prop_index = Math.floor(Math.random() * props.length)
+
+            obj[props[prop_index]] = depSchemas_objects[schema_index][props[prop_index]]
+            delete depSchemas_objects[schema_index][props[prop_index]]
+            if (!Object.keys(depSchemas_objects[schema_index]).length) depSchemas_objects.splice(schema_index, 1)
         }
         else if ("properties" in json && Object.keys(json.properties).length > 0) {
             let k = Object.keys(json.properties)[0]
@@ -148,31 +168,42 @@ function parseObjectType(json, depth) {
                 }
 
                 let final_len = i + new_required.length
-                if (final_len >= minProps && final_len <= maxProps) { addProperties(json, obj, new_required, depth); break }
-                else if (final_len < minProps) { addProperties(json, obj, new_required, depth); i += new_required.length }
+                if (final_len >= minProps && final_len <= maxProps) { addProperties(json, obj, new_required, depSchemas, depSchemas_objects, depth); break }
+                else if (final_len < minProps) { addProperties(json, obj, new_required, depSchemas, depSchemas_objects, depth); i += new_required.length }
                 else delete json.properties[k]
             }
             else {
                 addProperty(k, json.properties[k])
                 delete json.properties[k]
                 i++
+
+                if (k in depSchemas) {
+                    let schema = parseObjectType(depSchemas[k].type.object, true, depth)
+                    let new_required = "required" in depSchemas[k].type.object ? depSchemas[k].type.object.required : []
+    
+                    new_required.map(x => {obj[x] = schema[x]; delete schema[x]})
+                    if (Object.keys(schema).length > 0) depSchemas_objects.push(schema)
+                    i += new_required.length
+                }
             }
         }
         // produzir, no máximo, 1 propriedade aleatória respeitante da schema da chave atual do patternProperties
         else if ("patternProperties" in json && Object.keys(json.patternProperties).length > 0) {
             let k = Object.keys(json.patternProperties)[0]
             let prop = new RandExp(k).gen()
-            if (!(prop in obj) && Math.random() < 0.5) { addProperty(prop, json.patternProperties[k]); i++ }
+            if (!(prop in obj) && Math.random() < SETTINGS.prob_patternProperty) { addProperty(prop, json.patternProperties[k]); i++ }
             delete json.patternProperties[k]
         }
         else if (!("additionalProperties" in json || "unevaluatedProperties" in json))
-            { nonRequired_randomProps(json, obj, size, true, addProperty); break }
+            { if (i < minProps || SETTINGS.random_props || "propertyNames" in json) nonRequired_randomProps(json, obj, size, true, addProperty); break }
         else if ("additionalProperties" in json && json.additionalProperties !== false)
             { nonRequired_randomProps(json, obj, size, json.additionalProperties, addProperty); break }
         else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) 
             { nonRequired_randomProps(json, obj, size, json.unevaluatedProperties, addProperty); break }
         else break
     }
+    
+    if (only_req && Object.keys(obj).length >= minProps) return obj
 
     // converter o objeto final para string da DSL
     Object.keys(obj).map(k => str += `${indent(depth)}${k}: ${obj[k]},\n`)
@@ -189,14 +220,16 @@ function objectSize(json, required) {
 
     let minProps, maxProps
     if (!("minProperties" in json || "maxProperties" in json)) {
-        minProps = "required" in json ? required : ("properties" in json ? properties : 0)
-        maxProps = minProps + (additional ? 3 : 0)
+        minProps = "required" in json ? required : properties
+        maxProps = (properties > required ? properties : required) + (additional ? 3 : 0)
 
-        if (!required && !properties && !("patternProperties" in json)) {
-            if (!(!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps = 0
+        if (!required && !properties) {
+            if ("patternProperties" in json) maxProps = Object.keys(json.patternProperties).length
+            else if ("propertyNames" in json) maxProps = 3
+            else if (!(!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps = 0
             else maxProps = 3
         }
-        else if (minProps == maxProps && required > 0 && (!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps += 3
+        //else if (minProps == maxProps && required > 0 && (!("additionalProperties" in json || "unevaluatedProperties" in json))) maxProps += 3
         else if (!maxProps) maxProps = 3
     }
     else if ("minProperties" in json && !("maxProperties" in json)) {
@@ -226,14 +259,25 @@ function objectSize(json, required) {
 }
 
 // adicionar um conjunto de propriedades ao objeto final
-function addProperties(json, obj, props, depth) {
+function addProperties(json, obj, props, depSchemas, depSchemas_objects, depth) {
     // adicionar uma propriedade nova
     let addProperty = (k,v) => obj[k] = parseJSON(v, depth+1)
     
     for (let i = 0; i < props.length; i++) {
         let k = props[i]
 
-        if ("properties" in json && k in json.properties) { addProperty(k, json.properties[k]); delete json.properties[k] }
+        if ("properties" in json && k in json.properties) {
+            addProperty(k, json.properties[k])
+            delete json.properties[k]
+
+            if (k in depSchemas) {
+                let schema = parseObjectType(depSchemas[k], true, depth)
+                let required = Object.keys(schema).filter(x => obj.required.includes(x))
+
+                required.map(x => {obj[x] = schema[x]; delete schema[x]})
+                if (Object.keys(schema).length > 0) depSchemas_objects.push(schema)
+            }
+        }
         else if ("patternProperties" in json) {
             for (let j in json.patternProperties) {
                 let regex = new RegExp(j)
