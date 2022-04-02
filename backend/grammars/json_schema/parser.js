@@ -5770,6 +5770,7 @@ module.exports = /*
             schema.type[v_type][k] = obj[k]
           }
           else if (k == "enum") structureEnum(schema, obj[k])
+          else if (k == "oneOf") structureOneOf(schema, obj[k])
           else if (["if","then","else"].includes(k)) {
             for (let key in obj[k].type) {
               if (!(key in schema.type)) schema.type[key] = {}
@@ -5792,17 +5793,47 @@ module.exports = /*
         return schema
       }
 
+      // formatar um enum para a estrutura intermédia pretendida
       function structureEnum(schema, arr) {
-        let enum_by_types = arr.reduce((obj,elem) => {
+        // separar os elementos da enumeração por tipos
+        let by_types = arr.reduce((obj,elem) => {
           let v_type = getValueType(elem)
           if (!(v_type in obj)) obj[v_type] = []
           obj[v_type].push(elem)
           return obj
         }, {})
 
-        for (let type in enum_by_types) {
+        // cada subdivisão é tornada numa enum nova e colocada no respetivo tipo, na estrutura intermédia
+        for (let type in by_types) {
           if (!(type in schema.type)) schema.type[type] = {}
-          schema.type[type].enum = enum_by_types[type]
+          schema.type[type].enum = by_types[type]
+        }
+      }
+
+      // format um oneOf para a estrutura intermédia pretendida
+      function structureOneOf(schema, arr) {
+        // separar os elementos do oneOf por tipos (garantido que cada elemento tem um único tipo, graças à checkCompositionTypes)
+        let by_types = arr.reduce((obj,elem) => {
+          let el_type = Object.keys(elem.type)[0]
+          if (!(el_type in obj)) obj[el_type] = []
+
+          // não vale a pena guardar uma schema vazia
+          if (Object.keys(elem.type[el_type]).length > 0) obj[el_type].push(elem.type[el_type])
+          return obj
+        }, {})
+
+        // cada subdivisão é tornada num oneOf novo e colocado no respetivo tipo, na estrutura intermédia
+        for (let type in by_types) {
+          if (!(type in schema.type)) schema.type[type] = {}
+
+          // se não houver schemas neste tipo (nenhuma schema foi guardada acima porque eram todas vazias - só foi especificado mesmo o tipo em cada uma), não vale a pena fazer mais nada
+          // haverá a possibilidade de gerar este tipo na mesma, porque já foi colocado na estrutura intermédia na linha de código acima
+          if (by_types[type].length > 0) {
+            // se só houver uma schema, não vai ser uma escolha, logo atribui-se logo as chaves ao objeto
+            if (by_types[type].length == 1) Object.assign(schema.type[type], by_types[type][0])
+            // caso contrário, oneOf novo com as schemas deste tipo
+            else schema.type[type].oneOf = by_types[type]
+          }
         }
       }
 
@@ -6079,20 +6110,25 @@ module.exports = /*
         return true
       }
 
-      /* function checkCompositionTypes(key, value) {
+      function checkCompositionTypes(key, value) {
         if (key == "oneOf") {
           for (let i = 0; i < value.length; i++) {
             let types = Object.keys(value[i].type)
 
-            if ("type" in value[i] && types.length > 1) {
-              let elem = value.splice(i, 1)
+            if (types.length > 1) {
+              let elem = value.splice(i--, 1)[0]
 
-              for (let j = 0; j < types.length; j++) {}
-              value.push()
+              for (let j = 0; j < types.length; j++) {
+                let new_schema = {type: {}}
+                new_schema.type[types[j]] = elem.type[types[j]]
+                value.push(new_schema)
+              }
             }
           }
         }
-      } */
+
+        return true
+      }
 
 
     peg$result = peg$startRuleFunction();

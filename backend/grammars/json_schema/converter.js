@@ -14,6 +14,8 @@ const indent = depth => "\t".repeat(depth)
 const randomValue = `'{{random(boolean(), integer(-9999,9999), float(-9999,9999), lorem("sentences", 1))}}'`
 // obter um número aleatório entre os limites
 let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
+// obter um número aleatório entre 0 e len
+let rand = len => Math.floor(Math.random()*len)
 // clonar um valor
 let clone = x => JSON.parse(JSON.stringify(x))
 
@@ -43,7 +45,7 @@ function parseJSON(json, depth) {
 function parseType(json, depth) {
     let possibleTypes = Object.keys(json.type)
     //selecionar um dos vários tipos possíveis aleatoriamente, para produzir
-    let type = possibleTypes[Math.floor(Math.random() * possibleTypes.length)]
+    let type = possibleTypes[rand(possibleTypes.length)]
     let value
 
     if ("const" in json.type[type]) return `gen => { return ${JSON.stringify(json.type[type].const)} }`
@@ -67,6 +69,8 @@ function parseType(json, depth) {
 }
 
 function parseNumericType(json) {
+    if ("oneOf" in json) Object.assign(json, json.oneOf[rand(json.oneOf.length)])
+
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
     if (multipleOf === undefined) multipleOf = 1
 
@@ -176,9 +180,9 @@ function parseObjectType(json, only_req, depth) {
             delete json.recursive
         }
         else if (depSchemas_objects.length > 0 && Math.random() > 0.5) {
-            let schema_index = Math.floor(Math.random() * depSchemas_objects.length)
+            let schema_index = rand(depSchemas_objects.length)
             let props = Object.keys(depSchemas_objects[schema_index])
-            let prop_index = Math.floor(Math.random() * props.length)
+            let prop_index = rand(props.length)
 
             obj[props[prop_index]] = depSchemas_objects[schema_index][props[prop_index]]
             delete depSchemas_objects[schema_index][props[prop_index]]
