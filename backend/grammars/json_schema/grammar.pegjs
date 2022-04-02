@@ -193,6 +193,8 @@
     }
     else if (hasAll(["minContains","maxContains"], obj) && obj.minContains > obj.maxContains) return error("O valor da chave 'minContains' deve ser <= ao da chave 'maxContains'!")
 
+    if (hasAll(["minContains", "maxItems"], obj) && obj.minContains > obj.maxItems) return error(`O array deve ter pelo menos ${obj.minContains} elementos, segundo a chave 'minContains', mas a chave 'maxItems' define um limite máximo de ${obj.maxItems}!`)
+
     return true
   }
 
@@ -494,7 +496,7 @@ array_keyword = kw_items / kw_prefixItems / kw_unevaluatedItems / kw_contains / 
 kw_items = QM key:"items" QM name_separator value:schema_object {return {key, value}}
 kw_prefixItems = QM key:"prefixItems" QM name_separator value:schema_array {return {key, value}}
 kw_unevaluatedItems = QM key:"unevaluatedItems" QM name_separator value:schema_object {return {key, value}}
-kw_contains = QM key:$("contains" {current_key = "contains"}) QM name_separator value:schema_object {current_key = ""; return {key, value}}
+kw_contains = QM key:"contains" QM name_separator value:schema_object {return {key, value}}
 kws_mContains = QM key:$("minContains"/"maxContains") QM name_separator value:int {return {key, value}}
 kws_array_length = QM key:$("minItems"/"maxItems") QM name_separator value:int {return {key, value}}
 kw_uniqueness = QM key:"uniqueItems" QM name_separator value:boolean {return {key, value}}
@@ -552,12 +554,7 @@ schema_object
     })? (ws "}" ws {depth.pop()})
     &{ return checkSchema(members) }
     { 
-      let schema
-      if (current_key == "contains") {
-        if (!members.type.length) delete members.type
-        schema = members
-      }
-      else schema = structureSchemaData(members)
+      let schema = structureSchemaData(members)
 
       if (typeof schema != "boolean") {
         if ("$ref" in schema) refs[refs.length-1].push(schema)

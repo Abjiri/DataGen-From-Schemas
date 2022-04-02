@@ -238,9 +238,9 @@ function objectSize(json, required) {
             if ("patternProperties" in json) maxProps = Object.keys(json.patternProperties).length
             else if ("propertyNames" in json) maxProps = 3
             else if (!(!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps = 0
-            else maxProps = 3
+            else {json.additionalProperties = true; maxProps = 3}
         }
-        //else if (minProps == maxProps && required > 0 && (!("additionalProperties" in json || "unevaluatedProperties" in json))) maxProps += 3
+        else if (SETTINGS.random_props && minProps == maxProps && minProps > 0 && (!("additionalProperties" in json || "unevaluatedProperties" in json))) maxProps += 3
         else if (!maxProps) maxProps = 3
     }
     else if ("minProperties" in json && !("maxProperties" in json)) {
@@ -332,24 +332,37 @@ function parseArrayType(json, depth) {
     let arr = []
     let prefixed = "prefixItems" in json ? json.prefixItems.length : 0
     let additionalItems = ("items" in json && json.items !== false) || !("items" in json) && "unevaluatedItems" in json && json.unevaluatedItems !== false
-    let len = arrayLen(json, prefixed, additionalItems)
-
-    /* let containsSchema = "contains" in json ? json.contains : true
-    let contained = false
-
-    let minContains = "minContains" in json ? json.minContains : 1
-    let maxContains = "maxContains" in json ? json.maxContains : minContains */
+    let arrLen = arrayLen(json, prefixed, additionalItems)
     
     // gerar os elementos prefixados do array
-    let prefixedLen = prefixed > len ? len : prefixed
+    let prefixedLen = prefixed > arrLen.len ? arrLen.len : prefixed
     for (let i = 0; i < prefixedLen; i++) arr.push(parseJSON(json.prefixItems[i], depth))
+
+    // só gerar elementos do contains se forem permitidos itens extra
+    if ("contains" in json && (!("items" in json || "unevaluatedItems" in json) || additionalItems)) {
+        if (!("maxItems" in json) || prefixed < arrLen.maxItems) {
+            if (prefixedLen < prefixed) {
+                for (let i = prefixedLen; i < prefixed; i++) arr.push(parseJSON(json.prefixItems[i], depth))
+            }
+
+            let containsSchema = json.contains
+            let minContains = "minContains" in json ? json.minContains : 1
+            let maxContains = "maxContains" in json ? json.maxContains : minContains
+        
+            let containsLen = randomize(maxContains, minContains)
+            let sumLen = arr.length + containsLen
+            let final_len = !("maxItems" in json) ? sumLen : (sumLen <= arrLen.maxItems ? sumLen : arrLen.maxItems)
+
+            for (let i = arr.length; i < final_len; i++) {console.log(parseJSON(containsSchema, depth)); arr.push(parseJSON(containsSchema, depth))}
+        }
+    }
 
     // gerar os restantes elementos, se forem permitidos
     let nonPrefixedSchema = true
     if ("items" in json && json.items !== false) nonPrefixedSchema = json.items
     else if (additionalItems) nonPrefixedSchema = json.unevaluatedItems
 
-    for (let i = prefixedLen; i < len; i++) arr.push(parseJSON(nonPrefixedSchema, depth))
+    for (let i = arr.length; i < arrLen.len; i++) arr.push(parseJSON(nonPrefixedSchema, depth))
 
     // converter o array final para string da DSL
     if (!("uniqueItems" in json && !arr.some(x => /^({\n|\[|gen => {\n\t*\/\/uniqueItems)/.test(x)))) {
@@ -408,7 +421,7 @@ function arrayLen(json, prefixed, additionalItems) {
         else if (minItems < json.recursive && (prefixed >= json.recursive || additionalItems)) minItems = json.recursive
     }
     
-    return randomize(maxItems, minItems)
+    return {minItems, maxItems, len: randomize(maxItems, minItems)}
 }
 
 module.exports = { convert }
