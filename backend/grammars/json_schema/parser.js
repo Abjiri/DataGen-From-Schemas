@@ -6110,6 +6110,7 @@ module.exports = /*
         return true
       }
 
+      // separar as subschemas do oneOf por tipos de dados geráveis em subschemas mais pequenas, de forma a garantir que todos os elementos do oneOf podem gerar 1 único tipo de dados
       function checkCompositionTypes(key, value) {
         if (key == "oneOf") {
           for (let i = 0; i < value.length; i++) {

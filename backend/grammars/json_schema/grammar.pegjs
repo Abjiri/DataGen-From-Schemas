@@ -405,6 +405,26 @@
     
     return true
   }
+
+  // separar as subschemas do oneOf por tipos de dados geráveis em subschemas mais pequenas, de forma a garantir que todos os elementos do oneOf podem gerar 1 único tipo de dados
+  function checkCompositionTypes(key, value) {
+    if (key == "oneOf") {
+      for (let i = 0; i < value.length; i++) {
+        let types = Object.keys(value[i].type)
+
+        if (types.length > 1) {
+          let elem = value.splice(i--, 1)[0]
+
+          for (let j = 0; j < types.length; j++) {
+            let new_schema = {type: {}}
+            new_schema.type[types[j]] = elem.type[types[j]]
+            value.push(new_schema)
+          }
+        }
+      }
+    }
+
+    return true
   }
 }
 
