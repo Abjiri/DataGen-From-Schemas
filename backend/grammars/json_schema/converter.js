@@ -29,33 +29,26 @@ function parseJSON(json, depth) {
         else str = randomValue
     }
     else {
-        str = parseKeywords(json, depth)
+        str = parseType(json, depth)
         if (depth==1 && str[0] != "{") str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${str}\n}`
     }
 
     return str
 }
 
-function parseKeywords(json, depth) {
-    if ("const" in json) {
-        if (typeof json.const == "object" && json.const !== null) return `gen => { return JSON.parse(${JSON.stringify(json.const)}) }`
-        return JSON.stringify(json.const)
-    }
-    if ("enum" in json) return `gen => { return gen.random(...${JSON.stringify(json.enum)}) }`
-    if ("type" in json) return parseType(json, depth)
-    if ("default" in json) return JSON.stringify(json.default)
-    if (["allOf","anyOf","oneOf"].some(x => x in json)) return parseSchemaComposition(json, depth)
-}
-
-function parseSchemaComposition(json, depth) {
-    if ("oneOf" in json) return parseJSON(json.oneOf[Math.floor(Math.random()*json.oneOf.length)], depth)
-}
+/* function parseOneOf(json, type, depth) {
+    if (type === null) return parseJSON(json.oneOf[Math.floor(Math.random()*json.oneOf.length)], depth)
+} */
 
 function parseType(json, depth) {
     let possibleTypes = Object.keys(json.type)
     //selecionar um dos vários tipos possíveis aleatoriamente, para produzir
     let type = possibleTypes[Math.floor(Math.random() * possibleTypes.length)]
     let value
+
+    if ("const" in json.type[type]) return `gen => { return ${JSON.stringify(json.type[type].const)} }`
+    if ("enum" in json.type[type]) return `gen => { return gen.random(...${JSON.stringify(json.enum)}) }`
+    if ("default" in json.type[type] && Object.keys(json.type[type]).length == 1) return `gen => { return ${JSON.stringify(json.type[type].default)} }`
 
     if (type == "object") value = parseObjectType(clone(json.type.object), false, depth)
     else {
@@ -64,21 +57,55 @@ function parseType(json, depth) {
             case "boolean": value = "'{{boolean()}}'"; break
             case "string": value = parseStringType(json.type.string); break
             case "array": value = parseArrayType(json.type.array, depth+1); break
-            case "number": 
-                value = json.type[type].dsl
-
-                for (let i = -1; ; i++) {
-                    let regex = new RegExp(`{depth${i}}`, "g")
-                    if (regex.test(value)) value = value.replace(regex, indent(depth+i+1))
-                    else break
-                }
-                break
+            case "number": value = parseNumericType(json.type.number, depth); break
         }
 
         if (depth==1) value = `{\n${indent(depth)}DFJS_NOT_OBJECT: ${value}\n}`
     }
 
     return value
+}
+
+function parseNumericType(json) {
+    let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
+    if (multipleOf === undefined) multipleOf = 1
+
+    let frac = multipleOf % 1 != 0
+    let max = null, min = null
+    let upper = null, lower = null
+    let int_multiples = []
+
+    if (maximum !== undefined) max = maximum
+    if (exclusiveMaximum !== undefined) max = exclusiveMaximum - (frac ? 0.0000000001 : 1)
+
+    if (minimum !== undefined) min = minimum
+    if (exclusiveMinimum !== undefined) min = exclusiveMaximum + (frac ? 0.0000000001 : 1)
+
+    if (max !== null && min !== null) {
+      upper = Math.floor(max/multipleOf)
+      lower = Math.ceil(min/multipleOf)
+      
+      if (frac && "integer" in json) {
+        let decimal_part = parseFloat((multipleOf % 1).toFixed(4))
+
+        for (let i = lower; i <= upper; i++) {
+          if ((decimal_part * i) % 1 == 0) int_multiples.push(i)
+        }
+      }
+    }
+    else if (max !== null) {
+      upper = Math.floor(max/multipleOf)
+      lower = upper - 100
+    }
+    else if (min !== null) {
+      lower = Math.ceil(min/multipleOf)
+      upper = lower + 100
+    }
+
+    if (!Object.keys(json).length) return `'{{${"integer" in json ? "integer" : "float"}(-1000,1000)}}'`
+    else if (upper === null) return `'{{multipleOf(${multipleOf})}}'`
+    else if (int_multiples.length > 0) return `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${multipleOf} }`
+    return `gen => { return gen.integer(${lower},${upper}) * ${multipleOf} }`
 }
 
 function parseStringType(json) {
@@ -353,7 +380,7 @@ function parseArrayType(json, depth) {
             let sumLen = arr.length + containsLen
             let final_len = !("maxItems" in json) ? sumLen : (sumLen <= arrLen.maxItems ? sumLen : arrLen.maxItems)
 
-            for (let i = arr.length; i < final_len; i++) {console.log(parseJSON(containsSchema, depth)); arr.push(parseJSON(containsSchema, depth))}
+            for (let i = arr.length; i < final_len; i++) arr.push(parseJSON(containsSchema, depth))
         }
     }
 
@@ -407,7 +434,7 @@ function arrayLen(json, prefixed, additionalItems) {
     }
     else if (!("minItems" in json) && "maxItems" in json) {
         maxItems = json.maxItems
-        minItems = maxItems > prefixed ? prefixed : 0
+        minItems = maxItems > prefixed ? prefixed : ("contains" in json ? maxItems : 0)
     }
     else {
         minItems = json.minItems

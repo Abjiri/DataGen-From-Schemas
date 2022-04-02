@@ -30,6 +30,13 @@
   // verificar se objeto alguma das propriedades em questão
   const hasAny = (k, obj) => k.some(key => key in obj)
 
+  // retorna o tipo de um valor explícito (não considera inteiros porque são classificados como numbers na estrutura gerada pela DSL)
+  function getValueType(value) {
+    if (Array.isArray(value)) return "array"
+    else if (value === null) return "null"
+    return typeof value
+  }
+
   // fazer todas as verificações necessárias para garantir que a schema está bem escrita
   function checkSchema(s) {
     s = determineType(s)
@@ -50,10 +57,16 @@
       else schema.type[k] = {}
     }
     delete obj.type
-    if (!Object.keys(schema.type).length) delete schema.type
+    //if (!Object.keys(schema.type).length) delete schema.type
 
     for (let k in obj) {
-      if (["if","then","else"].includes(k)) {
+      if (k == "const" || k == "default") {
+        let v_type = getValueType(obj[k])
+        if (!(v_type in schema.type)) schema.type[v_type] = {}
+        schema.type[v_type][k] = obj[k]
+      }
+      else if (k == "enum") structureEnum(schema, obj[k])
+      else if (["if","then","else"].includes(k)) {
         for (let key in obj[k].type) {
           if (!(key in schema.type)) schema.type[key] = {}
           schema.type[key][k] = obj[k].type[key]
@@ -68,11 +81,26 @@
 
     // verificar a coerência das chaves numéricas
     if ("type" in schema && "number" in schema.type) {
-      let valid = dslNumericTypes(schema.type.number, 0)
+      let valid = checkNumericKeys(schema.type.number, 0)
       if (valid !== true) return valid
     }
 
     return schema
+  }
+
+  // formatar um enum para a estrutura intermédia pretendida
+  function structureEnum(schema, arr) {
+    let enum_by_types = arr.reduce((obj,elem) => {
+      let v_type = getValueType(elem)
+      if (!(v_type in obj)) obj[v_type] = []
+      obj[v_type].push(elem)
+      return obj
+    }, {})
+
+    for (let type in enum_by_types) {
+      if (!(type in schema.type)) schema.type[type] = {}
+      schema.type[type].enum = enum_by_types[type]
+    }
   }
 
   // determinar o tipo do valor, se a chave 'type' não for especificada
@@ -227,7 +255,7 @@
           for (let j = 0; j < obj.type.length; j++) {
             if (obj.type[j] == "array" && Array.isArray(obj.enum[i])) {valid = true; break}
             else if (obj.type[j] == "null" && obj.enum[i] === null) {valid = true; break}
-            else if (obj.type[j] == "integer" && Number.isInteger(obj.enum[i])) {valid = true; break}
+            //else if (obj.type[j] == "integer" && Number.isInteger(obj.enum[i])) {valid = true; break}
             else if (typeof obj.enum[i] == obj.type[j]) {valid = true; break}
           }
 
@@ -240,13 +268,13 @@
 
   // verificar se o valor da chave 'const' é do tipo correto
   function checkConstType(obj) {
-    if (hasAll("const", obj) && Object.keys(obj.type) > 0) {
+    if (hasAll("const", obj) && obj.type.length > 0) {
       let valid = false
 
       for (let j = 0; j < obj.type.length; j++) {
         if (obj.type[j] == "array" && Array.isArray(obj.const)) {valid = true; break}
         else if (obj.type[j] == "null" && obj.const === null) {valid = true; break}
-        else if (obj.type[j] == "integer" && Number.isInteger(obj.const)) {valid = true; break}
+        //else if (obj.type[j] == "integer" && Number.isInteger(obj.const)) {valid = true; break}
         else if (typeof obj.const == obj.type[j]) {valid = true; break}
       }
 
@@ -314,7 +342,7 @@
   }
 
   // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
-  function dslNumericTypes(obj, nesting) {
+  function checkNumericKeys(obj, nesting) {
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
     if (multipleOf === undefined) multipleOf = 1
 
@@ -332,9 +360,8 @@
     if (max !== null && min !== null) {
       upper = Math.floor(max/multipleOf)
       lower = Math.ceil(min/multipleOf)
-      let dif = upper - lower
       
-      if (dif < 0) return error(`Não existem múltiplos do número '${multipleOf}' no intervalo de valores especificado com as chaves de alcance!`)
+      if (upper - lower < 0) return error(`Não existem múltiplos do número '${multipleOf}' no intervalo de valores especificado com as chaves de alcance!`)
       else if (frac && "integer" in obj) {
         let decimal_part = parseFloat((multipleOf % 1).toFixed(4))
 
@@ -345,72 +372,7 @@
         if (!int_multiples.length) return error(`Não existem múltiplos inteiros do número '${multipleOf}' no intervalo de valores especificado com as chaves de alcance!`)
       }
     }
-    else if (max !== null) {
-      upper = Math.floor(max/multipleOf)
-      lower = upper - 100
-    }
-    else if (min !== null) {
-      lower = Math.ceil(min/multipleOf)
-      upper = lower + 100
-    }
-
-    /* let dsl = `gen => {\n{depth${nesting}}let num = gen.`
-    if (nesting > 0) dsl = `{depth${nesting}}let final = gen.`
-
-    if (!Object.keys(obj).length) {
-      if (current_key == "if") dsl = "if (true)"
-      else dsl += `${"integer" in obj ? "integer" : "float"}(-1000,1000)`
-    }
-    else if (upper === null) {
-      if (current_key == "if") dsl = `if (num % ${multipleOf} == 0)`
-      else dsl += `multipleOf(${multipleOf})`
-    }
-    else if (int_multiples.length > 0) {
-      if (current_key == "if") dsl = `if (${JSON.stringify(int_multiples.map(x => x*multipleOf))}.includes(num))`
-      else dsl += `random(...${JSON.stringify(int_multiples)}) * ${multipleOf}`
-    }
-    else {
-      if (current_key == "if") dsl = `if (gen.range(${lower},${upper}).concat(${upper}).map(x => x*${multipleOf}).includes(num))`
-      else dsl += `integer(${lower},${upper}) * ${multipleOf}`
-    }
-
-    if ("if" in obj) {
-      dsl += `\n{depth${nesting}}${obj.if.dsl} {}`
-      if ("then" in obj) dsl = dsl.slice(0,-1) + `\n`
-    }
-    if ("then" in obj) {
-      let then_obj = Object.assign(JSON.parse(JSON.stringify(obj)), obj.if, obj.then)
-
-      delete then_obj.if
-      delete then_obj.then
-      if ("else" in then_obj) delete then_obj.else
-      
-      let valid = dslNumericTypes(then_obj, nesting+1)
-      if (valid !== true) return valid
-
-      dsl += then_obj.dsl
-    }
-    if ("else" in obj) {
-      let else_obj = Object.assign(JSON.parse(JSON.stringify(obj)), obj.else)
-
-      delete else_obj.if
-      delete else_obj.else
-      if ("then" in else_obj) delete else_obj.then
-      
-      let valid = dslNumericTypes(else_obj, nesting+1)
-      if (valid !== true) return valid
-
-      dsl += `\n{depth${nesting}}else {}`
-      dsl = dsl.slice(0,-1) + "\n" + else_obj.dsl
-    }
-
-    if (current_key != "if") dsl += `\n{depth${nesting}}return ${nesting>0 ? "final" : "num"}\n{depth${nesting-1}}}`
-    obj.dsl = dsl */
-
-    if (!Object.keys(obj).length) obj.dsl = `'{{${"integer" in obj ? "integer" : "float"}(-1000,1000)}}'`
-    else if (upper === null) obj.dsl = `'{{multipleOf(${multipleOf})}}'`
-    else if (int_multiples.length > 0) obj.dsl = `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${multipleOf} }`
-    else obj.dsl = `gen => { return gen.integer(${lower},${upper}) * ${multipleOf} }`
+    
     return true
   }
 }
