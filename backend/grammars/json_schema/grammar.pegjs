@@ -114,7 +114,7 @@
   function structureOneOf(schema, arr) {
     // separar os elementos do oneOf por tipos (garantido que cada elemento tem um único tipo, graças à checkCompositionTypes)
     let by_types = arr.reduce((obj,elem) => {
-      // se uma schema não tiver tipo, é porque tem apenas um subset das seguintes chaves: $ref ou $defs
+      // se uma schema não tiver tipo, é porque tem apenas um subset das seguintes chaves: $ref, $defs ou chaves de composição de schemas
       // no converter é preciso reprocessar o que estiver neste tipo "undef" - se tem uma ref, terá novos dados, senão pode-se eliminar
       let el_type = "type" in elem ? Object.keys(elem.type)[0] : "undef"
       if (!(el_type in obj)) obj[el_type] = []

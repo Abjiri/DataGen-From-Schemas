@@ -31,9 +31,14 @@ function parseJSON(json, depth) {
     return str
 }
 
-/* function parseOneOf(json, type, depth) {
-    if (type === null) return parseJSON(json.oneOf[Math.floor(Math.random()*json.oneOf.length)], depth)
-} */
+function parseSchemaComposition(json, key) {
+    if (key == "oneOf") {
+        let elem = json[rand(json.length)]
+
+        if ("oneOf" in elem) elem = parseSchemaComposition(elem.oneOf, "oneOf")
+        return elem
+    }
+}
 
 function parseType(json, depth) {
     let possibleTypes = Object.keys(json.type)
@@ -65,6 +70,7 @@ function extendNumericSchema(json, schema) {
     if ("const" in schema) json.const = schema.const
     else if ("enum" in schema) json.enum = schema.enum
     else {
+        if ("default" in schema) json.default = schema.default
         let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = schema
 
         if (multipleOf !== undefined) {
@@ -113,7 +119,11 @@ function extendNumericSchema(json, schema) {
 }
 
 function parseNumericType(json) {
-    if ("oneOf" in json) Object.assign(json, json.oneOf[rand(json.oneOf.length)])
+    if ("oneOf" in json) {
+        let subschema = parseSchemaComposition(json.oneOf, "oneOf")
+        delete json.oneOf
+        extendNumericSchema(json, subschema)
+    }
 
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
     if (multipleOf === undefined) multipleOf = [1]

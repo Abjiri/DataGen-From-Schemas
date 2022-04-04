@@ -14,6 +14,7 @@ function separateByTypes_oneOf(value) {
     for (let i = 0; i < value.length; i++) {
         if ("type" in value[i]) {
             let types = Object.keys(value[i].type)
+            if (types.includes("undef")) structureUndefType(value[i])
 
             if (types.length > 1) {
                 let elem = value.splice(i--, 1)[0]
