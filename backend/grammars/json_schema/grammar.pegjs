@@ -10,9 +10,9 @@
   let anchors = []
   let propertyNames_refs = []
 
-  let genericKeys = ["type","enum","const"]
-  let annotationKeys = ["title","description","default","examples","readOnly","writeOnly","deprecated","$comment"]
-  let mediaKeys = ["contentMediaType","contentEncoding","contentSchema"]
+  let genericKeys = ["type","enum","const","default"]
+  let annotationKeys = ["title","description","examples","readOnly","writeOnly","deprecated","$comment"] // a gramática reconhece mas ignora
+  let mediaKeys = ["contentMediaType","contentEncoding","contentSchema"] // a gramática reconhece mas ignora
   let schemaKeys = ["allOf","anyOf","oneOf","not","if","then","else"]
   let structuringKeys = ["$schema","$id","$anchor","$ref","$defs"]
 
@@ -46,7 +46,7 @@
 
   // formatar os dados para a estrutura intermédia pretendida
   function structureSchemaData(obj) {
-    if (obj === null) return true
+    if (obj === null) obj = {type: ["string","integer","number","boolean","null","array","object"]}
     let schema = {type: {}}
 
     for (let k of obj.type) {
@@ -57,7 +57,6 @@
       else schema.type[k] = {}
     }
     delete obj.type
-    //if (!Object.keys(schema.type).length) delete schema.type
 
     for (let k in obj) {
       if (k == "const" || k == "default") {
@@ -86,6 +85,11 @@
       if (valid !== true) return valid
     }
 
+    if (!Object.keys(schema.type).length) {
+      // se a schema só tiver um subset das chaves {$id, $schema, $anchor, $defs}, pode gerar qualquer tipo de valor
+      if (!Object.keys(schema).includes("$ref")) schema.type = {string: {}, number: {}, boolean: {}, null: {}, array: {}, object: {}}
+      else delete schema.type
+    }
     return schema
   }
 
@@ -110,11 +114,14 @@
   function structureOneOf(schema, arr) {
     // separar os elementos do oneOf por tipos (garantido que cada elemento tem um único tipo, graças à checkCompositionTypes)
     let by_types = arr.reduce((obj,elem) => {
-      let el_type = Object.keys(elem.type)[0]
+      // se uma schema não tiver tipo, é porque tem apenas um subset das seguintes chaves: $ref ou $defs
+      // no converter é preciso reprocessar o que estiver neste tipo "undef" - se tem uma ref, terá novos dados, senão pode-se eliminar
+      let el_type = "type" in elem ? Object.keys(elem.type)[0] : "undef"
       if (!(el_type in obj)) obj[el_type] = []
 
+      if (el_type == "undef") obj[el_type].push(elem)
       // não vale a pena guardar uma schema vazia
-      if (Object.keys(elem.type[el_type]).length > 0) obj[el_type].push(elem.type[el_type])
+      else if (Object.keys(elem.type[el_type]).length > 0) obj[el_type].push(elem.type[el_type])
       return obj
     }, {})
 
@@ -124,12 +131,7 @@
 
       // se não houver schemas neste tipo (nenhuma schema foi guardada acima porque eram todas vazias - só foi especificado mesmo o tipo em cada uma), não vale a pena fazer mais nada
       // haverá a possibilidade de gerar este tipo na mesma, porque já foi colocado na estrutura intermédia na linha de código acima
-      if (by_types[type].length > 0) {
-        // se só houver uma schema, não vai ser uma escolha, logo atribui-se logo as chaves ao objeto
-        if (by_types[type].length == 1) Object.assign(schema.type[type], by_types[type][0])
-        // caso contrário, oneOf novo com as schemas deste tipo
-        else schema.type[type].oneOf = by_types[type]
-      }
+      if (by_types[type].length > 0) schema.type[type].oneOf = by_types[type]
     }
   }
 
@@ -371,10 +373,29 @@
     return true
   }
 
+  // calcular o mínimo múltiplo comum entre 2 números
+  function lcm_two_numbers(x, y) {
+    if ((typeof x !== 'number') || (typeof y !== 'number')) return false
+    return (!x || !y) ? 0 : Math.abs((x * y) / gcd_two_numbers(x, y))
+  }
+
+  // calcular o maior divisor comum entre 2 números
+  function gcd_two_numbers(x, y) {
+    x = Math.abs(x)
+    y = Math.abs(y)
+    while(y) {
+      var t = y
+      y = x % y
+      x = t
+    }
+    return x;
+  }
+
   // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
   function checkNumericKeys(obj, nesting) {
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
     if (multipleOf === undefined) multipleOf = 1
+    else multipleOf = multipleOf[0]
 
     let frac = multipleOf % 1 != 0
     let max = null, min = null
@@ -407,18 +428,21 @@
   }
 
   // separar as subschemas do oneOf por tipos de dados geráveis em subschemas mais pequenas, de forma a garantir que todos os elementos do oneOf podem gerar 1 único tipo de dados
+  // uma subschema só fica com um tipo se tiver chaves de algum dos tipos de dados primitivos
   function checkCompositionTypes(key, value) {
     if (key == "oneOf") {
       for (let i = 0; i < value.length; i++) {
-        let types = Object.keys(value[i].type)
+        if ("type" in value[i]) {
+          let types = Object.keys(value[i].type)
 
-        if (types.length > 1) {
-          let elem = value.splice(i--, 1)[0]
+          if (types.length > 1) {
+            let elem = value.splice(i--, 1)[0]
 
-          for (let j = 0; j < types.length; j++) {
-            let new_schema = {type: {}}
-            new_schema.type[types[j]] = elem.type[types[j]]
-            value.push(new_schema)
+            for (let j = 0; j < types.length; j++) {
+              let new_schema = {type: {}}
+              new_schema.type[types[j]] = elem.type[types[j]]
+              value.push(new_schema)
+            }
           }
         }
       }
@@ -456,7 +480,7 @@ keyword = generic_keyword / string_keyword / number_keyword / object_keyword / a
 
 // ---------- Keywords generic ----------
 
-generic_keyword = kw_type / kw_enum / kw_const / annotation_keyword
+generic_keyword = kw_type / kw_enum / kw_const / kw_default / annotation_keyword
 
 kw_type = QM key:"type" QM name_separator value:type_value {return {key, value}}
 type_value = t:type {return [t]} / arr:type_array {return arr}
@@ -464,13 +488,13 @@ type = QM v:$("string" / "number" / "integer" / "object" / "array" / "boolean" /
 
 kw_enum = QM key:"enum" QM name_separator value:array {return {key, value}}
 kw_const = QM key:"const" QM name_separator value:value {return {key, value}}
+kw_default = QM key:"default" QM name_separator value:value {return {key, value}}
 
 // ---------- Keywords annotation ----------
 
-annotation_keyword = kws_annotation_stringValues / kw_default / kw_examples / kws_annotation_booleanValues
+annotation_keyword = (kws_annotation_stringValues / kw_examples / kws_annotation_booleanValues) {return null}
 
 kws_annotation_stringValues = QM key:$("title"/"description"/"$comment") QM name_separator value:string {return {key, value}}
-kw_default = QM key:"default" QM name_separator value:value {return {key, value}}
 kw_examples = QM key:"examples" QM name_separator value:array {return {key, value}}
 kws_annotation_booleanValues = QM key:$("readOnly"/"writeOnly"/"deprecated") QM name_separator value:boolean {return {key, value}}
 
@@ -489,7 +513,7 @@ format_value = QM f:("date-time" / "time" / "date" / "duration" / "email" / "idn
 
 number_keyword = kw_multipleOf / kws_range
 
-kw_multipleOf = QM key:"multipleOf" QM name_separator value:positiveNumber {return {key, value}}
+kw_multipleOf = QM key:"multipleOf" QM name_separator value:positiveNumber {return {key, value: [value]}}
 kws_range = QM key:$("minimum"/"exclusiveMinimum"/"maximum"/"exclusiveMaximum") QM name_separator value:number {return {key, value}}
 
 // ---------- Keywords object ----------
@@ -516,7 +540,7 @@ kw_uniqueness = QM key:"uniqueItems" QM name_separator value:boolean {return {ke
 
 // ---------- Keywords media ----------
 
-media_keyword = kw_contentMediaType / kw_contentEncoding / kw_contentSchema
+media_keyword = (kw_contentMediaType / kw_contentEncoding / kw_contentSchema) {return null}
 
 kw_contentMediaType = QM key:"contentMediaType" QM name_separator value:mime_type {return {key, value}}
 mime_type = ""
@@ -545,7 +569,7 @@ kw_ifThenElse = QM key:$(k:("if"/"then"/"else") {current_key = k}) QM name_separ
 
 structuring_keyword = kw_schema / kw_id / kw_anchor / kw_ref / kw_defs
 
-kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return {key, value}}
+kw_schema = QM key:"$schema" QM name_separator value:schema_value &{return atRoot(key)} {return null}//{key, value}}
 schema_value = QM v:$("http://json-schema.org/draft-0"[467]"/schema#" / "https://json-schema.org/draft/20"("19-09"/"20-12")"/schema") QM
                &{return v == "https://json-schema.org/draft/2020-12/schema" ? true : error("Esta ferramenta implementa apenas a sintaxe do draft 2020-12!")} {return v}
 
@@ -558,39 +582,38 @@ kw_defs = QM key:"$defs" QM name_separator value:object_schemaMap {return {key, 
 // ----- Objetos -----
 
 schema_object
-  = boolean /
+  = false / true { return structureSchemaData(null) } /
     (ws "{" ws {depth.push(0); refs.push([]); anchors.push({})}) members:(
       head:keyword tail:(value_separator m:keyword { return m; })* {
         var result = {};
-        [head].concat(tail).forEach(el => {result[el.key] = el.value});
+        [head].concat(tail).forEach(el => {if (el !== null) result[el.key] = el.value});
         return result;
     })? (ws "}" ws {depth.pop()})
     &{ return checkSchema(members) }
     { 
       let schema = structureSchemaData(members)
 
-      if (typeof schema != "boolean") {
-        if ("$ref" in schema) refs[refs.length-1].push(schema)
-        if ("$anchor" in schema) {
-          let anchor_name = schema.$anchor
-          delete schema.$anchor
-          anchors[anchors.length-1][anchor_name] = schema
-        }
-
-        let new_refs = refs.pop()
-        let new_anchors = anchors.pop()
-
-        // guardar subschema se tiver um id ou se for a própria schema
-        if ("$id" in schema || !refs.length) {
-          let id = "$id" in schema ? schema.$id : ("anon" + ++anon_schemas)
-          if ("$id" in schema) delete schema.$id
-          subschemas.push({id, schema, refs: new_refs, anchors: new_anchors})
-        }
-        else {
-          refs.push(refs.pop().concat(new_refs))
-          Object.assign(anchors[anchors.length-1], new_anchors)
-        }
+      if ("$ref" in schema) refs[refs.length-1].push(schema)
+      if ("$anchor" in schema) {
+        let anchor_name = schema.$anchor
+        delete schema.$anchor
+        anchors[anchors.length-1][anchor_name] = schema
       }
+
+      let new_refs = refs.pop()
+      let new_anchors = anchors.pop()
+
+      // guardar subschema se tiver um id ou se for a própria schema
+      if ("$id" in schema || !refs.length) {
+        let id = "$id" in schema ? schema.$id : ("anon" + ++anon_schemas)
+        if ("$id" in schema) delete schema.$id
+        subschemas.push({id, schema, refs: new_refs, anchors: new_anchors})
+      }
+      else {
+        refs.push(refs.pop().concat(new_refs))
+        Object.assign(anchors[anchors.length-1], new_anchors)
+      }
+      
       return schema
     }
 

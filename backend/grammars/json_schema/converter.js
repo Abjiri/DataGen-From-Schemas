@@ -1,7 +1,6 @@
 const RandExp = require('randexp');
 const jsf = require('json-schema-faker');
-const Validator = require('jsonschema').Validator;
-const validator = new Validator();
+const { structureUndefType } = require('./undefType')
 
 let SETTINGS = {
     prob_patternProperty: 0.8,
@@ -10,8 +9,8 @@ let SETTINGS = {
 
 // tabs de indentação
 const indent = depth => "\t".repeat(depth)
-// poder gerar um boleano, inteiro, float ou string
-const randomValue = `'{{random(boolean(), integer(-9999,9999), float(-9999,9999), lorem("sentences", 1))}}'`
+// schema que pode gerar qualquer tipo de valor
+const trueSchema = {type: {string: {}, number: {}, boolean: {}, null: {}, array: {}, object: {}}}
 // obter um número aleatório entre os limites
 let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
 // obter um número aleatório entre 0 e len
@@ -24,17 +23,11 @@ function convert(json) {
 }
 
 function parseJSON(json, depth) {
-    let str = ""
+    // processar refs que tenham sido substítuidas dentro de chaves de composição de schemas
+    structureUndefType(json)
 
-    if (json === true) {
-        if (depth==1) str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${randomValue}\n}`
-        else str = randomValue
-    }
-    else {
-        str = parseType(json, depth)
-        if (depth==1 && str[0] != "{") str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${str}\n}`
-    }
-
+    let str = parseType(json, depth)
+    if (depth==1 && str[0] != "{") str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${str}\n}`
     return str
 }
 
@@ -68,11 +61,62 @@ function parseType(json, depth) {
     return value
 }
 
+function extendNumericSchema(json, schema) {
+    if ("const" in schema) json.const = schema.const
+    else if ("enum" in schema) json.enum = schema.enum
+    else {
+        let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = schema
+
+        if (multipleOf !== undefined) {
+            if ("multipleOf" in json) json.multipleOf = json.multipleOf.concat(multipleOf.filter(x => !json.multipleOf.includes(x)))
+            else json.multipleOf = multipleOf
+        }
+
+        if (minimum !== undefined) {
+            if ("minimum" in json) {
+                if (minimum > json.minimum) json.minimum = minimum
+            } 
+            else if ("exclusiveMinimum" in json) {
+                if (minimum > json.exclusiveMinimum) {json.minimum = minimum; delete json.exclusiveMinimum}
+            }
+            else json.minimum = minimum
+        }
+        else if (exclusiveMinimum !== undefined) {
+            if ("minimum" in json) {
+                if (exclusiveMinimum >= json.minimum) {json.exclusiveMinimum = exclusiveMinimum; delete json.minimum}
+            } 
+            else if ("exclusiveMinimum" in json) {
+                if (exclusiveMinimum > json.exclusiveMinimum) json.exclusiveMinimum = exclusiveMinimum
+            }
+            else json.exclusiveMinimum = exclusiveMinimum
+        }
+
+        if (maximum !== undefined) {
+            if ("maximum" in json) {
+                if (maximum < json.maximum) json.maximum = maximum
+            } 
+            else if ("exclusiveMaximum" in json) {
+                if (maximum < json.exclusiveMaximum) {json.maximum = maximum; delete json.exclusiveMaximum}
+            }
+            else json.maximum = maximum
+        }
+        else if (exclusiveMaximum !== undefined) {
+            if ("maximum" in json) {
+                if (exclusiveMaximum <= json.maximum) {json.exclusiveMaximum = exclusiveMaximum; delete json.maximum}
+            } 
+            else if ("exclusiveMaximum" in json) {
+                if (exclusiveMaximum < json.exclusiveMaximum) json.exclusiveMaximum = exclusiveMaximum
+            }
+            else json.exclusiveMaximum = exclusiveMaximum
+        }
+    }
+}
+
 function parseNumericType(json) {
     if ("oneOf" in json) Object.assign(json, json.oneOf[rand(json.oneOf.length)])
 
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
-    if (multipleOf === undefined) multipleOf = 1
+    if (multipleOf === undefined) multipleOf = [1]
 
     let frac = multipleOf % 1 != 0
     let max = null, min = null
@@ -237,7 +281,7 @@ function parseObjectType(json, only_req, depth) {
             delete json.patternProperties[k]
         }
         else if (!("additionalProperties" in json || "unevaluatedProperties" in json))
-            { if (i < minProps || SETTINGS.random_props || "propertyNames" in json) nonRequired_randomProps(json, obj, size, true, addProperty); break }
+            { if (i < minProps || SETTINGS.random_props || "propertyNames" in json) nonRequired_randomProps(json, obj, size, trueSchema, addProperty); break }
         else if ("additionalProperties" in json && json.additionalProperties !== false)
             { nonRequired_randomProps(json, obj, size, json.additionalProperties, addProperty); break }
         else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) 
@@ -269,7 +313,7 @@ function objectSize(json, required) {
             if ("patternProperties" in json) maxProps = Object.keys(json.patternProperties).length
             else if ("propertyNames" in json) maxProps = 3
             else if (!(!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps = 0
-            else {json.additionalProperties = true; maxProps = 3}
+            else {json.additionalProperties = trueSchema; maxProps = 3}
         }
         else if (SETTINGS.random_props && minProps == maxProps && minProps > 0 && (!("additionalProperties" in json || "unevaluatedProperties" in json))) maxProps += 3
         else if (!maxProps) maxProps = 3
@@ -340,7 +384,7 @@ function addProperties(json, obj, props, depSchemas, depSchemas_objects, depth) 
         }
         else if ("additionalProperties" in json && json.additionalProperties !== false) addProperty(k, json.additionalProperties)
         else if (!("additionalProperties" in json) && "unevaluatedProperties" in json && json.unevaluatedProperties !== false) addProperty(k, json.unevaluatedProperties)
-        else obj[k] = randomValue
+        else addProperty(k, trueSchema)
     }
 }
 
@@ -389,7 +433,7 @@ function parseArrayType(json, depth) {
     }
 
     // gerar os restantes elementos, se forem permitidos
-    let nonPrefixedSchema = true
+    let nonPrefixedSchema = trueSchema
     if ("items" in json && json.items !== false) nonPrefixedSchema = json.items
     else if (additionalItems) nonPrefixedSchema = json.unevaluatedItems
 
