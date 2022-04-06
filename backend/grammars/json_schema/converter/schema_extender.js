@@ -40,6 +40,7 @@ function extendString(json, schema) {
 
 function extendNumeric(json, schema) {
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = schema
+    if ("integer" in schema) json.integer = true
 
     if (multipleOf !== undefined) {
         if ("multipleOf" in json) json.multipleOf = json.multipleOf.concat(multipleOf.filter(x => !json.multipleOf.includes(x)))

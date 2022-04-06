@@ -32,13 +32,39 @@ function parseJSON(json, depth) {
     return str
 }
 
-function parseSchemaComposition(json, key) {
-    if (key == "oneOf") {
-        let elem = json[rand(json.length)]
+// processa as chaves de composição de schemas pela ordem que aparecem no objeto
+function parseAllSchemaComposition(json, type) {
+    let schemaComp_keys = Object.keys(json).filter(x => ["allOf","anyOf","oneOf","not"].includes(x))
+    for (let i = 0; i < schemaComp_keys.length; i++) parseSchemaComposition(json, schemaComp_keys[i], type)
+}
 
-        if ("oneOf" in elem) elem = parseSchemaComposition(elem.oneOf, "oneOf")
-        return elem
+function parseSchemaComposition(json, key, type) {
+    switch (key) {
+        case "anyOf":
+            // seleciona um nr aleatório de schemas do tipo em questão
+            let subschemas = getRandomSubarray(json[key], randomize(json[key].length, 1))
+            subschemas.map(s => parseAllSchemaComposition(s, type))
+            delete json[key]
+            subschemas.map(s => extendSchema(json, s, type))
+            break
+        case "oneOf":
+            let subschema = json[key][rand(json[key].length)]
+            parseAllSchemaComposition(subschema, type)
+            delete json[key]
+            extendSchema(json, subschema, type)
+            break
     }
+}
+
+function getRandomSubarray(arr, size) {
+    var shuffled = arr.slice(0), i = arr.length, temp, index;
+    while (i--) {
+        index = Math.floor((i + 1) * Math.random());
+        temp = shuffled[index];
+        shuffled[index] = shuffled[i];
+        shuffled[i] = temp;
+    }
+    return shuffled.slice(0, size);
 }
 
 function parseType(json, depth) {
@@ -49,13 +75,8 @@ function parseType(json, depth) {
     let value
 
     // resolver as chaves de composição de schemas aqui, para não ter de repetir este código na função de parsing de cada tipo
-    let schemaComp_keys = Object.keys(json.type[type]).filter(x => ["allOf","anyOf","oneOf","not"].includes(x))
-    for (let i = 0; i < schemaComp_keys.length; i++) {
-        let key = schemaComp_keys[i]
-        let subschema = parseSchemaComposition(json.type[type][key], key)
-        delete json.type[type][key]
-        extendSchema(json.type[type], subschema, type)
-    }
+    parseAllSchemaComposition(json.type[type], type)
+    console.log(json.type[type])
 
     if ("const" in json.type[type]) return predefinedValue(json.type[type].const)
     if ("enum" in json.type[type]) return predefinedValue(json.enum)

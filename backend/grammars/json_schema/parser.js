@@ -5853,7 +5853,7 @@ module.exports = /*
             schema.type[v_type][k] = obj[k]
           }
           else if (k == "enum") structureEnum(schema, obj[k])
-          else if (k == "oneOf") structureOneOf(schema, obj[k])
+          else if (["anyOf","oneOf"].includes(k)) structureSchemaCompArr(schema, obj[k], k)
           else if (["if","then","else"].includes(k)) {
             for (let key in obj[k].type) {
               if (!(key in schema.type)) schema.type[key] = {}
@@ -5898,9 +5898,9 @@ module.exports = /*
         }
       }
 
-      // format um oneOf para a estrutura intermédia pretendida
-      function structureOneOf(schema, arr) {
-        // separar os elementos do oneOf por tipos (garantido que cada elemento tem um único tipo, graças à checkCompositionTypes)
+      // formata um any/oneOf para a estrutura intermédia pretendida
+      function structureSchemaCompArr(schema, arr, key) {
+        // separar os elementos do any/oneOf por tipos (garantido que cada elemento tem um único tipo, graças à checkCompositionTypes)
         let by_types = arr.reduce((obj,elem) => {
           // se uma schema não tiver tipo, é porque tem apenas um subset das seguintes chaves: $ref, $defs ou chaves de composição de schemas
           // no converter é preciso reprocessar o que estiver neste tipo "undef" - se tem uma ref, terá novos dados, senão pode-se eliminar
@@ -5913,13 +5913,13 @@ module.exports = /*
           return obj
         }, {})
 
-        // cada subdivisão é tornada num oneOf novo e colocado no respetivo tipo, na estrutura intermédia
+        // cada subdivisão é tornada num any/oneOf novo e colocado no respetivo tipo, na estrutura intermédia
         for (let type in by_types) {
           if (!(type in schema.type)) schema.type[type] = {}
 
           // se não houver schemas neste tipo (nenhuma schema foi guardada acima porque eram todas vazias - só foi especificado mesmo o tipo em cada uma), não vale a pena fazer mais nada
           // haverá a possibilidade de gerar este tipo na mesma, porque já foi colocado na estrutura intermédia na linha de código acima
-          if (by_types[type].length > 0) schema.type[type].oneOf = by_types[type]
+          if (by_types[type].length > 0) schema.type[type][key] = by_types[type]
         }
       }
 
@@ -6203,10 +6203,10 @@ module.exports = /*
         return true
       }
 
-      // separar as subschemas do oneOf por tipos de dados geráveis em subschemas mais pequenas, de forma a garantir que todos os elementos do oneOf podem gerar 1 único tipo de dados
+      // separar as subschemas do any/oneOf por tipos de dados geráveis em subschemas mais pequenas, de forma a garantir que todos os elementos do any/oneOf podem gerar 1 único tipo de dados
       // uma subschema só fica com um tipo se tiver chaves de algum dos tipos de dados primitivos
       function checkCompositionTypes(key, value) {
-        if (key == "oneOf") {
+        if (key == "oneOf" || key == "anyOf") {
           for (let i = 0; i < value.length; i++) {
             if ("type" in value[i]) {
               let types = Object.keys(value[i].type)
@@ -6215,15 +6215,24 @@ module.exports = /*
                 let elem = value.splice(i--, 1)[0]
 
                 for (let j = 0; j < types.length; j++) {
-                  let new_schema = {type: {}}
-                  new_schema.type[types[j]] = elem.type[types[j]]
-                  value.push(new_schema)
+                  // se tiver um any/oneOf aninhado dentro de uma chave igual, dar flat à estrutura
+                  if (key in elem.type[types[j]] && Object.keys(elem.type[types[j]]).length == 1) {
+                    elem.type[types[j]][key].map(x => {
+                      let new_schema = {type: {}}
+                      new_schema.type[types[j]] = x
+                      value.push(new_schema)
+                    })
+                  }
+                  else {
+                    let new_schema = {type: {}}
+                    new_schema.type[types[j]] = elem.type[types[j]]
+                    value.push(new_schema)
+                  }
                 }
               }
             }
           }
         }
-
         return true
       }
 
