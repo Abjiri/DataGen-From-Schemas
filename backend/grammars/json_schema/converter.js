@@ -118,6 +118,31 @@ function extendNumericSchema(json, schema) {
     }
 }
 
+// calcular o mínimo múltiplo comum de 2+ números
+function lcm_n_numbers(arr) {
+    let lcm = arr[0]
+    for (let i = 1; i < arr.length; i++) lcm = lcm_two_numbers(lcm, arr[i])
+    return lcm
+}
+
+// calcular o mínimo múltiplo comum entre 2 números
+function lcm_two_numbers(x, y) {
+  if ((typeof x !== 'number') || (typeof y !== 'number')) return false
+  return (!x || !y) ? 0 : Math.abs((x * y) / gcd_two_numbers(x, y))
+}
+
+// calcular o maior divisor comum entre 2 números
+function gcd_two_numbers(x, y) {
+  x = Math.abs(x)
+  y = Math.abs(y)
+  while(y) {
+    var t = y
+    y = x % y
+    x = t
+  }
+  return x;
+}
+
 function parseNumericType(json) {
     if ("oneOf" in json) {
         let subschema = parseSchemaComposition(json.oneOf, "oneOf")
@@ -127,24 +152,28 @@ function parseNumericType(json) {
 
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
     if (multipleOf === undefined) multipleOf = [1]
+    else if ("integer" in json) multipleOf.push(1)
 
-    let frac = multipleOf % 1 != 0
+    let any_frac = multipleOf.reduce((a,c) => a || (c%1 != 0), false)
     let max = null, min = null
     let upper = null, lower = null
     let int_multiples = []
 
     if (maximum !== undefined) max = maximum
-    if (exclusiveMaximum !== undefined) max = exclusiveMaximum - (frac ? 0.0000000001 : 1)
+    if (exclusiveMaximum !== undefined) max = exclusiveMaximum - (any_frac ? 0.0000000001 : 1)
 
     if (minimum !== undefined) min = minimum
-    if (exclusiveMinimum !== undefined) min = exclusiveMaximum + (frac ? 0.0000000001 : 1)
+    if (exclusiveMinimum !== undefined) min = exclusiveMaximum + (any_frac ? 0.0000000001 : 1)
+
+    // mínimo múltiplo comum de todos os multipleOf
+    let lcm = multipleOf.length == 1 ? multipleOf[0] : lcm_n_numbers(multipleOf)
 
     if (max !== null && min !== null) {
-      upper = Math.floor(max/multipleOf)
-      lower = Math.ceil(min/multipleOf)
+      upper = Math.floor(max/lcm)
+      lower = Math.ceil(min/lcm)
       
-      if (frac && "integer" in json) {
-        let decimal_part = parseFloat((multipleOf % 1).toFixed(4))
+      if (any_frac && "integer" in json) {
+        let decimal_part = parseFloat((lcm % 1).toFixed(4))
 
         for (let i = lower; i <= upper; i++) {
           if ((decimal_part * i) % 1 == 0) int_multiples.push(i)
@@ -152,18 +181,18 @@ function parseNumericType(json) {
       }
     }
     else if (max !== null) {
-      upper = Math.floor(max/multipleOf)
+      upper = Math.floor(max/lcm)
       lower = upper - 100
     }
     else if (min !== null) {
-      lower = Math.ceil(min/multipleOf)
+      lower = Math.ceil(min/lcm)
       upper = lower + 100
     }
 
     if (!Object.keys(json).length) return `'{{${"integer" in json ? "integer" : "float"}(-1000,1000)}}'`
-    else if (upper === null) return `'{{multipleOf(${multipleOf})}}'`
-    else if (int_multiples.length > 0) return `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${multipleOf} }`
-    return `gen => { return gen.integer(${lower},${upper}) * ${multipleOf} }`
+    else if (upper === null) return `'{{multipleOf(${lcm})}}'`
+    else if (int_multiples.length > 0) return `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${lcm} }`
+    return `gen => { return gen.integer(${lower},${upper}) * ${lcm} }`
 }
 
 function parseStringType(json) {

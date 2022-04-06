@@ -5739,8 +5739,8 @@ module.exports = /*
       let propertyNames_refs = []
 
       let genericKeys = ["type","enum","const","default"]
-      let annotationKeys = ["title","description","examples","readOnly","writeOnly","deprecated","$comment"]
-      let mediaKeys = ["contentMediaType","contentEncoding","contentSchema"]
+      let annotationKeys = ["title","description","examples","readOnly","writeOnly","deprecated","$comment"] // a gramática reconhece mas ignora
+      let mediaKeys = ["contentMediaType","contentEncoding","contentSchema"] // a gramática reconhece mas ignora
       let schemaKeys = ["allOf","anyOf","oneOf","not","if","then","else"]
       let structuringKeys = ["$schema","$id","$anchor","$ref","$defs"]
 
@@ -5842,7 +5842,7 @@ module.exports = /*
       function structureOneOf(schema, arr) {
         // separar os elementos do oneOf por tipos (garantido que cada elemento tem um único tipo, graças à checkCompositionTypes)
         let by_types = arr.reduce((obj,elem) => {
-          // se uma schema não tiver tipo, é porque tem apenas um subset das seguintes chaves: $ref ou $defs
+          // se uma schema não tiver tipo, é porque tem apenas um subset das seguintes chaves: $ref, $defs ou chaves de composição de schemas
           // no converter é preciso reprocessar o que estiver neste tipo "undef" - se tem uma ref, terá novos dados, senão pode-se eliminar
           let el_type = "type" in elem ? Object.keys(elem.type)[0] : "undef"
           if (!(el_type in obj)) obj[el_type] = []
@@ -6101,24 +6101,6 @@ module.exports = /*
         return true
       }
 
-      // calcular o mínimo múltiplo comum entre 2 números
-      function lcm_two_numbers(x, y) {
-        if ((typeof x !== 'number') || (typeof y !== 'number')) return false
-        return (!x || !y) ? 0 : Math.abs((x * y) / gcd_two_numbers(x, y))
-      }
-
-      // calcular o maior divisor comum entre 2 números
-      function gcd_two_numbers(x, y) {
-        x = Math.abs(x)
-        y = Math.abs(y)
-        while(y) {
-          var t = y
-          y = x % y
-          x = t
-        }
-        return x;
-      }
-
       // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
       function checkNumericKeys(obj, nesting) {
         let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
@@ -6156,7 +6138,7 @@ module.exports = /*
       }
 
       // separar as subschemas do oneOf por tipos de dados geráveis em subschemas mais pequenas, de forma a garantir que todos os elementos do oneOf podem gerar 1 único tipo de dados
-      // uma subschema só fico com um tipo se tiver chaves de algum dos tipos de dados primitivos
+      // uma subschema só fica com um tipo se tiver chaves de algum dos tipos de dados primitivos
       function checkCompositionTypes(key, value) {
         if (key == "oneOf") {
           for (let i = 0; i < value.length; i++) {
