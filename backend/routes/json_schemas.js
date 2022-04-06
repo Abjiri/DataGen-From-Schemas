@@ -5,9 +5,9 @@ const dslParser = require('../grammars/datagen_dsl/parser')
 const jsonParser = require('../grammars/json_schema/parser')
 
 const dslConverter = require('../grammars/datagen_dsl/conversions')
-const jsonConverter = require('../grammars/json_schema/converter')
+const jsonConverter = require('../grammars/json_schema/converter/converter')
 
-const {resolve_refs} = require('../grammars/json_schema/refs')
+const {resolve_refs} = require('../grammars/json_schema/converter/refs')
 
 // POST para gerar um dataset a partir de um XML schema
 router.post('/', (req, res) => {

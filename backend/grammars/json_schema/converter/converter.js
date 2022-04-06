@@ -1,6 +1,7 @@
 const RandExp = require('randexp');
 const jsf = require('json-schema-faker');
 const { structureUndefType } = require('./undefType')
+const { extendSchema } = require('./schema_extender')
 
 let SETTINGS = {
     prob_patternProperty: 0.8,
@@ -41,14 +42,27 @@ function parseSchemaComposition(json, key) {
 }
 
 function parseType(json, depth) {
+    let predefinedValue = arr => `gen => { return gen.random(...${JSON.stringify(arr)}) }`
     let possibleTypes = Object.keys(json.type)
     //selecionar um dos vários tipos possíveis aleatoriamente, para produzir
     let type = possibleTypes[rand(possibleTypes.length)]
     let value
 
-    if ("const" in json.type[type]) return `gen => { return ${JSON.stringify(json.type[type].const)} }`
-    if ("enum" in json.type[type]) return `gen => { return gen.random(...${JSON.stringify(json.enum)}) }`
-    if ("default" in json.type[type] && Object.keys(json.type[type]).length == 1) return `gen => { return ${JSON.stringify(json.type[type].default)} }`
+    // resolver as chaves de composição de schemas aqui, para não ter de repetir este código na função de parsing de cada tipo
+    let schemaComp_keys = Object.keys(json.type[type]).filter(x => ["allOf","anyOf","oneOf","not"].includes(x))
+    for (let i = 0; i < schemaComp_keys.length; i++) {
+        let key = schemaComp_keys[i]
+        let subschema = parseSchemaComposition(json.type[type][key], key)
+        delete json.type[type][key]
+        extendSchema(json.type[type], subschema, type)
+    }
+
+    if ("const" in json.type[type]) return predefinedValue(json.type[type].const)
+    if ("enum" in json.type[type]) return predefinedValue(json.enum)
+    if ("default" in json.type[type]) {
+        let keys = Object.keys(json.type[type])
+        if (keys.length == 1 || (type == "number" && keys.length == 2 && keys.includes("integer"))) return predefinedValue(json.type[type].default)
+    }
 
     if (type == "object") value = parseObjectType(clone(json.type.object), false, depth)
     else {
@@ -64,58 +78,6 @@ function parseType(json, depth) {
     }
 
     return value
-}
-
-function extendNumericSchema(json, schema) {
-    if ("const" in schema) json.const = schema.const
-    else if ("enum" in schema) json.enum = schema.enum
-    else {
-        if ("default" in schema) json.default = schema.default
-        let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = schema
-
-        if (multipleOf !== undefined) {
-            if ("multipleOf" in json) json.multipleOf = json.multipleOf.concat(multipleOf.filter(x => !json.multipleOf.includes(x)))
-            else json.multipleOf = multipleOf
-        }
-
-        if (minimum !== undefined) {
-            if ("minimum" in json) {
-                if (minimum > json.minimum) json.minimum = minimum
-            } 
-            else if ("exclusiveMinimum" in json) {
-                if (minimum > json.exclusiveMinimum) {json.minimum = minimum; delete json.exclusiveMinimum}
-            }
-            else json.minimum = minimum
-        }
-        else if (exclusiveMinimum !== undefined) {
-            if ("minimum" in json) {
-                if (exclusiveMinimum >= json.minimum) {json.exclusiveMinimum = exclusiveMinimum; delete json.minimum}
-            } 
-            else if ("exclusiveMinimum" in json) {
-                if (exclusiveMinimum > json.exclusiveMinimum) json.exclusiveMinimum = exclusiveMinimum
-            }
-            else json.exclusiveMinimum = exclusiveMinimum
-        }
-
-        if (maximum !== undefined) {
-            if ("maximum" in json) {
-                if (maximum < json.maximum) json.maximum = maximum
-            } 
-            else if ("exclusiveMaximum" in json) {
-                if (maximum < json.exclusiveMaximum) {json.maximum = maximum; delete json.exclusiveMaximum}
-            }
-            else json.maximum = maximum
-        }
-        else if (exclusiveMaximum !== undefined) {
-            if ("maximum" in json) {
-                if (exclusiveMaximum <= json.maximum) {json.exclusiveMaximum = exclusiveMaximum; delete json.maximum}
-            } 
-            else if ("exclusiveMaximum" in json) {
-                if (exclusiveMaximum < json.exclusiveMaximum) json.exclusiveMaximum = exclusiveMaximum
-            }
-            else json.exclusiveMaximum = exclusiveMaximum
-        }
-    }
 }
 
 // calcular o mínimo múltiplo comum de 2+ números
@@ -144,12 +106,6 @@ function gcd_two_numbers(x, y) {
 }
 
 function parseNumericType(json) {
-    if ("oneOf" in json) {
-        let subschema = parseSchemaComposition(json.oneOf, "oneOf")
-        delete json.oneOf
-        extendNumericSchema(json, subschema)
-    }
-
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
     if (multipleOf === undefined) multipleOf = [1]
     else if ("integer" in json) multipleOf.push(1)
@@ -164,6 +120,9 @@ function parseNumericType(json) {
 
     if (minimum !== undefined) min = minimum
     if (exclusiveMinimum !== undefined) min = exclusiveMaximum + (any_frac ? 0.0000000001 : 1)
+
+    // só acontece se o user fizer constraints inválidos com as chaves de composição de schemas
+    if (min > max) max = null
 
     // mínimo múltiplo comum de todos os multipleOf
     let lcm = multipleOf.length == 1 ? multipleOf[0] : lcm_n_numbers(multipleOf)
@@ -230,6 +189,9 @@ function parseStringType(json) {
 
     let min = "minLength" in json ? json.minLength : 0
     let max = "maxLength" in json ? json.maxLength : min+100
+
+    // só acontece se o user fizer constraints inválidos com as chaves de composição de schemas
+    if (min > max) max = min+100
     return `'{{stringOfSize(${min}, ${max})}}'`
 }
 

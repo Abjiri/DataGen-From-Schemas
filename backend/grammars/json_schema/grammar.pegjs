@@ -41,7 +41,7 @@
   function checkSchema(s) {
     s = determineType(s)
     return checkKeysByType(s) && checkRangeKeywords(s) && checkDependentRequired(s) && checkDependentSchemas(s) && checkRequiredProps(s) && checkMaxProperties(s) && 
-           checkContains(s) && checkArrayLength(s) && checkEnumArray(s) && checkConstType(s) && checkIfThenElse(s) && checkContentSchema(s)
+           checkContains(s) && checkArrayLength(s) && checkEnumArray(s) && checkPredefinedValueType(s) && checkIfThenElse(s) && checkContentSchema(s)
   }
 
   // formatar os dados para a estrutura intermédia pretendida
@@ -60,7 +60,7 @@
 
     for (let k in obj) {
       if (k == "const" || k == "default") {
-        let v_type = getValueType(obj[k])
+        let v_type = getValueType(obj[k][0])
         if (!(v_type in schema.type)) schema.type[v_type] = {}
         schema.type[v_type][k] = obj[k]
       }
@@ -287,7 +287,7 @@
           for (let j = 0; j < obj.type.length; j++) {
             if (obj.type[j] == "array" && Array.isArray(obj.enum[i])) {valid = true; break}
             else if (obj.type[j] == "null" && obj.enum[i] === null) {valid = true; break}
-            //else if (obj.type[j] == "integer" && Number.isInteger(obj.enum[i])) {valid = true; break}
+            else if (obj.type[j] == "integer" && Number.isInteger(obj.enum[i])) {valid = true; break}
             else if (typeof obj.enum[i] == obj.type[j]) {valid = true; break}
           }
 
@@ -298,19 +298,25 @@
     return true
   }
 
-  // verificar se o valor da chave 'const' é do tipo correto
-  function checkConstType(obj) {
-    if (hasAll("const", obj) && obj.type.length > 0) {
-      let valid = false
+  // verificar se o valor da chave 'const' e/ou 'default' é do tipo correto
+  function checkPredefinedValueType(obj) {
+    let value = []
+    if (hasAll("const", obj)) value.push({k: "const", v: obj.const[0]})
+    if (hasAll("default", obj)) value.push({k: "default", v: obj.default[0]})
 
-      for (let j = 0; j < obj.type.length; j++) {
-        if (obj.type[j] == "array" && Array.isArray(obj.const)) {valid = true; break}
-        else if (obj.type[j] == "null" && obj.const === null) {valid = true; break}
-        //else if (obj.type[j] == "integer" && Number.isInteger(obj.const)) {valid = true; break}
-        else if (typeof obj.const == obj.type[j]) {valid = true; break}
+    if (value.length > 0 && obj.type.length > 0) {
+      for (let i = 0; i < value.length; i++) {
+        let valid = false
+
+        for (let j = 0; j < obj.type.length; j++) {
+          if (obj.type[j] == "array" && Array.isArray(value[i].v)) {valid = true; break}
+          else if (obj.type[j] == "null" && value[i].v === null) {valid = true; break}
+          else if (obj.type[j] == "integer" && Number.isInteger(value[i].v)) {valid = true; break}
+          else if (typeof value[i].v == obj.type[j]) {valid = true; break}
+        }
+
+        if (!valid) return error(`O valor da chave '${value[i].k}' deve ser do tipo {${obj.type.join(", ")}}, segundo definido pela chave 'type'!`)
       }
-
-      if (!valid) return error(`O valor da chave 'const' deve ser do tipo {${obj.type.join(", ")}}, segundo definido pela chave 'type'!`)
     }
     return true
   }
@@ -469,8 +475,8 @@ type_value = t:type {return [t]} / arr:type_array {return arr}
 type = QM v:$("string" / "number" / "integer" / "object" / "array" / "boolean" / "null") QM {return v}
 
 kw_enum = QM key:"enum" QM name_separator value:array {return {key, value}}
-kw_const = QM key:"const" QM name_separator value:value {return {key, value}}
-kw_default = QM key:"default" QM name_separator value:value {return {key, value}}
+kw_const = QM key:"const" QM name_separator value:value {return {key, value: [value]}}
+kw_default = QM key:"default" QM name_separator value:value {return {key, value: [value]}}
 
 // ---------- Keywords annotation ----------
 
@@ -485,7 +491,7 @@ kws_annotation_booleanValues = QM key:$("readOnly"/"writeOnly"/"deprecated") QM 
 string_keyword = kws_string_length / kw_pattern / kw_format
 
 kws_string_length = QM key:$("minLength"/"maxLength") QM name_separator value:int {return {key, value}}
-kw_pattern = QM key:"pattern" QM name_separator value:string {return {key, value}}
+kw_pattern = QM key:"pattern" QM name_separator value:pattern_string {return {key, value}}
 
 kw_format = QM key:"format" QM name_separator value:format_value {return {key, value}}
 format_value = QM f:("date-time" / "time" / "date" / "duration" / "email" / "idn-email" / "hostname" / "idn-hostname" / "ipv4" / "ipv6"
@@ -681,7 +687,8 @@ int "integer"
 
 // ----- Strings -----
 
-string "string" = QM chars:char* QM {return chars.join("")}
+string "string" = QM str:$char* QM {return str}
+pattern_string = QM str:$[^"]* QM {return str}
 anchor "anchor" = QM value:anchor_value QM {return value}
 schema_id = QM "https://datagen.di.uminho.pt"? id:$("/json-schemas" ("/" [^/"]+)+) QM {return id}
 schema_ref "$ref" = QM "https://datagen.di.uminho.pt"? ref:$("#" ref_segment / ("/json-schemas/" [^/"]+ ref_segment)) QM {if (current_key == "propertyNames") propertyNames_refs.push(ref); return ref}
