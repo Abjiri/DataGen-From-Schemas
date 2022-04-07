@@ -25,7 +25,7 @@ function convert(json) {
 
 function parseJSON(json, depth) {
     // processar refs que tenham sido substítuidas dentro de chaves de composição de schemas
-    structureUndefType(json)
+    if ("undef" in json.type) structureUndefType(json)
 
     let str = parseType(json, depth)
     if (depth==1 && str[0] != "{") str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${str}\n}`
@@ -39,21 +39,14 @@ function parseAllSchemaComposition(json, type) {
 }
 
 function parseSchemaComposition(json, key, type) {
-    switch (key) {
-        case "anyOf":
-            // seleciona um nr aleatório de schemas do tipo em questão
-            let subschemas = getRandomSubarray(json[key], randomize(json[key].length, 1))
-            subschemas.map(s => parseAllSchemaComposition(s, type))
-            delete json[key]
-            subschemas.map(s => extendSchema(json, s, type))
-            break
-        case "oneOf":
-            let subschema = json[key][rand(json[key].length)]
-            parseAllSchemaComposition(subschema, type)
-            delete json[key]
-            extendSchema(json, subschema, type)
-            break
-    }
+    let subschemas
+    if (key == "allOf") subschemas = json[key]
+    if (key == "anyOf") subschemas = getRandomSubarray(json[key], randomize(json[key].length, 1))
+    if (key == "oneOf") subschemas = [json[key][rand(json[key].length)]]
+    
+    subschemas.map(s => parseAllSchemaComposition(s, type))
+    delete json[key]
+    subschemas.map(s => extendSchema(json, s, type))
 }
 
 function getRandomSubarray(arr, size) {
