@@ -123,7 +123,10 @@ function notNumeric(json) {
         json[new_k] = value
     }
 
-    if ("integer" in json) json.integer = false
+    if ("integer" in json) {
+        if (json.integer) json.integer = false
+        else delete json.integer
+    }
     if ("mininum" in json) invertSchema("minimum", "exclusiveMaximum")
     else if ("exclusiveMinimum" in json) invertSchema("exclusiveMinimum", "maximum")
     else if ("maximum" in json) invertSchema("maximum", "exclusiveMinimum")

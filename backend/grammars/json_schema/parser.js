@@ -5929,13 +5929,12 @@ module.exports = /*
             schema.type[v_type][k] = obj[k]
           }
           else if (k == "enum") structureEnum(schema, obj[k])
-          else if (k == "not") structureNot(schema, obj[k])
+          else if (k == "not") structureGeneric(schema, obj[k], k)
           else if (["allOf","anyOf","oneOf"].includes(k)) structureSchemaCompArr(schema, obj[k], k)
-          else if (["if","then","else"].includes(k)) {
-            for (let key in obj[k].type) {
-              if (!(key in schema.type)) schema.type[key] = {}
-              schema.type[key][k] = obj[k].type[key]
-            }
+          else if (k == "if") {
+            structureGeneric(schema, obj[k], k)
+            if ("then" in obj) structureGeneric(schema, obj.then, "then")
+            if ("else" in obj) structureGeneric(schema, obj.else, "else")
           }
           else if (numericKeys.includes(k)) schema.type.number[k] = obj[k]
           else if (stringKeys.includes(k)) schema.type.string[k] = obj[k]
@@ -6053,10 +6052,10 @@ module.exports = /*
       }
 
       // de forma a manter a convenção de ter todas as chaves dentro de um tipo, coloca o not original em cada um dos tipos permitidos na sua schema, uma vez que separá-los pode levar a resultados incorretos 
-      function structureNot(schema, notSchema) {
-        for (let type in notSchema.type) {
+      function structureGeneric(schema, subschema, key) {
+        for (let type in subschema.type) {
           if (!(type in schema.type)) schema.type[type] = {}
-          schema.type[type].not = notSchema.type[type]
+          schema.type[type][key] = subschema.type[type]
         }
       }
 

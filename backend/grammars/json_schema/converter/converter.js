@@ -35,16 +35,23 @@ function parseJSON(json, depth) {
 
 // processa as chaves de composição de schemas pela ordem que aparecem no objeto
 function parseAllSchemaComposition(json, type) {
-    let schemaComp_keys = Object.keys(json).filter(x => ["allOf","anyOf","oneOf","not"].includes(x))
+    let schemaComp_keys = Object.keys(json).filter(x => ["allOf","anyOf","oneOf","not","if"].includes(x))
     for (let i = 0; i < schemaComp_keys.length; i++) parseSchemaComposition(json, schemaComp_keys[i], type)
 }
 
 function parseSchemaComposition(json, key, type) {
-    let subschemas
+    let subschemas = []
     if (key == "allOf") subschemas = json[key]
     if (key == "anyOf") subschemas = getRandomSubarray(json[key], randomize(json[key].length, 1))
     if (key == "oneOf") subschemas = [json[key][rand(json[key].length)]]
     if (key == "not") subschemas = [json[key]]
+    if (key == "if") {
+        if (Math.random() > 0.5) { if ("then" in json) subschemas = [json[key], json.then] }
+        else if ("else" in json) subschemas = [{not: json[key]}, json.else]
+
+        if ("then" in json) delete json.then
+        if ("else" in json) delete json.else
+    }
     
     subschemas.map(s => parseAllSchemaComposition(s, type))
     subschemas.map(s => extendSchema(json, s, type, key))
