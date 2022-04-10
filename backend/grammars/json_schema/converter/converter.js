@@ -18,6 +18,7 @@ let randomize = (max,min) => Math.floor(Math.random() * ((max+1) - min) + min)
 let rand = len => Math.floor(Math.random()*len)
 // clonar um valor
 let clone = x => JSON.parse(JSON.stringify(x))
+let a = x => console.log(JSON.stringify(x))
 
 function convert(json) {
     return "<!LANGUAGE pt>\n" + parseJSON(json, 1)
@@ -43,10 +44,11 @@ function parseSchemaComposition(json, key, type) {
     if (key == "allOf") subschemas = json[key]
     if (key == "anyOf") subschemas = getRandomSubarray(json[key], randomize(json[key].length, 1))
     if (key == "oneOf") subschemas = [json[key][rand(json[key].length)]]
+    if (key == "not") subschemas = [json[key]]
     
     subschemas.map(s => parseAllSchemaComposition(s, type))
+    subschemas.map(s => extendSchema(json, s, type, key))
     delete json[key]
-    subschemas.map(s => extendSchema(json, s, type))
 }
 
 function getRandomSubarray(arr, size) {
@@ -63,13 +65,13 @@ function getRandomSubarray(arr, size) {
 function parseType(json, depth) {
     let predefinedValue = arr => `gen => { return gen.random(...${JSON.stringify(arr)}) }`
     let possibleTypes = Object.keys(json.type)
+
     //selecionar um dos vários tipos possíveis aleatoriamente, para produzir
     let type = possibleTypes[rand(possibleTypes.length)]
     let value
 
     // resolver as chaves de composição de schemas aqui, para não ter de repetir este código na função de parsing de cada tipo
     parseAllSchemaComposition(json.type[type], type)
-    console.log(json.type[type])
 
     if ("const" in json.type[type]) return predefinedValue(json.type[type].const)
     if ("enum" in json.type[type]) return predefinedValue(json.enum)
@@ -119,10 +121,13 @@ function gcd_two_numbers(x, y) {
   return x;
 }
 
-function parseNumericType(json) {
-    let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
-    if (multipleOf === undefined) multipleOf = [1]
-    else if ("integer" in json) multipleOf.push(1)
+function parseNumericType(json, depth) {
+    let {multipleOf, notMultipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
+    let integer = "integer" in json && json.integer
+    let notInteger = "integer" in json && !json.integer
+
+    if (multipleOf === undefined) multipleOf = notInteger ? [0.4] : [1]
+    else if (integer) multipleOf.push(1)
 
     let any_frac = multipleOf.reduce((a,c) => a || (c%1 != 0), false)
     let max = null, min = null
@@ -133,7 +138,7 @@ function parseNumericType(json) {
     if (exclusiveMaximum !== undefined) max = exclusiveMaximum - (any_frac ? 0.0000000001 : 1)
 
     if (minimum !== undefined) min = minimum
-    if (exclusiveMinimum !== undefined) min = exclusiveMaximum + (any_frac ? 0.0000000001 : 1)
+    if (exclusiveMinimum !== undefined) min = exclusiveMinimum + (any_frac ? 0.0000000001 : 1)
 
     // só acontece se o user fizer constraints inválidos com as chaves de composição de schemas
     if (min > max) max = null
@@ -145,7 +150,7 @@ function parseNumericType(json) {
       upper = Math.floor(max/lcm)
       lower = Math.ceil(min/lcm)
       
-      if (any_frac && "integer" in json) {
+      if (any_frac && integer) {
         let decimal_part = parseFloat((lcm % 1).toFixed(4))
 
         for (let i = lower; i <= upper; i++) {
@@ -162,9 +167,43 @@ function parseNumericType(json) {
       upper = lower + 100
     }
 
-    if (!Object.keys(json).length) return `'{{${"integer" in json ? "integer" : "float"}(-1000,1000)}}'`
-    else if (upper === null) return `'{{multipleOf(${lcm})}}'`
-    else if (int_multiples.length > 0) return `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${lcm} }`
+    // se não tiver quaisquer chaves de restrição, gera um inteiro/float aleatório
+    if (!Object.keys(json).length || (Object.keys(json).length == 1 && "integer" in json)) return `'{{${integer ? "integer" : "float"}(-1000,1000)}}'`
+    // se não tiver chaves de range, gera um múltiplo aleatório da chave 'multipleOf' ou, se não tiver, 1
+    else if (upper === null) {
+        if ("notMultipleOf" in json && "multipleOf" in json) return `gen => {
+${indent(depth+1)}let multiples = gen.range(1,100).filter(i => ${JSON.stringify(notMultipleOf)}.every(notMult => ${lcm}*i % notMult != 0)).map(x => ${lcm}*x)
+${indent(depth+1)}let notInteger = ${notInteger}, final_multiples = !multiples.length ? gen.range(1,100).map(x => ${lcm}*x) : multiples
+${indent(depth+1)}if (notInteger && final_multiples.some(m => m%1 != 0)) final_multiples = final_multiples.filter(m => m%1 != 0)
+${indent(depth+1)}return gen.random(...final_multiples)
+${indent(depth)}}`
+        else if ("notMultipleOf" in json) return `gen => {
+${indent(depth+1)}for (let i = 0; i < 100; i++) {
+${indent(depth+2)}let num = gen.${integer ? "integer" : "float"}(-1000, 1000)
+${indent(depth+2)}if (${JSON.stringify(notMultipleOf)}.every(x => num%x != 0) || i==99) return num
+${indent(depth+1)}}
+${indent(depth)}}`
+        else if (notInteger && lcm%1 != 0) return `gen => {
+${indent(depth+1)}let multiples = gen.range(1,100).map(x => ${lcm}*x).filter(x => x%1 != 0)
+${indent(depth+1)}return gen.random(...multiples)
+${indent(depth)}}`
+        return `'{{multipleOf(${lcm})}}'`
+    }
+    // se quiser um inteiro entre certos limites, determina os múltiplos possíveis no intervalo de valores e gera um deles aleatoriamente
+    else if (int_multiples.length > 0) {
+        if ("notMultipleOf" in json) return `gen => { 
+${indent(depth+1)}let multiples = ${JSON.stringify(int_multiples)}.map(x => ${lcm}*x)
+${indent(depth+1)}let final_multiples = multiples.filter(m => ${JSON.stringify(notMultipleOf)}.every(x => m%x != 0))
+${indent(depth+1)}return !final_multiples.length ? gen.random(...multiples) : gen.random(...final_multiples)
+${indent(depth)}}`
+        return `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${lcm} }`
+    }
+    // se quiser um número entre certos limites, determina os múltiplos possíveis no intervalo de valores e gera um deles aleatoriamente
+    if ("notMultipleOf" in json) return `gen => {
+${indent(depth+1)}let multiples = ${lower < upper ? `gen.range(${lower},${upper+1})` : `[${lower}]`}.map(x => x*${lcm})
+${indent(depth+1)}let final_multiples = multiples.filter(m => ${JSON.stringify(notMultipleOf)}.every(x => m%x != 0))
+${indent(depth+1)}return !final_multiples.length ? gen.random(...multiples) : gen.random(...final_multiples)
+${indent(depth)}}`
     return `gen => { return gen.integer(${lower},${upper}) * ${lcm} }`
 }
 

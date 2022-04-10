@@ -46,7 +46,12 @@
 
   // formatar os dados para a estrutura intermédia pretendida
   function structureSchemaData(obj) {
-    if (obj === null) obj = {type: ["string","integer","number","boolean","null","array","object"]}
+    if (obj === null) {
+      if (current_key == "not") return error("A schema da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
+      else obj = {type: ["string","integer","number","boolean","null","array","object"]}
+    }
+    else if ("$ref" in obj && Object.keys(obj).length > 1) return error("O DataGen From Schemas não permite que uma schema com uma '$ref' possua qualquer outra chave!")
+
     let schema = {type: {}}
 
     for (let k of obj.type) {
@@ -56,15 +61,17 @@
       }
       else schema.type[k] = {}
     }
-    delete obj.type
 
     for (let k in obj) {
-      if (k == "const" || k == "default") {
+      if (k == "type") ;
+      else if (k == "$ref") schema[k] = obj[k]
+      else if (k == "const" || k == "default") {
         let v_type = getValueType(obj[k][0])
         if (!(v_type in schema.type)) schema.type[v_type] = {}
         schema.type[v_type][k] = obj[k]
       }
       else if (k == "enum") structureEnum(schema, obj[k])
+      else if (k == "not") structureNot(schema, obj[k])
       else if (["allOf","anyOf","oneOf"].includes(k)) structureSchemaCompArr(schema, obj[k], k)
       else if (["if","then","else"].includes(k)) {
         for (let key in obj[k].type) {
@@ -76,7 +83,42 @@
       else if (stringKeys.includes(k)) schema.type.string[k] = obj[k]
       else if (objectKeys.includes(k)) schema.type.object[k] = obj[k]
       else if (arrayKeys.includes(k)) schema.type.array[k] = obj[k]
-      else schema[k] = obj[k]
+    }
+    
+    // se um tipo presente na schema do not não tiver nenhuma chave específica, esse tipo é proibido
+    if ("not" in obj) {
+      for (let t in obj.not.type) {
+        let keys = Object.keys(obj.not.type[t])
+
+        if (!keys.length) delete schema.type[t]
+        else if (t == "number" && keys.length == 1 && keys.includes("integer")) {
+          if ("number" in schema.type && "integer" in schema.type.number) {
+            if (obj.type.includes("number")) delete schema.type[t].integer
+            else delete schema.type[t]
+          }
+        }
+      }
+    }
+    
+    let schemaComp_keys = Object.keys(obj).filter(k => ["allOf","anyOf","oneOf"].includes(k))
+
+    // para cumprir uma chave de composição de schemas, é necessário que o tipo gerado seja um dos permitidos pelas suas subschemas
+    // logo, elimina-se todos os outros presentes na estrutura intermédia
+    schemaComp_keys.map(k => {
+      let allowedTypes = obj[k].reduce((a,c) => {
+        let type = Object.keys(c.type)[0]
+        if (!a.includes(type)) a.push(type)
+        return a
+      }, [])
+
+      for (let t in schema.type) {
+        if (!allowedTypes.includes(t)) delete schema.type[t]
+      }
+    })
+    
+    // verificar se é possível cumprir as chaves de composição de schemas presentes
+    for (let i = 0; i < schemaComp_keys.length; i++) {
+      if (!checkKeyExistence(obj, schema, schemaComp_keys[i], 0)) return error(`Com a schema em questão, é impossível cumprir a chave '${schemaComp_keys[i]}', dado que não é possível gerar nenhum dos tipos de dados das suas subschemas!`)
     }
 
     // verificar a coerência das chaves numéricas
@@ -86,11 +128,53 @@
     }
 
     if (!Object.keys(schema.type).length) {
-      // se a schema só tiver um subset das chaves {$id, $schema, $anchor, $defs}, pode gerar qualquer tipo de valor
-      if (!Object.keys(schema).includes("$ref")) schema.type = {string: {}, number: {}, boolean: {}, null: {}, array: {}, object: {}}
-      else delete schema.type
+      // as seguintes chaves são as não tipadas, segunda a estrutura intermédia desta gramática
+      // se as chaves da schema forem um subset destas, então inicialmente é possível gerar qualquer tipo de dados (que pode ser restringido pela 'not')
+      if (Object.keys(obj).every(k => ["$id","$schema","$anchor","$defs","not"].includes(k) || (k == "type" && !obj[k].length)))
+        obj.type = ["string","number","boolean","null","array","object"]
+
+      // a schema é um subset das chaves {$id, $schema, $anchor, $ref, $defs}
+      if (Object.keys(obj).every(k => /^$/.test(k))) {
+        // se a schema só tiver um subset das chaves {$id, $schema, $anchor, $defs}, pode gerar qualquer tipo de valor
+        if (!Object.keys(schema).includes("$ref")) schema.type = {string: {}, number: {}, boolean: {}, null: {}, array: {}, object: {}}
+        // se tiver $ref, ainda será resolvida mais tarde
+        else delete schema.type
+      }
+
+      // se tiver um 'not', é necessário verificar se está a proibir todos os tipos geráveis ou não
+      if ("not" in obj) {
+        let allowedTypes = obj.type.filter(k => !(k in obj.not.type))
+        if (allowedTypes.includes("integer") && "number" in obj.not.type) allowedTypes.splice(allowedTypes.indexOf("integer"), 1)
+
+        if (!allowedTypes.length) return error(`Não é possível gerar nenhum valor a partir da schema em questão!`)
+        else allowedTypes.map(k => schema.type[k] = {})
+      }
     }
+
     return schema
+  }
+
+  // verificar se uma chave de composição de schema existe na estrutura intermédia, ou se foi completamente elimanada por uma chave 'not'
+  function checkKeyExistence(json, schema, key, depth) {
+  	let keys = Array.isArray(schema) ? [...Array(schema.length).keys()] : Object.keys(schema)
+	
+  	for (let i = 0; i < keys.length; i++) {
+    	let k = keys[i]
+    	if (k == key) return true
+      else if (typeof schema[k] === 'object' && schema[k] !== null && checkKeyExistence(json, schema[k], key, depth+1)) return true
+	  }
+
+    // se a chave não estiver presente, é possível que seja válida na mesma se possuir uma subschema vazia de um certo tipo e esse tipo for gerável
+    if (!depth) {
+      let allowedTypes = json[key].reduce((a,c) => {
+        let type = Object.keys(c.type)[0]
+        if (!Object.keys(c.type[type]).length && !a.includes(type)) a.push(type)
+        return a
+      }, [])
+
+      if (allowedTypes.some(x => x in schema.type)) return true
+    }
+	  else return false
   }
 
   // formatar um enum para a estrutura intermédia pretendida
@@ -107,6 +191,14 @@
     for (let type in by_types) {
       if (!(type in schema.type)) schema.type[type] = {}
       schema.type[type].enum = by_types[type]
+    }
+  }
+
+  // de forma a manter a convenção de ter todas as chaves dentro de um tipo, coloca o not original em cada um dos tipos permitidos na sua schema, uma vez que separá-los pode levar a resultados incorretos 
+  function structureNot(schema, notSchema) {
+    for (let type in notSchema.type) {
+      if (!(type in schema.type)) schema.type[type] = {}
+      schema.type[type].not = notSchema.type[type]
     }
   }
 
@@ -578,7 +670,7 @@ kw_contentSchema = QM key:"contentSchema" QM name_separator value:schema_object 
 schemaComposition_keyword = kws_combineSchemas / kw_notSchema
 
 kws_combineSchemas = QM key:$("allOf"/"anyOf"/"oneOf") QM name_separator value:schema_array &{return checkCompositionTypes(key, value)} {return {key, value}}
-kw_notSchema = QM key:"not" QM name_separator value:schema_object {return {key, value}}
+kw_notSchema = QM key:$("not" {current_key = "not"}) QM name_separator value:schema_object {current_key = ""; return {key, value}}
 
 // ---------- Keywords conditional subschemas ----------
 
@@ -605,7 +697,7 @@ kw_defs = QM key:"$defs" QM name_separator value:object_schemaMap {return {key, 
 // ----- Objetos -----
 
 schema_object
-  = false / true { return structureSchemaData(null) } /
+  = true { return structureSchemaData(null) } /
     (ws "{" ws {depth.push(0); refs.push([]); anchors.push({})}) members:(
       head:keyword tail:(value_separator m:keyword { return m; })* {
         var result = {};
@@ -711,7 +803,7 @@ type_array "array of JSON types"
 // ----- Números -----
 
 number "number" = "-"? int frac? { return parseFloat(text()); }
-positiveNumber "positive number" = int frac? { return parseFloat(text()); }
+positiveNumber "positive number" = ("0" frac / [1-9] [0-9]* frac?) { return parseFloat(text()); }
 
 exp = [eE] ("-"/"+")? [0-9]+
 frac = "." [0-9]+

@@ -1,4 +1,10 @@
-function extendSchema(json, schema, type) {
+function extendSchema(json, schema, type, key) {
+    if (key == "not") {
+        switch (type) {
+            case "number": notNumeric(schema); break
+        }
+    }
+    
     if ("const" in schema) extendPredefinedValue(json, schema, "const")
     else if ("enum" in schema) extendPredefinedValue(json, schema, "enum")
     else {
@@ -39,12 +45,16 @@ function extendString(json, schema) {
 }
 
 function extendNumeric(json, schema) {
-    let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = schema
-    if ("integer" in schema) json.integer = true
+    let {multipleOf, notMultipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = schema
+    if ("integer" in schema) json.integer = schema.integer
 
     if (multipleOf !== undefined) {
         if ("multipleOf" in json) json.multipleOf = json.multipleOf.concat(multipleOf.filter(x => !json.multipleOf.includes(x)))
         else json.multipleOf = multipleOf
+    }
+    if (notMultipleOf !== undefined) {
+        if ("notMultipleOf" in json) json.notMultipleOf = json.notMultipleOf.concat(notMultipleOf.filter(x => !json.notMultipleOf.includes(x)))
+        else json.notMultipleOf = notMultipleOf
     }
 
     if (minimum !== undefined) {
@@ -84,6 +94,40 @@ function extendNumeric(json, schema) {
         }
         else json.exclusiveMaximum = exclusiveMaximum
     }
+}
+
+function notNumeric(json) {
+    let invertSchema = (old_k, new_k) => {
+        let value = json[old_k]
+        Object.keys(json).map(k => delete json[k])
+        json[new_k] = value
+    }
+
+    if ("integer" in json) json.integer = false
+
+    if ("mininum" in json) invertSchema("minimum", "exclusiveMaximum")
+    else if ("exclusiveMinimum" in json) invertSchema("exclusiveMinimum", "maximum")
+    else if ("maximum" in json) invertSchema("maximum", "exclusiveMinimum")
+    else if ("exclusiveMaximum" in json) invertSchema("exclusiveMaximum", "minimum")
+    else {
+        let {multipleOf, notMultipleOf} = json
+
+        if (multipleOf !== undefined && notMultipleOf !== undefined) {
+            let temp = multipleOf
+            json.multipleOf = notMultipleOf
+            json.notMultipleOf = temp
+        }
+        else if (multipleOf !== undefined) {
+            json.notMultipleOf = multipleOf
+            delete json.multipleOf
+        }
+        else if (notMultipleOf !== undefined) {
+            json.multipleOf = notMultipleOf
+            delete json.notMultipleOf
+        }
+    }
+
+    return json
 }
 
 module.exports = { extendSchema }
