@@ -2,6 +2,7 @@ function extendSchema(json, schema, type, key) {
     if (key == "not") {
         switch (type) {
             case "number": notNumeric(schema); break
+            case "string": notString(schema); break
         }
     }
     
@@ -24,23 +25,30 @@ function extendPredefinedValue(json, schema, key) {
 
 function extendString(json, schema) {
     if ("pattern" in schema) json.pattern = schema.pattern
-    else if ("format" in schema) json.format = schema.format
-    else {
-        let {minLength, maxLength} = schema
+    if ("format" in schema) json.format = schema.format
+    if ("notFormat" in schema) {
+        if ("notFormat" in json) json.notFormat = json.notFormat.concat(schema.notFormat)
+        else json.notFormat = schema.notFormat
+    }
 
-        if (minLength != undefined) {
-            if ("minLength" in json) {
-                if (minLength > json.minLength) json.minLength = minLength
-            } 
-            else json.minLength = minLength
-        }
+    let {minLength, maxLength} = schema
 
-        if (maxLength != undefined) {
-            if ("maxLength" in json) {
-                if (maxLength < json.maxLength) json.maxLength = maxLength
-            } 
-            else json.maxLength = maxLength
-        }
+    if (minLength != undefined) {
+        if ("minLength" in json) {
+            if (minLength > json.minLength) json.minLength = minLength
+        } 
+        else json.minLength = minLength
+
+        if ("maxLength" in json && json.maxLength < json.minLength) delete json.maxLength
+    }
+
+    if (maxLength != undefined) {
+        if ("maxLength" in json) {
+            if (maxLength < json.maxLength) json.maxLength = maxLength
+        } 
+        else json.maxLength = maxLength
+
+        if ("minLength" in json && json.minLength > json.maxLength) delete json.minLength
     }
 }
 
@@ -116,7 +124,6 @@ function notNumeric(json) {
     }
 
     if ("integer" in json) json.integer = false
-
     if ("mininum" in json) invertSchema("minimum", "exclusiveMaximum")
     else if ("exclusiveMinimum" in json) invertSchema("exclusiveMinimum", "maximum")
     else if ("maximum" in json) invertSchema("maximum", "exclusiveMinimum")
@@ -138,8 +145,20 @@ function notNumeric(json) {
             delete json.notMultipleOf
         }
     }
-
     return json
+}
+
+function notString(json) {
+    if ("pattern" in json) json.pattern = `^((?!(${json.pattern})).){${"minLength" in json ? json.minLength : 10},${"maxLength" in json ? json.maxLength : 30}}`
+    if ("format" in json) json.notFormat = [json.format]
+    if ("maxLength" in json) {
+        json.minLength = json.maxLength+1
+        delete json.maxLength
+    }
+    else if ("minLength" in json) {
+        json.maxLength = json.minLength - (!json.minLength ? 0 : 1)
+        delete json.minLength
+    }
 }
 
 module.exports = { extendSchema }

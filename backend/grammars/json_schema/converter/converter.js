@@ -210,6 +210,7 @@ ${indent(depth)}}`
 function parseStringType(json) {
     if ("pattern" in json) return `'{{pattern("${json.pattern}")}}'`
 
+    if ("notFormat" in json && "format" in json && json.notFormat.includes(json.format)) {console.log("yo"); delete json.format}
     if ("format" in json) {
         let minDate = {date: ["01/01/1950", "00:00:00"], neg: false}
         let defaultList = {max: 1, min: 1}
