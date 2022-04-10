@@ -65,6 +65,9 @@ function extendNumeric(json, schema) {
             if (minimum > json.exclusiveMinimum) {json.minimum = minimum; delete json.exclusiveMinimum}
         }
         else json.minimum = minimum
+
+        if ("maximum" in json && json.minimum > json.maximum) delete json.maximum
+        else if ("exclusiveMaximum" in json && json.minimum >= json.exclusiveMaximum) delete json.exclusiveMaximum
     }
     else if (exclusiveMinimum !== undefined) {
         if ("minimum" in json) {
@@ -74,6 +77,9 @@ function extendNumeric(json, schema) {
             if (exclusiveMinimum > json.exclusiveMinimum) json.exclusiveMinimum = exclusiveMinimum
         }
         else json.exclusiveMinimum = exclusiveMinimum
+
+        if ("maximum" in json && json.exclusiveMinimum >= json.maximum) delete json.maximum
+        else if ("exclusiveMaximum" in json && json.exclusiveMinimum >= json.exclusiveMaximum) delete json.exclusiveMaximum
     }
 
     if (maximum !== undefined) {
@@ -84,6 +90,9 @@ function extendNumeric(json, schema) {
             if (maximum < json.exclusiveMaximum) {json.maximum = maximum; delete json.exclusiveMaximum}
         }
         else json.maximum = maximum
+
+        if ("minimum" in json && json.maximum < json.minimum) delete json.minimum
+        else if ("exclusiveMinimum" in json && json.maximum <= json.exclusiveMinimum) delete json.exclusiveMinimum
     }
     else if (exclusiveMaximum !== undefined) {
         if ("maximum" in json) {
@@ -93,6 +102,9 @@ function extendNumeric(json, schema) {
             if (exclusiveMaximum < json.exclusiveMaximum) json.exclusiveMaximum = exclusiveMaximum
         }
         else json.exclusiveMaximum = exclusiveMaximum
+
+        if ("minimum" in json && json.exclusiveMaximum <= json.minimum) delete json.minimum
+        else if ("exclusiveMinimum" in json && json.exclusiveMaximum <= json.exclusiveMinimum) delete json.exclusiveMinimum
     }
 }
 
