@@ -74,7 +74,7 @@ function parseType(json, depth) {
     parseAllSchemaComposition(json.type[type], type)
 
     if ("const" in json.type[type]) return predefinedValue(json.type[type].const)
-    if ("enum" in json.type[type]) return predefinedValue(json.enum)
+    if ("enum" in json.type[type]) return predefinedValue(json.type[type].enum)
     if ("default" in json.type[type]) {
         let keys = Object.keys(json.type[type])
         if (keys.length == 1 || (type == "number" && keys.length == 2 && keys.includes("integer"))) return predefinedValue(json.type[type].default)

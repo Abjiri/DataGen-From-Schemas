@@ -697,7 +697,7 @@ kw_defs = QM key:"$defs" QM name_separator value:object_schemaMap {return {key, 
 // ----- Objetos -----
 
 schema_object
-  = true { return structureSchemaData(null) } /
+  = false / true { return structureSchemaData(null) } /
     (ws "{" ws {depth.push(0); refs.push([]); anchors.push({})}) members:(
       head:keyword tail:(value_separator m:keyword { return m; })* {
         var result = {};
