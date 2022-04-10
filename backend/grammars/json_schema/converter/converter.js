@@ -235,7 +235,8 @@ function parseStringType(json) {
             case "uri-reference": case "iri-reference": return `'{{pattern("((https?:\\/\\/(www\\.))|\/)[-a-zA-Z0-9@:%._]{2,32}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%_]{2,32})")}}'`
             case "uri-template": return `'{{pattern("https?:\\/\\/(www\\.)([-a-zA-Z0-9@:%._]{2,8}({[a-zA-Z]{3,10}})){1,5}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%_]{2,32})")}}'`
 
-            case "json-pointer": case "relative-json-pointer": return ""
+            case "json-pointer": return "https://datagen.di.uminho.pt/json-schemas/"
+            case "relative-json-pointer": return "/json-schemas/"
 
             case "regex": return `'{{regex()}}'`
         }
