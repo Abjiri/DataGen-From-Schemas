@@ -5908,7 +5908,7 @@ module.exports = /*
           if (current_key == "not") return error("A schema da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
           else obj = {type: ["string","integer","number","boolean","null","array","object"]}
         }
-        else if ("$ref" in obj && Object.keys(obj).length > 1) return error("O DataGen From Schemas não permite que uma schema com uma '$ref' possua qualquer outra chave!")
+        else if ("$ref" in obj && (Object.keys(obj).length > 2 || obj.type.length > 1)) return error("O DataGen From Schemas não permite que uma schema com uma '$ref' possua qualquer outra chave!")
 
         let schema = {type: {}}
 
@@ -5922,7 +5922,6 @@ module.exports = /*
 
         for (let k in obj) {
           if (k == "type") ;
-          else if (k == "$ref") schema[k] = obj[k]
           else if (k == "const" || k == "default") {
             let v_type = getValueType(obj[k][0])
             if (!(v_type in schema.type)) schema.type[v_type] = {}
@@ -5940,6 +5939,7 @@ module.exports = /*
           else if (stringKeys.includes(k)) schema.type.string[k] = obj[k]
           else if (objectKeys.includes(k)) schema.type.object[k] = obj[k]
           else if (arrayKeys.includes(k)) schema.type.array[k] = obj[k]
+          else schema[k] = obj[k]
         }
         
         // se um tipo presente na schema do not não tiver nenhuma chave específica, esse tipo é proibido
