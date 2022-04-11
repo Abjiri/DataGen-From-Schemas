@@ -1,5 +1,5 @@
 function structureUndefType(json) {
-    let schemaComp_keys = Object.keys(json.type.undef).filter(x => ["allOf","anyOf","oneOf","not"].includes(x))
+    let schemaComp_keys = Object.keys(json.type.undef).filter(x => ["allOf","anyOf","oneOf","not","if","then","else"].includes(x))
 
     if (!schemaComp_keys.length && "type" in json.type.undef) json.type = json.type.undef.type
     else {

@@ -5939,7 +5939,7 @@ module.exports = /*
           else if (stringKeys.includes(k)) schema.type.string[k] = obj[k]
           else if (objectKeys.includes(k)) schema.type.object[k] = obj[k]
           else if (arrayKeys.includes(k)) schema.type.array[k] = obj[k]
-          else schema[k] = obj[k]
+          else if (!["then","else"].includes(k)) schema[k] = obj[k]
         }
         
         // se um tipo presente na schema do not não tiver nenhuma chave específica, esse tipo é proibido
@@ -6417,12 +6417,14 @@ module.exports = /*
         let types_map = value.map(x => {
           let keys = "type" in x ? Object.keys(x.type) : []
           keys.map(k => { if (!types.includes(k)) types.push(k) })
-          if ("$ref" in x) types.push("undef")
+          if ("$ref" in x && !types.includes("undef")) types.push("undef")
           return keys
         })
 
-        for (let i = 0; i < types.length; i++) {
-          if (!types_map.every(x => !x.length || x.includes(types[i]))) types.splice(i--, 1)
+        if (!types.includes("undef")) {
+          for (let i = 0; i < types.length; i++) {
+            if (types[i] != "undef" && !types_map.every(x => !x.length || x.includes(types[i]))) types.splice(i--, 1)
+          }
         }
 
         if (!types.length) return error("As schemas da chave 'allOf' devem ter pelo menos um tipo de dados em comum, caso contrário não é possível gerar um valor que respeite todas elas!")
