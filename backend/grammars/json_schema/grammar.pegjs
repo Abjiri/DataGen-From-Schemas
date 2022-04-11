@@ -559,6 +559,7 @@
     let types_map = value.map(x => {
       let keys = "type" in x ? Object.keys(x.type) : []
       keys.map(k => { if (!types.includes(k)) types.push(k) })
+      if ("$ref" in x) types.push("undef")
       return keys
     })
 

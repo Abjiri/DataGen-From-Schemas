@@ -1,19 +1,15 @@
 function structureUndefType(json) {
-  console.log(JSON.stringify(json))
     let schemaComp_keys = Object.keys(json.type.undef).filter(x => ["allOf","anyOf","oneOf","not"].includes(x))
-    console.log("schemaComp_keys:",schemaComp_keys)
 
     if (!schemaComp_keys.length && "type" in json.type.undef) json.type = json.type.undef.type
     else {
         for (let i = 0; i < schemaComp_keys.length; i++) {
             let k = schemaComp_keys[i]
-            console.log(JSON.stringify(json))
             if (["allOf","anyOf","oneOf"].includes(k)) {
               separateByTypes(k, json.type.undef[k])
               structureSchemaCompArr(json, json.type.undef[k], k)
             }
             else structureGeneric(json, json.type.undef[k], k)
-            console.log(JSON.stringify(json))
             delete json.type.undef[k]
         }
         delete json.type.undef
@@ -106,10 +102,29 @@ function structureGeneric(schema, subschema, key) {
     schema.type.undef[key] = subschema
   }
 
-  console.log("subschema:",subschema)
+  let schema_originalTypes = Object.keys(schema.type)
+
+  let subschema_types = Object.keys(subschema.type)
+  if (subschema_types.includes("undef")) structureUndefType(subschema)
+
   for (let type in subschema.type) {
     if (!(type in schema.type)) schema.type[type] = {}
     schema.type[type][key] = subschema.type[type]
+  }
+  
+  // se um tipo presente na schema do not não tiver nenhuma chave específica, esse tipo é proibido
+  if (key == "not") {
+    for (let t in subschema.type) {
+      let keys = Object.keys(subschema.type[t])
+
+      if (!keys.length) delete schema.type[t]
+      else if (t == "number" && keys.length == 1 && keys.includes("integer")) {
+        if ("number" in schema.type && "integer" in schema.type.number) {
+          if (schema_originalTypes.includes("number")) delete schema.type[t].integer
+          else delete schema.type[t]
+        }
+      }
+    }
   }
 }
 
