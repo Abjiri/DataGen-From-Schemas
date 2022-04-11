@@ -50,7 +50,7 @@
       if (current_key == "not") return error("A schema da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
       else obj = {type: ["string","integer","number","boolean","null","array","object"]}
     }
-    else if ("$ref" in obj && (Object.keys(obj).length > 2 || obj.type.length > 1)) return error("O DataGen From Schemas não permite que uma schema com uma '$ref' possua qualquer outra chave!")
+    else if ("$ref" in obj && (Object.keys(obj).length > 2 || obj.type.length > 0)) return error("O DataGen From Schemas não permite que uma schema com uma '$ref' possua qualquer outra chave!")
 
     let schema = {type: {}}
 
@@ -105,13 +105,15 @@
     // logo, elimina-se todos os outros presentes na estrutura intermédia
     schemaComp_keys.map(k => {
       let allowedTypes = obj[k].reduce((a,c) => {
-        let type = Object.keys(c.type)[0]
+        let type = "$ref" in c ? "undef" : Object.keys(c.type)[0]
         if (!a.includes(type)) a.push(type)
         return a
       }, [])
 
-      for (let t in schema.type) {
-        if (!allowedTypes.includes(t)) delete schema.type[t]
+      if (!(allowedTypes.length == 1 && allowedTypes.includes("undef"))) {
+        for (let t in schema.type) {
+          if (!allowedTypes.includes(t)) delete schema.type[t]
+        }
       }
     })
     
@@ -121,23 +123,22 @@
     }
 
     // verificar a coerência das chaves numéricas
-    if ("type" in schema && "number" in schema.type) {
+    if ("number" in schema.type) {
       let valid = checkNumericKeys(schema.type.number, 0)
       if (valid !== true) return valid
     }
 
-    if (!Object.keys(schema.type).length) {
+    if (!Object.keys(schema.type).length) delete schema.type
+    if (!("type" in schema)) {
       // as seguintes chaves são as não tipadas, segunda a estrutura intermédia desta gramática
       // se as chaves da schema forem um subset destas, então inicialmente é possível gerar qualquer tipo de dados (que pode ser restringido pela 'not')
       if (Object.keys(obj).every(k => ["$id","$schema","$anchor","$defs","not"].includes(k) || (k == "type" && !obj[k].length)))
         obj.type = ["string","number","boolean","null","array","object"]
 
       // a schema é um subset das chaves {$id, $schema, $anchor, $ref, $defs}
-      if (Object.keys(obj).every(k => /^$/.test(k))) {
+      if (Object.keys(obj).every(k => /^$/.test(k) || (k == "type" && !obj[k].length))) {
         // se a schema só tiver um subset das chaves {$id, $schema, $anchor, $defs}, pode gerar qualquer tipo de valor
         if (!Object.keys(schema).includes("$ref")) schema.type = {string: {}, number: {}, boolean: {}, null: {}, array: {}, object: {}}
-        // se tiver $ref, ainda será resolvida mais tarde
-        else delete schema.type
       }
 
       // se tiver um 'not', é necessário verificar se está a proibir todos os tipos geráveis ou não
@@ -166,7 +167,7 @@
     // se a chave não estiver presente, é possível que seja válida na mesma se possuir uma subschema vazia de um certo tipo e esse tipo for gerável
     if (!depth) {
       let allowedTypes = json[key].reduce((a,c) => {
-        let type = Object.keys(c.type)[0]
+        let type = "$ref" in c ? "undef" : Object.keys(c.type)[0]
         if (!Object.keys(c.type[type]).length && !a.includes(type)) a.push(type)
         return a
       }, [])
@@ -193,8 +194,12 @@
     }
   }
 
-  // de forma a manter a convenção de ter todas as chaves dentro de um tipo, coloca o not original em cada um dos tipos permitidos na sua schema, uma vez que separá-los pode levar a resultados incorretos 
   function structureGeneric(schema, subschema, key) {
+    if ("$ref" in subschema) {
+      if (!("undef" in schema.type)) schema.type.undef = {}
+      schema.type.undef[key] = subschema
+    }
+
     for (let type in subschema.type) {
       if (!(type in schema.type)) schema.type[type] = {}
       schema.type[type][key] = subschema.type[type]
@@ -207,7 +212,7 @@
     let by_types = arr.reduce((obj,elem) => {
       // se uma schema não tiver tipo, é porque tem apenas um subset das seguintes chaves: $ref, $defs ou chaves de composição de schemas
       // no converter é preciso reprocessar o que estiver neste tipo "undef" - se tem uma ref, terá novos dados, senão pode-se eliminar
-      let el_type = "type" in elem ? Object.keys(elem.type)[0] : "undef"
+      let el_type = "$ref" in elem ? "undef" : Object.keys(elem.type)[0]
       if (!(el_type in obj)) obj[el_type] = []
 
       if (el_type == "undef") obj[el_type].push(elem)

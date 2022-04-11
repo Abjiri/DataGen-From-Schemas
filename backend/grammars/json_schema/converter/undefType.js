@@ -1,15 +1,21 @@
 function structureUndefType(json) {
+  console.log(JSON.stringify(json))
     let schemaComp_keys = Object.keys(json.type.undef).filter(x => ["allOf","anyOf","oneOf","not"].includes(x))
+    console.log("schemaComp_keys:",schemaComp_keys)
 
     if (!schemaComp_keys.length && "type" in json.type.undef) json.type = json.type.undef.type
     else {
         for (let i = 0; i < schemaComp_keys.length; i++) {
             let k = schemaComp_keys[i]
-            separateByTypes(k, json.type.undef[k])
-            structureSchemaCompArr(json, json.type.undef[k], k)
+            console.log(JSON.stringify(json))
+            if (["allOf","anyOf","oneOf"].includes(k)) {
+              separateByTypes(k, json.type.undef[k])
+              structureSchemaCompArr(json, json.type.undef[k], k)
+            }
+            else structureGeneric(json, json.type.undef[k], k)
+            console.log(JSON.stringify(json))
             delete json.type.undef[k]
         }
-    
         delete json.type.undef
     }
 }
@@ -17,33 +23,31 @@ function structureUndefType(json) {
 // separar as subschemas do all/any/oneOf por tipos de dados geráveis em subschemas mais pequenas, de forma a garantir que todos os elementos do all/any/oneOf podem gerar 1 único tipo de dados
 // uma subschema só fica com um tipo se tiver chaves de algum dos tipos de dados primitivos
 function separateByTypes(key, value) {
-  if (key != "not") {
-    for (let i = 0; i < value.length; i++) {
-      if ("type" in value[i]) {
-        let types = Object.keys(value[i].type)
+  for (let i = 0; i < value.length; i++) {
+    if ("type" in value[i]) {
+      let types = Object.keys(value[i].type)
 
-        if (types.includes("undef")) {
-            structureUndefType(value[i])
-            types = Object.keys(value[i].type)
-        }
+      if (types.includes("undef")) {
+          structureUndefType(value[i])
+          types = Object.keys(value[i].type)
+      }
 
-        if (types.length > 1) {
-          let elem = value.splice(i--, 1)[0]
+      if (types.length > 1) {
+        let elem = value.splice(i--, 1)[0]
 
-          for (let j = 0; j < types.length; j++) {
-            // se tiver uma chave dentro de uma chave igual, dar flat à estrutura
-            if (key in elem.type[types[j]] && Object.keys(elem.type[types[j]]).length == 1) {
-              elem.type[types[j]][key].map(x => {
-                let new_schema = {type: {}}
-                new_schema.type[types[j]] = x
-                value.push(new_schema)
-              })
-            }
-            else {
+        for (let j = 0; j < types.length; j++) {
+          // se tiver uma chave dentro de uma chave igual, dar flat à estrutura
+          if (key in elem.type[types[j]] && Object.keys(elem.type[types[j]]).length == 1) {
+            elem.type[types[j]][key].map(x => {
               let new_schema = {type: {}}
-              new_schema.type[types[j]] = elem.type[types[j]]
+              new_schema.type[types[j]] = x
               value.push(new_schema)
-            }
+            })
+          }
+          else {
+            let new_schema = {type: {}}
+            new_schema.type[types[j]] = elem.type[types[j]]
+            value.push(new_schema)
           }
         }
       }
@@ -57,7 +61,7 @@ function structureSchemaCompArr(schema, arr, key) {
   let by_types = arr.reduce((obj,elem) => {
     // se uma schema não tiver tipo, é porque tem apenas um subset das seguintes chaves: $ref, $defs ou chaves de composição de schemas
     // no converter é preciso reprocessar o que estiver neste tipo "undef" - se tem uma ref, terá novos dados, senão pode-se eliminar
-    let el_type = "type" in elem ? Object.keys(elem.type)[0] : "undef"
+    let el_type = "$ref" in elem ? "undef" : Object.keys(elem.type)[0]
     if (!(el_type in obj)) obj[el_type] = []
 
     if (el_type == "undef") obj[el_type].push(elem)
@@ -93,6 +97,19 @@ function structureSchemaCompArr(schema, arr, key) {
         }
         else schema.type[type][key] = by_types[type]
     }
+  }
+}
+
+function structureGeneric(schema, subschema, key) {
+  if ("$ref" in subschema) {
+    if (!("undef" in schema.type)) schema.type.undef = {}
+    schema.type.undef[key] = subschema
+  }
+
+  console.log("subschema:",subschema)
+  for (let type in subschema.type) {
+    if (!(type in schema.type)) schema.type[type] = {}
+    schema.type[type][key] = subschema.type[type]
   }
 }
 
