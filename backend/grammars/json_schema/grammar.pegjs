@@ -124,7 +124,7 @@
 
     // verificar a coerência das chaves numéricas
     if ("number" in schema.type) {
-      let valid = checkNumericKeys(schema.type.number, 0)
+      let valid = checkNumericKeys(schema.type.number)
       if (valid !== true) return valid
     }
 
@@ -147,7 +147,10 @@
         if (allowedTypes.includes("integer") && "number" in obj.not.type) allowedTypes.splice(allowedTypes.indexOf("integer"), 1)
 
         if (!allowedTypes.length) return error(`Não é possível gerar nenhum valor a partir da schema em questão!`)
-        else allowedTypes.map(k => schema.type[k] = {})
+        else {
+          schema.type = {}
+          allowedTypes.map(k => schema.type[k] = {})
+        }
       }
     }
 
@@ -474,12 +477,53 @@
   function checkIfThenElse(obj) {
     if (hasAny(["if","then","else"], obj)) {
       if (!hasAll("if", obj)) return error("Não pode usar as chaves 'then' e/ou 'else' numa schema sem usar a chave 'if'!")
+      else if ("type" in obj.if) {
+        let schema_types = obj.type.map(x => x=="integer" ? "number" : x)
+        let if_types = Object.keys(obj.if.type)
+
+        if (!schema_types.includes("undef") && schema_types.length > 0) {
+          for (let i = 0; i < if_types.length; i++) {
+            if (if_types[i] != "undef" && !schema_types.includes(if_types[i])) {
+              delete obj.if.type[if_types[i]]
+              if_types.splice(i--, 1)
+            }
+          }
+        }
+
+        if (hasAll("then", obj) && "type" in obj.then) {
+          let then_types = Object.keys(obj.then.type)
+
+          if (!if_types.includes("undef") && !then_types.includes("undef")) {
+            if (!then_types.filter(t => if_types.includes(t)).length) return error("As schemas das chaves 'if' e 'then' devem ter pelo menos 1 tipo de dados gerável em comum!")
+
+            for (let i = 0; i < then_types.length; i++) {
+              if (!if_types.includes(then_types[i])) delete obj.then.type[then_types[i]]
+            }
+          }
+        } 
+
+        if (hasAll("else", obj) && "type" in obj.else) {
+          let else_types = Object.keys(obj.else.type)
+
+          if (!if_types.includes("undef") && !else_types.includes("undef")) {
+            if (!else_types.filter(t => if_types.includes(t)).length) return error("As schemas das chaves 'if' e 'else' devem ter pelo menos 1 tipo de dados gerável em comum!")
+
+            for (let i = 0; i < else_types.length; i++) {
+              if (!if_types.includes(else_types[i])) delete obj.else.type[else_types[i]]
+            }
+          }
+        }
+
+        if (hasAll("if", obj) && !hasAny(["then","else"], obj)) delete obj.if
+        if (hasAll("then", obj) && !hasAll("if", obj)) delete obj.then
+        if (hasAll("else", obj) && !hasAll("if", obj)) delete obj.else
+      }
     }
     return true
   }
 
   // verificar que as chaves de tipo numérico são todas coerentes e gerar o modelo da DSL para gerar um valor correspondente
-  function checkNumericKeys(obj, nesting) {
+  function checkNumericKeys(obj) {
     let {multipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = obj
     if (multipleOf === undefined) multipleOf = 1
     else multipleOf = multipleOf[0]

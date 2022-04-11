@@ -26,7 +26,7 @@ function convert(json) {
 
 function parseJSON(json, depth) {
     // processar refs que tenham sido substítuidas dentro de chaves de composição de schemas
-    if ("undef" in json.type) structureUndefType(json)
+    if ("undef" in json.type) {structureUndefType(json); a(json)}
 
     let str = parseType(json, depth)
     if (depth==1 && str[0] != "{") str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${str}\n}`
@@ -129,6 +129,7 @@ function gcd_two_numbers(x, y) {
 }
 
 function parseNumericType(json, depth) {
+    a(json)
     let {multipleOf, notMultipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
     let integer = "integer" in json && json.integer
     let notInteger = "integer" in json && !json.integer

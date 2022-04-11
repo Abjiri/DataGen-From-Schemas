@@ -9,11 +9,13 @@ function structureUndefType(json) {
               separateByTypes(k, json.type.undef[k])
               structureSchemaCompArr(json, json.type.undef[k], k)
             }
-            else structureGeneric(json, json.type.undef[k], k)
+            else structureGeneric(json, json.type.undef[k], k, false)
             delete json.type.undef[k]
         }
         delete json.type.undef
     }
+
+    checkIfThenElse(json)
 }
 
 // separar as subschemas do all/any/oneOf por tipos de dados geráveis em subschemas mais pequenas, de forma a garantir que todos os elementos do all/any/oneOf podem gerar 1 único tipo de dados
@@ -66,6 +68,8 @@ function structureSchemaCompArr(schema, arr, key) {
     return obj
   }, {})
 
+  if (!("type" in schema)) schema.type = {}
+
   // cada subdivisão é tornada num all/any/oneOf novo e colocado no respetivo tipo, na estrutura intermédia
   for (let type in by_types) {
     if (!(type in schema.type)) schema.type[type] = {}
@@ -96,20 +100,61 @@ function structureSchemaCompArr(schema, arr, key) {
   }
 }
 
-function structureGeneric(schema, subschema, key) {
+function structureGeneric(schema, subschema, key, nesting) {
   if ("$ref" in subschema) {
     if (!("undef" in schema.type)) schema.type.undef = {}
     schema.type.undef[key] = subschema
   }
 
-  let schema_originalTypes = Object.keys(schema.type)
+  if (!("type" in schema)) schema.type = {}
+  let schema_originalTypes = Object.keys(schema.type), recursiv_call = true
 
-  let subschema_types = Object.keys(subschema.type)
-  if (subschema_types.includes("undef")) structureUndefType(subschema)
+  if ("type" in subschema) {
+    recursiv_call = false
+    if (Object.keys(subschema.type).includes("undef")) structureUndefType(subschema)
+  }
+  else {
+    let schemaComp_keys = Object.keys(subschema).filter(x => ["allOf","anyOf","oneOf","not","if","then","else"].includes(x))
 
-  for (let type in subschema.type) {
-    if (!(type in schema.type)) schema.type[type] = {}
-    schema.type[type][key] = subschema.type[type]
+    for (let i = 0; i < schemaComp_keys.length; i++) {
+        let k = schemaComp_keys[i]
+        
+        if (["allOf","anyOf","oneOf"].includes(k)) {
+          separateByTypes(k, subschema[k])
+          structureSchemaCompArr(subschema, subschema[k], k)
+        }
+        else structureGeneric(subschema, subschema[k], k, true)
+        
+        delete subschema[k]
+    }
+  }
+  
+  if (!nesting && recursiv_call) {
+    for (let type in subschema.type) {
+      if (!(type in schema.type)) schema.type[type] = {}
+
+      if (!(key in schema.type[type])) schema.type[type][key] = subschema.type[type]
+      else {
+        let schema_copy = schema.type[type][key]
+        let subschema_copy = subschema.type[type]
+        let path = [], next_key
+        
+        while ((next_key = Object.keys(subschema_copy).filter(x => ["allOf","anyOf","oneOf","not","if","then","else"].includes(x))).length > 0) {
+          path.push(next_key[0])
+          subschema_copy = subschema_copy[next_key[0]]
+        }
+        
+        for (let i = 0; i < path.length-1; i++) schema_copy = schema_copy[path[i]]
+        let path_last = path[path.length-1]
+        schema_copy[path_last] = schema_copy[path_last].concat(subschema_copy)
+      }
+    }
+  }
+  else {
+    for (let type in subschema.type) {
+      if (!(type in schema.type)) schema.type[type] = {}
+      schema.type[type][key] = subschema.type[type]
+    }
   }
   
   // se um tipo presente na schema do not não tiver nenhuma chave específica, esse tipo é proibido
@@ -127,5 +172,59 @@ function structureGeneric(schema, subschema, key) {
     }
   }
 }
+
+// verificar as condições if then else
+function checkIfThenElse(obj) {
+  if (hasAny(["if","then","else"], obj)) {
+    if (!hasAll("if", obj)) return error("Não pode usar as chaves 'then' e/ou 'else' numa schema sem usar a chave 'if'!")
+    else if ("type" in obj.if) {
+      let schema_types = obj.type.map(x => x=="integer" ? "number" : x)
+      let if_types = Object.keys(obj.if.type)
+
+      if (!schema_types.includes("undef") && schema_types.length > 0) {
+        for (let i = 0; i < if_types.length; i++) {
+          if (if_types[i] != "undef" && !schema_types.includes(if_types[i])) {
+            delete obj.if.type[if_types[i]]
+            if_types.splice(i--, 1)
+          }
+        }
+      }
+
+      if (hasAll("then", obj) && "type" in obj.then) {
+        let then_types = Object.keys(obj.then.type)
+
+        if (!if_types.includes("undef") && !then_types.includes("undef")) {
+          if (!then_types.filter(t => if_types.includes(t)).length) return error("As schemas das chaves 'if' e 'then' devem ter pelo menos 1 tipo de dados gerável em comum!")
+
+          for (let i = 0; i < then_types.length; i++) {
+            if (!if_types.includes(then_types[i])) delete obj.then.type[then_types[i]]
+          }
+        }
+      } 
+
+      if (hasAll("else", obj) && "type" in obj.else) {
+        let else_types = Object.keys(obj.else.type)
+
+        if (!if_types.includes("undef") && !else_types.includes("undef")) {
+          if (!else_types.filter(t => if_types.includes(t)).length) return error("As schemas das chaves 'if' e 'else' devem ter pelo menos 1 tipo de dados gerável em comum!")
+
+          for (let i = 0; i < else_types.length; i++) {
+            if (!if_types.includes(else_types[i])) delete obj.else.type[else_types[i]]
+          }
+        }
+      }
+
+      if (hasAll("if", obj) && !hasAny(["then","else"], obj)) delete obj.if
+      if (hasAll("then", obj) && !hasAll("if", obj)) delete obj.then
+      if (hasAll("else", obj) && !hasAll("if", obj)) delete obj.else
+    }
+  }
+  return true
+}
+
+// verificar se objeto tem todas as propriedades em questão
+const hasAll = (k, obj) => typeof k == "string" ? k in obj : k.every(key => key in obj)
+// verificar se objeto alguma das propriedades em questão
+const hasAny = (k, obj) => k.some(key => key in obj)
 
 module.exports = { structureUndefType }
