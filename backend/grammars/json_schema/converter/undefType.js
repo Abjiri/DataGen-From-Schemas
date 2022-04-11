@@ -175,56 +175,17 @@ function structureGeneric(schema, subschema, key, nesting) {
 
 // verificar as condições if then else
 function checkIfThenElse(obj) {
-  if (hasAny(["if","then","else"], obj)) {
-    if (!hasAll("if", obj)) return error("Não pode usar as chaves 'then' e/ou 'else' numa schema sem usar a chave 'if'!")
-    else if ("type" in obj.if) {
-      let schema_types = obj.type.map(x => x=="integer" ? "number" : x)
-      let if_types = Object.keys(obj.if.type)
+  for (let type in obj.type) {
+    let schema = obj.type[type]
 
-      if (!schema_types.includes("undef") && schema_types.length > 0) {
-        for (let i = 0; i < if_types.length; i++) {
-          if (if_types[i] != "undef" && !schema_types.includes(if_types[i])) {
-            delete obj.if.type[if_types[i]]
-            if_types.splice(i--, 1)
-          }
-        }
+    if ("if" in schema || "then" in schema || "else" in schema) {
+      if (!("if" in schema)) {
+        if ("then" in schema) delete schema.then
+        if ("else" in schema) delete schema.else
       }
-
-      if (hasAll("then", obj) && "type" in obj.then) {
-        let then_types = Object.keys(obj.then.type)
-
-        if (!if_types.includes("undef") && !then_types.includes("undef")) {
-          if (!then_types.filter(t => if_types.includes(t)).length) return error("As schemas das chaves 'if' e 'then' devem ter pelo menos 1 tipo de dados gerável em comum!")
-
-          for (let i = 0; i < then_types.length; i++) {
-            if (!if_types.includes(then_types[i])) delete obj.then.type[then_types[i]]
-          }
-        }
-      } 
-
-      if (hasAll("else", obj) && "type" in obj.else) {
-        let else_types = Object.keys(obj.else.type)
-
-        if (!if_types.includes("undef") && !else_types.includes("undef")) {
-          if (!else_types.filter(t => if_types.includes(t)).length) return error("As schemas das chaves 'if' e 'else' devem ter pelo menos 1 tipo de dados gerável em comum!")
-
-          for (let i = 0; i < else_types.length; i++) {
-            if (!if_types.includes(else_types[i])) delete obj.else.type[else_types[i]]
-          }
-        }
-      }
-
-      if (hasAll("if", obj) && !hasAny(["then","else"], obj)) delete obj.if
-      if (hasAll("then", obj) && !hasAll("if", obj)) delete obj.then
-      if (hasAll("else", obj) && !hasAll("if", obj)) delete obj.else
+      else if (!("then" in schema || "else" in schema)) delete schema.if
     }
   }
-  return true
 }
-
-// verificar se objeto tem todas as propriedades em questão
-const hasAll = (k, obj) => typeof k == "string" ? k in obj : k.every(key => key in obj)
-// verificar se objeto alguma das propriedades em questão
-const hasAny = (k, obj) => k.some(key => key in obj)
 
 module.exports = { structureUndefType }
