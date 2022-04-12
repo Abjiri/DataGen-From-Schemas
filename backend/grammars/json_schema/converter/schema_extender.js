@@ -11,6 +11,7 @@ function extendSchema(json, schema, type, key) {
     switch (type) {
         case "number": extendNumeric(json, schema); break
         case "string": extendString(json, schema); break
+        case "object": extendObject(json, schema); break
     }
 }
 
@@ -112,6 +113,32 @@ function extendNumeric(json, schema) {
     }
 }
 
+function extendObject(json, schema) {
+    ["properties","patternProperties"].filter(k => k in schema).map(k => assignProperties(json, schema, k))
+    ["additionalProperties","unevaluatedProperties"].filter(k => k in schema).map(k => assignSchemaObject(json, schema, k))
+}
+
+function assignProperties(json, schema, key) {
+    console.log("ya")
+    if (key in json) Object.assign(json[key], schema[key])
+    else json[key] = schema[key]
+}
+
+function assignSchemaObject(json, schema, key) {
+    console.log("yo")
+    if (key in json) {
+        if (typeof json[key] == "boolean") json[key] = schema[key]
+        else {
+            for (let t in schema[key].type) {
+                if (!(t in json[key].type)) json[key].type[t] = {}
+                Object.assign(json[key].type[t], schema[key].type[t])
+            }
+        }
+    }
+    else json[key] = schema[key]
+}
+
+
 function notGenericKeys(json) {
     if ("const" in json) {
         json.notValues = json.const
@@ -120,7 +147,7 @@ function notGenericKeys(json) {
     if ("enum" in json) {
         if ("notValues" in json) json.notValues = json.notValues.concat(json.enum)
         else json.notValues = json.enum
-        delete json.num
+        delete json.enum
     }
     if ("default" in json) {
         json.notDefault = json.default

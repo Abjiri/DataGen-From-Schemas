@@ -646,9 +646,12 @@
   }
 
   // verificar que nenhuma das propriedades da chave 'dependentSchemas' tem uma schema boleana
-  function checkDependentBooleanSchemas(value) {
+  function checkFalseProp(key, value) {
     for (let p in value) {
-      if (typeof value[p] == "boolean") return error("A chave 'dependentSchemas' não pode ter uma propriedade associada a uma schema true/false!")
+      if (key == "dependentSchemas") {
+        if (typeof value[p] == "boolean") return error(`A chave '${key}' não pode ter uma propriedade associada a uma schema true/false!`)
+      }
+      else if (value[p] === false) return error(`A chave '${key}' não pode ter uma propriedade associada a uma schema falsa!`)
     }
     return true
   }
@@ -723,7 +726,7 @@ kws_range = QM key:$("minimum"/"exclusiveMinimum"/"maximum"/"exclusiveMaximum") 
 
 object_keyword = kws_props / kw_moreProps / kw_requiredProps / kw_propertyNames / kws_size
 
-kws_props = QM key:$("patternProperties"/"properties") QM name_separator value:object_schemaMap {return {key, value}}
+kws_props = QM key:$("patternProperties"/"properties") QM name_separator value:object_schemaMap &{return checkFalseProp(key, value)} {return {key, value}}
 kw_moreProps = QM key:$("additionalProperties"/"unevaluatedProperties") QM name_separator value:schema_object {return {key, value}}
 kw_requiredProps = QM key:"required" QM name_separator value:string_array {return {key, value}}
 kw_propertyNames = QM key:$("propertyNames" {current_key = "propertyNames"}) QM name_separator value:schema_object &{return checkPropertyNamesType(value)} {current_key = ""; return {key, value: typeof value == "boolean" ? {type: {def: true, string: {}}} : value}}
@@ -764,7 +767,7 @@ kw_notSchema = QM key:$("not" {current_key = "not"}) QM name_separator value:sch
 conditionalSubschemas_keyword = kw_dependentRequired / kw_dependentSchemas / kw_ifThenElse
 
 kw_dependentRequired = QM key:"dependentRequired" QM name_separator value:object_arrayOfStringsMap {return {key, value}}
-kw_dependentSchemas = QM key:"dependentSchemas" QM name_separator value:object_schemaMap &{return checkDependentBooleanSchemas(value)} {return {key, value}}
+kw_dependentSchemas = QM key:"dependentSchemas" QM name_separator value:object_schemaMap &{return checkFalseProp(key, value)} {return {key, value}}
 kw_ifThenElse = QM key:$(k:("if"/"then"/"else") {current_key = k}) QM name_separator value:schema_object &{return key != "if" ? checkFalseSchema(key,value) : true} {current_key = ""; return {key, value}}
 
 // ---------- Keywords structuring ----------
