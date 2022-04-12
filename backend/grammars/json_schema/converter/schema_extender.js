@@ -1,20 +1,16 @@
 function extendSchema(json, schema, type, key) {
     if (key == "not") {
+        notGenericKeys(schema)
         switch (type) {
             case "number": notNumeric(schema); break
             case "string": notString(schema); break
         }
     }
     
-    if ("const" in schema) extendPredefinedValue(json, schema, "const")
-    else if ("enum" in schema) extendPredefinedValue(json, schema, "enum")
-    else {
-        if ("default" in schema) extendPredefinedValue(json, schema, "default")
-
-        switch (type) {
-            case "number": extendNumeric(json, schema); break
-            case "string": extendString(json, schema); break
-        }
+    ["const","enum","default","notValues","notDefault"].filter(k => k in schema).map(k => extendPredefinedValue(json, schema, k))
+    switch (type) {
+        case "number": extendNumeric(json, schema); break
+        case "string": extendString(json, schema); break
     }
 }
 
@@ -113,6 +109,22 @@ function extendNumeric(json, schema) {
 
         if ("minimum" in json && json.exclusiveMaximum <= json.minimum) delete json.minimum
         else if ("exclusiveMinimum" in json && json.exclusiveMaximum <= json.exclusiveMinimum) delete json.exclusiveMinimum
+    }
+}
+
+function notGenericKeys(json) {
+    if ("const" in json) {
+        json.notValues = json.const
+        delete json.const
+    }
+    if ("enum" in json) {
+        if ("notValues" in json) json.notValues = json.notValues.concat(json.enum)
+        else json.notValues = json.enum
+        delete json.num
+    }
+    if ("default" in json) {
+        json.notDefault = json.default
+        delete json.default
     }
 }
 

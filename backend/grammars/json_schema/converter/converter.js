@@ -1,5 +1,6 @@
 const RandExp = require('randexp');
 const jsf = require('json-schema-faker');
+const deepEqual = require('deep-equal');
 const { structureUndefType } = require('./undefType')
 const { extendSchema } = require('./schema_extender')
 
@@ -26,7 +27,7 @@ function convert(json) {
 
 function parseJSON(json, depth) {
     // processar refs que tenham sido substítuidas dentro de chaves de composição de schemas
-    if ("undef" in json.type) {structureUndefType(json); a(json)}
+    if ("undef" in json.type) structureUndefType(json)
 
     let str = parseType(json, depth)
     if (depth==1 && str[0] != "{") str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${str}\n}`
@@ -79,6 +80,7 @@ function parseType(json, depth) {
 
     // resolver as chaves de composição de schemas aqui, para não ter de repetir este código na função de parsing de cada tipo
     parseAllSchemaComposition(json.type[type], type)
+    parseNotPredefinedValues(json.type[type])
 
     if ("const" in json.type[type]) return predefinedValue(json.type[type].const)
     if ("enum" in json.type[type]) return predefinedValue(json.type[type].enum)
@@ -101,6 +103,20 @@ function parseType(json, depth) {
     }
 
     return value
+}
+
+function parseNotPredefinedValues(json) {
+    if ("notValues" in json) {
+        ["const","enum"].filter(k => k in json).map(k => {
+            json[k] = json[k].filter(x => !json.notValues.some(y => deepEqual(x,y)))
+            if (!json[k].length) delete json[k]
+        })
+    }
+
+    if ("notDefault" in json && "default" in json) {
+        json.default = json.default.filter(x => !json.notDefault.some(y => deepEqual(x,y)))
+        if (!json.default.length) delete json.default
+    }
 }
 
 // calcular o mínimo múltiplo comum de 2+ números
