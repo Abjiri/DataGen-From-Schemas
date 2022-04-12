@@ -30,7 +30,8 @@ function resolve_localRefs(json, schema_id, schema_refs, schema_anchors, pn_refs
 		if (ref.startsWith(schema_id)) ref = ref.replace(schema_id, "#")
 
 		if (ref == "#") {
-			resolve_recursiveRefs(json, schema_refs[i].$ref, schema_refs[i], recursiv)
+			let resolved = resolve_recursiveRefs(json, schema_refs[i].$ref, schema_refs[i], recursiv)
+			if (resolved !== true) return resolved
 			schema_refs.splice(i--, 1)
 		}
 		else if (/^##[a-zA-Z][a-zA-Z0-9\-\_\:\.]*/.test(ref)) {
@@ -66,7 +67,8 @@ function resolve_localRefs(json, schema_id, schema_refs, schema_anchors, pn_refs
 				undirect_recursive.map(x => schema_ref = schema_ref[x])
 				schema_ref.$ref = "#"
 				
-				resolve_recursiveRefs(schema, "#", schema_ref, recursiv)
+				let resolved = resolve_recursiveRefs(schema, "#", schema_ref, recursiv)
+				if (resolved !== true) return resolved
 				schema_refs.splice(i--, 1)
 			}
 			else {
@@ -184,6 +186,9 @@ function resolve_recursiveRefs(json, ref, schema_ref, recursiv) {
 
 	let occurs = Math.floor(Math.random() * ((recursiv.UPPER+1) - recursiv.LOWER) + recursiv.LOWER)
 	let ref_path = get_refPath(json, ref, [], 0)
+	
+	// um not não pode ter referência recursiva
+	if (ref_path.length == 3 && ref_path[0] == "type" && ref_path[1] == "undef" && ref_path[2] == "not") return `A $ref '${ref}' é inválida!`
 
 	delete schema_ref.$ref
 	let json_copy = copy(json)

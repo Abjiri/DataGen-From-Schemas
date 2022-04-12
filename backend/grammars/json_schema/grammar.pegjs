@@ -745,8 +745,7 @@ kw_uniqueness = QM key:"uniqueItems" QM name_separator value:boolean {return {ke
 
 media_keyword = (kw_contentMediaType / kw_contentEncoding / kw_contentSchema) {return null}
 
-kw_contentMediaType = QM key:"contentMediaType" QM name_separator value:mime_type {return {key, value}}
-mime_type = ""
+kw_contentMediaType = QM key:"contentMediaType" QM name_separator value:string {return {key, value}}
 
 kw_contentEncoding = QM key:"contentEncoding" QM name_separator value:encoding {return {key, value}}
 encoding = QM e:$("7bit" / "8bit" / "binary" / "quoted-printable" / "base16" / "base32" / "base64") QM {return e}
