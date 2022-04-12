@@ -348,7 +348,7 @@
 
   // verificar que a schema dada pela chave 'propertyNames' é do tipo string
   function checkPropertyNamesType(obj) {
-    if (obj === false || (typeof obj !== "boolean" && hasAll("type", obj) && Object.keys(obj.type).some(k => k != "string")))
+    if (typeof obj === "boolean" || (hasAll("type", obj) && Object.keys(obj.type).some(k => k != "string")))
       return error(`Como as chaves de objetos devem ser sempre strings, está implícito que a schema dada pela chave 'propertyNames' deve ser do tipo 'string' (apenas)!`)
     return true
   }
