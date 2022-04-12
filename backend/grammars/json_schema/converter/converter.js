@@ -46,7 +46,7 @@ function parseSchemaComposition(json, key, type) {
     if (key == "oneOf") subschemas = [json[key][rand(json[key].length)]]
     if (key == "not") subschemas = [json[key]]
     if (key == "if") {
-        if (Math.random() > 0.5) { if ("then" in json) subschemas = [json[key], json.then] }
+        if ("typeSchema" in json[key] || (!("booleanSchema" in json[key]) && Math.random() > 0.5) || json[key].booleanSchema) { if ("then" in json) subschemas = [json[key], json.then] }
         else if ("else" in json) subschemas = [{not: json[key]}, json.else]
 
         if ("then" in json) delete json.then
@@ -129,7 +129,6 @@ function gcd_two_numbers(x, y) {
 }
 
 function parseNumericType(json, depth) {
-    a(json)
     let {multipleOf, notMultipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = json
     let integer = "integer" in json && json.integer
     let notInteger = "integer" in json && !json.integer

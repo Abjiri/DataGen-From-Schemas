@@ -42,8 +42,8 @@ function resolve_localRefs(json, schema_id, schema_refs, schema_anchors, pn_refs
 		else if (/^#\//.test(ref)) {
 			schema = replace_ref(ref.split("/"), json)
 			
-			if (schema === false) return `A $ref '${schema_refs[i].$ref}' é inválida!`
-			if (schema !== true) {
+			if (typeof schema == "string" && schema == "invalid_ref") return `A $ref '${schema_refs[i].$ref}' é inválida!`
+			if (typeof schema != "boolean") {
 				// ref a apontar para schema com outra ref (não recursivo)
 				if ("$ref" in schema) {
 					if (schema.$ref == schema_refs[i].$ref) return `A $ref '${schema_refs[i].$ref}' é inválida! Uma referência não pode apontar para a sua própria schema!`
@@ -71,7 +71,7 @@ function resolve_localRefs(json, schema_id, schema_refs, schema_anchors, pn_refs
 			}
 			else {
 				delete schema_refs[i].$ref
-				Object.assign(schema_refs[i--], schema)
+				Object.assign(schema_refs[i--], typeof schema != "boolean" ? schema : {booleanSchema: schema})
 				if (!nested_ref) schema_refs.splice(i+1, 1)
 			}
 		}
@@ -123,8 +123,8 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
             else {
               schema = replace_ref(ref.split("/"), refs[refs.findIndex(x => x.id == ref_id)].schema)
 
-              if (schema === false) return `A $ref '${refs_map[id][i]}' é inválida!`
-              else if (schema !== true && "$ref" in schema) {
+              if (typeof schema == "string" && schema == "invalid_ref") return `A $ref '${refs_map[id][i]}' é inválida!`
+              else if (typeof schema != "boolean" && "$ref" in schema) {
 				  nested_ref = true
 				  if (nested_refs.includes(schema.$ref)) return `Existe um ciclo infinito de recursividade entre as schemas '${nested_refs[0]}' e '${nested_refs[1]}'!`
 			  }
@@ -136,7 +136,7 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
   
             let refs_elem = refs[refs.findIndex(x => x.id == id)]
             delete refs_elem.refs[i].$ref
-            Object.assign(refs_elem.refs[i], schema)
+			Object.assign(refs_elem.refs[i], typeof schema != "boolean" ? schema : {booleanSchema: schema})
   
             if (nested_ref) {
 				refs_map[id][i] = schema.$ref
@@ -162,7 +162,7 @@ function replace_ref(ref, json) {
   	if (ref.length > 1) {
 		if (["additionalProperties","unevaluatedProperties","propertyNames","items","unevaluatedItems","contains","contentSchema","not","if","then","else"].includes(ref[ref.length-1])) ;
 		else if (["properties","patternProperties","dependentSchemas","$defs"].includes(ref[ref.length-2])) ;
-		else return false
+		else return "invalid_ref"
   	}
 
 	for (let i = 1; i < ref.length; i++) {
@@ -170,13 +170,13 @@ function replace_ref(ref, json) {
 		else if ("type" in json) {
 			if ("object" in json.type && ref[i] in json.type.object) json = json.type.object[ref[i]]
 			else if ("array" in json.type && ref[i] in json.type.array) json = json.type.array[ref[i]]
-			else return false
+			else return "invalid_ref"
 		}
-		else return false
+		else return "invalid_ref"
 	}
 
 	if (typeof json == "boolean" || typeof json === 'object' && !Array.isArray(json) && json !== null) return json
-	return false
+	return "invalid_ref"
 }
 
 function resolve_recursiveRefs(json, ref, schema_ref, recursiv) {
