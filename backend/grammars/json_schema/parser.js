@@ -4523,9 +4523,6 @@ module.exports = /*
           peg$currPos = s2;
           s2 = peg$FAILED;
         }
-        if (s2 === peg$FAILED) {
-          s2 = null;
-        }
         if (s2 !== peg$FAILED) {
           s3 = peg$parseend_array();
           if (s3 !== peg$FAILED) {
@@ -5902,10 +5899,15 @@ module.exports = /*
       // formatar os dados para a estrutura intermédia pretendida
       function structureSchemaData(obj, boolean) {
         if (boolean === false && current_key != "if") return boolean
+        console.log(JSON.stringify(obj))
 
         if (obj === null) {
-          if (current_key == "not") return error("A schema da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
+          if (boolean !== false && current_key == "not") return error("A schema da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
           else obj = {type: ["string","integer","number","boolean","null","array","object"], booleanSchema: boolean}
+        }
+        else if ("not" in obj && obj.not === false) {
+          if (!obj.type.length) obj.type = ["string","integer","number","boolean","null","array","object"]
+          delete obj.not
         }
         else if ("$ref" in obj && (Object.keys(obj).length > 2 || obj.type.length > 0)) return error("O DataGen From Schemas não permite que uma schema com uma '$ref' possua qualquer outra chave!")
 
@@ -5940,8 +5942,57 @@ module.exports = /*
           else if (arrayKeys.includes(k)) schema.type.array[k] = obj[k]
           else if (!["then","else"].includes(k)) schema[k] = obj[k]
         }
-        
+
+        schemaComp_specific(obj, schema)
+
+        // verificar a coerência das chaves numéricas
+        if ("number" in schema.type) {
+          let valid = checkNumericKeys(schema.type.number)
+          if (valid !== true) return valid
+        }
+
+        if (current_key == "if") {
+          if (boolean !== null) {
+            for (let type in schema.type) schema.type[type].booleanSchema = boolean
+          }
+          else if (Object.keys(obj).length == 1 && "type" in obj) {
+            for (let type of obj.type) schema.type[type].typeSchema = true
+          }
+        }
+
+        if (!Object.keys(schema.type).length) delete schema.type
+        if (!("type" in schema)) {
+          // as seguintes chaves são as não tipadas, segundo a estrutura intermédia desta gramática
+          // se as chaves da schema forem um subset destas, então inicialmente é possível gerar qualquer tipo de dados (que pode ser restringido pela 'not')
+          if (Object.keys(obj).every(k => ["$id","$schema","$anchor","$defs","not"].includes(k) || (k == "type" && !obj[k].length)))
+            obj.type = ["string","number","boolean","null","array","object"]
+
+          // a schema é um subset das chaves {$id, $schema, $anchor, $ref, $defs}
+          if (Object.keys(obj).every(k => /^$/.test(k) || (k == "type" && !obj[k].length))) {
+            // se a schema só tiver um subset das chaves {$id, $schema, $anchor, $defs}, pode gerar qualquer tipo de valor
+            if (!Object.keys(schema).includes("$ref")) schema.type = {string: {}, number: {}, boolean: {}, null: {}, array: {}, object: {}}
+          }
+
+          // se tiver um 'not', é necessário verificar se está a proibir todos os tipos geráveis ou não
+          if ("not" in obj) {
+            let allowedTypes = obj.type.filter(k => !(k in obj.not.type))
+            if (allowedTypes.includes("integer") && "number" in obj.not.type) allowedTypes.splice(allowedTypes.indexOf("integer"), 1)
+
+            if (!allowedTypes.length) return error(`Não é possível gerar nenhum valor a partir da schema em questão!`)
+            else {
+              schema.type = {}
+              allowedTypes.map(k => schema.type[k] = {})
+            }
+          }
+        }
+
+        return schema
+      }
+
+      function schemaComp_specific(obj, schema) {
         // se um tipo presente na schema do not não tiver nenhuma chave específica, esse tipo é proibido
+        console.log("---")
+        console.log(JSON.stringify(obj))
         if ("not" in obj) {
           for (let t in obj.not.type) {
             let keys = Object.keys(obj.not.type[t])
@@ -5979,48 +6030,7 @@ module.exports = /*
           if (!checkKeyExistence(obj, schema, schemaComp_keys[i], 0)) return error(`Com a schema em questão, é impossível cumprir a chave '${schemaComp_keys[i]}', dado que não é possível gerar nenhum dos tipos de dados das suas subschemas!`)
         }
 
-        // verificar a coerência das chaves numéricas
-        if ("number" in schema.type) {
-          let valid = checkNumericKeys(schema.type.number)
-          if (valid !== true) return valid
-        }
-
-        if (current_key == "if") {
-          if (boolean !== null) {
-            for (let type in schema.type) schema.type[type].booleanSchema = boolean
-          }
-          else if (Object.keys(obj).length == 1 && "type" in obj) {
-            for (let type of obj.type) schema.type[type].typeSchema = true
-          }
-        }
-
-        if (!Object.keys(schema.type).length) delete schema.type
-        if (!("type" in schema)) {
-          // as seguintes chaves são as não tipadas, segunda a estrutura intermédia desta gramática
-          // se as chaves da schema forem um subset destas, então inicialmente é possível gerar qualquer tipo de dados (que pode ser restringido pela 'not')
-          if (Object.keys(obj).every(k => ["$id","$schema","$anchor","$defs","not"].includes(k) || (k == "type" && !obj[k].length)))
-            obj.type = ["string","number","boolean","null","array","object"]
-
-          // a schema é um subset das chaves {$id, $schema, $anchor, $ref, $defs}
-          if (Object.keys(obj).every(k => /^$/.test(k) || (k == "type" && !obj[k].length))) {
-            // se a schema só tiver um subset das chaves {$id, $schema, $anchor, $defs}, pode gerar qualquer tipo de valor
-            if (!Object.keys(schema).includes("$ref")) schema.type = {string: {}, number: {}, boolean: {}, null: {}, array: {}, object: {}}
-          }
-
-          // se tiver um 'not', é necessário verificar se está a proibir todos os tipos geráveis ou não
-          if ("not" in obj) {
-            let allowedTypes = obj.type.filter(k => !(k in obj.not.type))
-            if (allowedTypes.includes("integer") && "number" in obj.not.type) allowedTypes.splice(allowedTypes.indexOf("integer"), 1)
-
-            if (!allowedTypes.length) return error(`Não é possível gerar nenhum valor a partir da schema em questão!`)
-            else {
-              schema.type = {}
-              allowedTypes.map(k => schema.type[k] = {})
-            }
-          }
-        }
-
-        return schema
+        return true
       }
 
       // verificar se uma chave de composição de schema existe na estrutura intermédia, ou se foi completamente elimanada por uma chave 'not'

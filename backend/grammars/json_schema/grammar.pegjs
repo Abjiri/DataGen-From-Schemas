@@ -49,8 +49,12 @@
     if (boolean === false && current_key != "if") return boolean
 
     if (obj === null) {
-      if (current_key == "not") return error("A schema da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
+      if (boolean !== false && current_key == "not") return error("A schema da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
       else obj = {type: ["string","integer","number","boolean","null","array","object"], booleanSchema: boolean}
+    }
+    else if ("not" in obj && obj.not === false) {
+      if (!obj.type.length) obj.type = ["string","integer","number","boolean","null","array","object"]
+      delete obj.not
     }
     else if ("$ref" in obj && (Object.keys(obj).length > 2 || obj.type.length > 0)) return error("O DataGen From Schemas não permite que uma schema com uma '$ref' possua qualquer outra chave!")
 
