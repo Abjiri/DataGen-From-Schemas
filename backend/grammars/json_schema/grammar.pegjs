@@ -478,7 +478,7 @@
       for (let k in obj.dependentSchemas) {
         if ("type" in obj.dependentSchemas[k]) {
           let type_keys = Object.keys(obj.dependentSchemas[k].type)
-          if (type_keys.length > 1 || type_keys[0] != "object") return error(`As subschemas especificadas na chave 'dependentSchemas' deve ser do tipo 'object' (apenas), visto que são aplicadas a uma schema desse mesmo tipo!`)
+          if (type_keys.length > 1 || type_keys[0] != "object") return error(`As subschemas especificadas na chave 'dependentSchemas' devem ser do tipo 'object' (apenas), visto que são aplicadas a uma schema desse mesmo tipo!`)
 
           if (hasAll("required", obj)) {
             let subschema = obj.dependentSchemas[k].type.object
@@ -487,7 +487,6 @@
             }
           }
         }
-        //else verificar que as subschemas são do tipo object também
       }
     }
 
@@ -582,37 +581,36 @@
   // separar as subschemas do all/any/oneOf por tipos de dados geráveis em subschemas mais pequenas, de forma a garantir que todos os elementos do all/any/oneOf podem gerar 1 único tipo de dados
   // uma subschema só fica com um tipo se tiver chaves de algum dos tipos de dados primitivos
   function checkCompositionTypes(key, value) {
-    if (key != "not") {
-      // se for a chave 'allOf', determinar os tipos comuns a todas as suas schemas e apagar todas as subschemas que não forem desses tipos
-      let allOf_types = key == "allOf" ? checkAllOfTypes(value) : null
+    checkFalseSchema(key, value)
+    // se for a chave 'allOf', determinar os tipos comuns a todas as suas schemas e apagar todas as subschemas que não forem desses tipos
+    let allOf_types = key == "allOf" ? checkAllOfTypes(value) : null
 
-      for (let i = 0; i < value.length; i++) {
-        if ("type" in value[i]) {
-          let types = Object.keys(value[i].type)
+    for (let i = 0; i < value.length; i++) {
+      if ("type" in value[i]) {
+        let types = Object.keys(value[i].type)
 
-          if (types.length > 1) {
-            let elem = value.splice(i--, 1)[0]
+        if (types.length > 1) {
+          let elem = value.splice(i--, 1)[0]
 
-            for (let j = 0; j < types.length; j++) {
-              // se tiver um all/any/oneOf aninhado dentro de uma chave igual, dar flat à estrutura
-              if (key in elem.type[types[j]] && Object.keys(elem.type[types[j]]).length == 1) {
-                elem.type[types[j]][key].map(x => {
-                  if (key != "allOf" || allOf_types.includes(types[j])) {
-                    let new_schema = {type: {}}
-                    new_schema.type[types[j]] = x
-                    value.push(new_schema)
-                  }
-                })
-              }
-              else if (key != "allOf" || allOf_types.includes(types[j])) {
-                let new_schema = {type: {}}
-                new_schema.type[types[j]] = elem.type[types[j]]
-                value.push(new_schema)
-              }
+          for (let j = 0; j < types.length; j++) {
+            // se tiver um all/any/oneOf aninhado dentro de uma chave igual, dar flat à estrutura
+            if (key in elem.type[types[j]] && Object.keys(elem.type[types[j]]).length == 1) {
+              elem.type[types[j]][key].map(x => {
+                if (key != "allOf" || allOf_types.includes(types[j])) {
+                  let new_schema = {type: {}}
+                  new_schema.type[types[j]] = x
+                  value.push(new_schema)
+                }
+              })
+            }
+            else if (key != "allOf" || allOf_types.includes(types[j])) {
+              let new_schema = {type: {}}
+              new_schema.type[types[j]] = elem.type[types[j]]
+              value.push(new_schema)
             }
           }
-          else if (key == "allOf" && !allOf_types.includes(types[0])) value.splice(i--, 1)
         }
+        else if (key == "allOf" && !allOf_types.includes(types[0])) value.splice(i--, 1)
       }
     }
     return true
@@ -637,11 +635,29 @@
     if (!types.length) return error("As schemas da chave 'allOf' devem ter pelo menos um tipo de dados em comum, caso contrário não é possível gerar um valor que respeite todas elas!")
     return types
   }
+
+  // verificar que não há schemas false onde não deve
+  function checkFalseSchema(key, value) {
+    if (Array.isArray(value)) {
+      if (value.includes(false)) return error(`A chave '${key}' não pode conter uma subschema falsa!`)
+    }
+    else if (value === false) return error(`A schema da chave '${key}' não pode ser falsa!`)
+    return true
+  }
+
+  // verificar que nenhuma das propriedades da chave 'dependentSchemas' tem uma schema boleana
+  function checkDependentBooleanSchemas(value) {
+    for (let p in value) {
+      if (typeof value[p] == "boolean") return error("A chave 'dependentSchemas' não pode ter uma propriedade associada a uma schema true/false!")
+    }
+    return true
+  }
 }
 
 // ----- Dialect -----
 
-Dialect = ws schema:schema_object ws {return {schema, subschemas, pn_refs: propertyNames_refs}}
+Dialect = ws false ws {return error("A schema não pode ser falsa, pois nesse caso é impossível gerar qualquer valor!")}
+        / ws schema:schema_object ws {return {schema, subschemas, pn_refs: propertyNames_refs}}
 
 begin_array     = ws "[" ws {depth[depth.length-1]++}
 begin_object    = ws "{" ws {depth[depth.length-1]++}
@@ -720,7 +736,7 @@ array_keyword = kw_items / kw_prefixItems / kw_unevaluatedItems / kw_contains / 
 kw_items = QM key:"items" QM name_separator value:schema_object {return {key, value}}
 kw_prefixItems = QM key:"prefixItems" QM name_separator value:schema_array {return {key, value}}
 kw_unevaluatedItems = QM key:"unevaluatedItems" QM name_separator value:schema_object {return {key, value}}
-kw_contains = QM key:"contains" QM name_separator value:schema_object {return {key, value}}
+kw_contains = QM key:"contains" QM name_separator value:schema_object &{return checkFalseSchema(key, value)} {return {key, value}}
 kws_mContains = QM key:$("minContains"/"maxContains") QM name_separator value:int {return {key, value}}
 kws_array_length = QM key:$("minItems"/"maxItems") QM name_separator value:int {return {key, value}}
 kw_uniqueness = QM key:"uniqueItems" QM name_separator value:boolean {return {key, value}}
@@ -749,8 +765,8 @@ kw_notSchema = QM key:$("not" {current_key = "not"}) QM name_separator value:sch
 conditionalSubschemas_keyword = kw_dependentRequired / kw_dependentSchemas / kw_ifThenElse
 
 kw_dependentRequired = QM key:"dependentRequired" QM name_separator value:object_arrayOfStringsMap {return {key, value}}
-kw_dependentSchemas = QM key:"dependentSchemas" QM name_separator value:object_schemaMap {return {key, value}}
-kw_ifThenElse = QM key:$(k:("if"/"then"/"else") {current_key = k}) QM name_separator value:schema_object {current_key = ""; return {key, value}}
+kw_dependentSchemas = QM key:"dependentSchemas" QM name_separator value:object_schemaMap &{return checkDependentBooleanSchemas(value)} {return {key, value}}
+kw_ifThenElse = QM key:$(k:("if"/"then"/"else") {current_key = k}) QM name_separator value:schema_object &{return key != "if" ? checkFalseSchema(key,value) : true} {current_key = ""; return {key, value}}
 
 // ---------- Keywords structuring ----------
 
