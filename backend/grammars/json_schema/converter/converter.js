@@ -285,18 +285,7 @@ function parseStringType(json) {
 }
 
 function parseObjectType(json, only_req, depth) {
-    if ("required" in json && "notRequired" in json) {
-        json.required = json.required.filter(x => !json.notRequired.includes(x))
-        delete json.notRequired
-    }
-    if ("notAdditionalTypes" in json && "additionalProperties" in json && "type" in json.additionalProperties) {
-        json.notAdditionalTypes.map(t => delete json.additionalProperties.type[t])
-        delete json.notAdditionalTypes
-    }
-    if ("notUnevaluatedTypes" in json && "unevaluatedProperties" in json && "type" in json.unevaluatedProperties) {
-        json.notUnevaluatedTypes.map(t => delete json.unevaluatedProperties.type[t])
-        delete json.notUnevaluatedTypes
-    }
+    parseNotObjectKeys(json)
 
     let str = "{\n", obj = {}
     let required = "required" in json ? json.required.length : 0
@@ -400,6 +389,21 @@ function parseObjectType(json, only_req, depth) {
     if (str == "{\n") str = "{\n" + indent(depth) + "DFJS_EMPTY_JSON: true\n" + indent(depth-1) + "}"
     else str = `${str.slice(0, -2)}\n${indent(depth-1)}}`
     return str
+}
+
+function parseNotObjectKeys(json) {
+    if ("required" in json && "notRequired" in json) {
+        json.required = json.required.filter(x => !json.notRequired.includes(x))
+        delete json.notRequired
+    }
+    if ("notAdditionalProperties" in json && "additionalProperties" in json && "type" in json.additionalProperties) {
+        json.notAdditionalProperties.map(t => delete json.additionalProperties.type[t])
+        delete json.notAdditionalProperties
+    }
+    if ("notUnevaluatedProperties" in json && "unevaluatedProperties" in json && "type" in json.unevaluatedProperties) {
+        json.notUnevaluatedProperties.map(t => delete json.unevaluatedProperties.type[t])
+        delete json.notUnevaluatedProperties
+    }
 }
 
 // determinar um tamanho aleatório para o objeto a gerar, dentro dos limites estabelecidos
@@ -507,6 +511,8 @@ function nonRequired_randomProps(json, obj, size, valueSchema, addProperty) {
 }
 
 function parseArrayType(json, depth) {
+    parseNotArrayKeys(json)
+
     let arr = []
     let prefixed = "prefixItems" in json ? json.prefixItems.length : 0
     let additionalItems = ("items" in json && json.items !== false) || !("items" in json) && "unevaluatedItems" in json && json.unevaluatedItems !== false
@@ -541,6 +547,14 @@ function parseArrayType(json, depth) {
     let nonPrefixedSchema = trueSchema
     if ("items" in json && json.items !== false) nonPrefixedSchema = json.items
     else if (additionalItems) nonPrefixedSchema = json.unevaluatedItems
+    else if ("notContains" in json) nonPrefixedSchema = json.notContains
+
+    if ("notContains" in json && (("items" in json && json.items !== false) || additionalItems)) {
+        for (let t in json.notContains.type) {
+            if (!(t in nonPrefixedSchema.type)) nonPrefixedSchema.type[t] = {}
+            extendSchema(nonPrefixedSchema.type[t], json.notContains.type[t], t, null, SETTINGS)
+        }
+    }
 
     for (let i = arr.length; i < arrLen.len; i++) arr.push(parseJSON(nonPrefixedSchema, depth))
 
@@ -567,6 +581,36 @@ ${indent(depth+2)}if (!arr.includes(newItem) || j==9) {arr.push(newItem); break}
 ${indent(depth+1)}}\n${indent(depth)}}
 ${indent(depth)}return arr
 ${indent(depth-1)}}`
+    }
+}
+
+function parseNotArrayKeys(json) {
+    if ("notContains" in json || "notContainsTypes" in json) {
+        let notContains = {type: {}}
+
+        if ("notContains" in json) {
+            json.notContains.map(s => {
+                for (let t in s.type) {
+                    if (!(t in notContains.type)) notContains.type[t] = {}
+                    extendSchema(notContains.type[t], s.type[t], t, null, SETTINGS)
+                }
+            })
+        }
+        else notContains = trueSchema
+
+        if ("notContainsTypes" in json) {
+            json.notContainsTypes.map(t => delete notContains.type[t])
+            delete json.notContainsTypes
+        }
+        json.notContains = notContains
+    }
+    if ("notItems" in json && "items" in json && "type" in json.items) {
+        json.notItems.map(t => delete json.items.type[t])
+        delete json.notItems
+    }
+    if ("notUnevaluatedItems" in json && "unevaluatedItems" in json && "type" in json.unevaluatedItems) {
+        json.notUnevaluatedItems.map(t => delete json.unevaluatedItems.type[t])
+        delete json.notUnevaluatedItems
     }
 }
 
