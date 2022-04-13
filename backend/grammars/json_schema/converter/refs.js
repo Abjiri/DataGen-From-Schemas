@@ -22,6 +22,46 @@ function resolve_refs(data, settings) {
 	if (crossRefs !== true) return crossRefs
 	return true
 }
+
+function get_refPath(json, ref, path, depth) {
+  	let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
+	
+  	for (let i = 0; i < keys.length; i++) {
+    	let k = keys[i]
+
+    	if (k == "$ref" && json[k] == ref) return !depth ? path : true
+		else if (typeof json[k] === 'object' && json[k] !== null) {
+			path.push(k)
+
+			if (get_refPath(json[k], ref, path, depth+1) === false) path.pop()
+			else return !depth ? path : true
+		}
+	}
+
+	return false
+}
+  
+function replace_ref(ref, json) {
+  // verificar que a ref está a apontar para uma schema
+  	if (ref.length > 1) {
+		if (["additionalProperties","unevaluatedProperties","propertyNames","items","unevaluatedItems","contains","contentSchema","not","if","then","else"].includes(ref[ref.length-1])) ;
+		else if (["properties","patternProperties","dependentSchemas","$defs"].includes(ref[ref.length-2])) ;
+		else return "invalid_ref"
+  	}
+
+	for (let i = 1; i < ref.length; i++) {
+		if (ref[i] in json) json = json[ref[i]]
+		else if ("type" in json) {
+			if ("object" in json.type && ref[i] in json.type.object) json = json.type.object[ref[i]]
+			else if ("array" in json.type && ref[i] in json.type.array) json = json.type.array[ref[i]]
+			else return "invalid_ref"
+		}
+		else return "invalid_ref"
+	}
+
+	if (typeof json == "boolean" || typeof json === 'object' && !Array.isArray(json) && json !== null) return json
+	return "invalid_ref"
+}
   
 function resolve_localRefs(json, schema_id, schema_refs, schema_anchors, pn_refs, recursiv) {
 	for (let i = 0; i < schema_refs.length; i++) {
@@ -158,28 +198,6 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
   
     return true
 }
-  
-function replace_ref(ref, json) {
-  // verificar que a ref está a apontar para uma schema
-  	if (ref.length > 1) {
-		if (["additionalProperties","unevaluatedProperties","propertyNames","items","unevaluatedItems","contains","contentSchema","not","if","then","else"].includes(ref[ref.length-1])) ;
-		else if (["properties","patternProperties","dependentSchemas","$defs"].includes(ref[ref.length-2])) ;
-		else return "invalid_ref"
-  	}
-
-	for (let i = 1; i < ref.length; i++) {
-		if (ref[i] in json) json = json[ref[i]]
-		else if ("type" in json) {
-			if ("object" in json.type && ref[i] in json.type.object) json = json.type.object[ref[i]]
-			else if ("array" in json.type && ref[i] in json.type.array) json = json.type.array[ref[i]]
-			else return "invalid_ref"
-		}
-		else return "invalid_ref"
-	}
-
-	if (typeof json == "boolean" || typeof json === 'object' && !Array.isArray(json) && json !== null) return json
-	return "invalid_ref"
-}
 
 function resolve_recursiveRefs(json, ref, schema_ref, recursiv) {
 	Object.keys(recursiv).map(k => recursiv[k] = parseInt(recursiv[k]))
@@ -262,24 +280,6 @@ function resolve_recursiveRefs(json, ref, schema_ref, recursiv) {
 	}
 
 	return true
-}
-
-function get_refPath(json, ref, path, depth) {
-  	let keys = Array.isArray(json) ? [...Array(json.length).keys()] : Object.keys(json)
-	
-  	for (let i = 0; i < keys.length; i++) {
-    	let k = keys[i]
-
-    	if (k == "$ref" && json[k] == ref) return !depth ? path : true
-		else if (typeof json[k] === 'object' && json[k] !== null) {
-			path.push(k)
-
-			if (get_refPath(json[k], ref, path, depth+1) === false) path.pop()
-			else return !depth ? path : true
-		}
-	}
-
-	return false
 }
 
 module.exports = { resolve_refs }

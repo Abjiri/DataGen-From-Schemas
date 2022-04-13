@@ -6,7 +6,10 @@ const { extendSchema } = require('./schema_extender')
 
 let SETTINGS = {
     prob_patternProperty: 0.8,
-    random_props: false
+    random_props: false,
+    extend_propSchema: "OR", // "OR" / "OW" (overwrite)
+    extend_prefixItems: "OR", // "OR" / "OWP" (overwrite parcial) / "OWT" (overwrite total) / "AP" (append) 
+    extend_schemaObj: "OR" // "OR" / "OW" (overwrite)
 }
 
 // tabs de indentação
@@ -36,6 +39,7 @@ function parseJSON(json, depth) {
 
 // processa as chaves de composição de schemas pela ordem que aparecem no objeto
 function parseAllSchemaComposition(json, type) {
+    if (type == "array" && "contains" in json) arrayfyContains(json)
     let schemaComp_keys = Object.keys(json).filter(x => ["allOf","anyOf","oneOf","not","if"].includes(x))
     for (let i = 0; i < schemaComp_keys.length; i++) parseSchemaComposition(json, schemaComp_keys[i], type)
 }
@@ -55,7 +59,7 @@ function parseSchemaComposition(json, key, type) {
     }
     
     subschemas.map(s => parseAllSchemaComposition(s, type))
-    subschemas.map(s => extendSchema(json, s, type, key))
+    subschemas.map(s => extendSchema(json, s, type, key, SETTINGS))
     delete json[key]
 }
 
@@ -68,6 +72,13 @@ function getRandomSubarray(arr, size) {
         shuffled[i] = temp;
     }
     return shuffled.slice(0, size);
+}
+
+function arrayfyContains(json) {
+    let minContains = null, maxContains = null
+    if ("minContains" in json) {minContains = json.minContains; delete json.minContains}
+    if ("maxContains" in json) {maxContains = json.maxContains; delete json.maxContains}
+    json.contains = [{contains: json.contains, minContains, maxContains}]
 }
 
 function parseType(json, depth) {
@@ -499,15 +510,17 @@ function parseArrayType(json, depth) {
                 for (let i = prefixedLen; i < prefixed; i++) arr.push(parseJSON(json.prefixItems[i], depth))
             }
 
-            let containsSchema = json.contains
-            let minContains = "minContains" in json ? json.minContains : 1
-            let maxContains = "maxContains" in json ? json.maxContains : minContains
-        
-            let containsLen = randomize(maxContains, minContains)
-            let sumLen = arr.length + containsLen
-            let final_len = !("maxItems" in json) ? sumLen : (sumLen <= arrLen.maxItems ? sumLen : arrLen.maxItems)
-
-            for (let i = arr.length; i < final_len; i++) arr.push(parseJSON(containsSchema, depth))
+            json.contains.map(c => {
+                let containsSchema = c.contains
+                let minContains = c.minContains !== null ? c.minContains : 1
+                let maxContains = c.maxContains !== null ? c.maxContains : minContains
+            
+                let containsLen = randomize(maxContains, minContains)
+                let sumLen = arr.length + containsLen
+                let final_len = !("maxItems" in json) ? sumLen : (sumLen <= arrLen.maxItems ? sumLen : arrLen.maxItems)
+    
+                for (let i = arr.length; i < final_len; i++) arr.push(parseJSON(containsSchema, depth))
+            })
         }
     }
 
