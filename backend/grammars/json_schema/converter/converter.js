@@ -498,7 +498,13 @@ function addProperties(json, obj, props, depSchemas, depSchemas_objects, depth) 
 // adicionar propriedades aleatórias ao objeto até ter o tamanho pretendido
 function nonRequired_randomProps(json, obj, size, valueSchema, addProperty) {
     let randomNameTries = 0
-    let namesSchema = "propertyNames" in json ? json.propertyNames.type.string : {"minLength": 3, "maxLength": 10}
+    let namesSchema = {"minLength": 3, "maxLength": 10}
+
+    if ("propertyNames" in json) {
+        namesSchema = json.propertyNames.type.string
+        parseAllSchemaComposition(namesSchema, "string")
+        parseNotPredefinedValues(namesSchema)
+    }
     namesSchema.type = "string"
     
     while (size > Object.keys(obj).length && randomNameTries < 10) {
