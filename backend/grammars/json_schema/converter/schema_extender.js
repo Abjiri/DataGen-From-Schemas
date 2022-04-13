@@ -6,10 +6,12 @@ function extendSchema(json, schema, type, key, SETTINGS) {
         switch (type) {
             case "number": inverter.notNumeric(schema); break
             case "string": inverter.notString(schema); break
+            case "object": inverter.notObject(schema); break
+            case "array": inverter.notArray(schema); break
         }
     }
     
-    ["const","enum","default","notValues","notDefault"].filter(k => k in schema).map(k => extendPredefinedValue(json, schema, k))
+    extendArrayKey(json, schema, ["const","enum","default","notValues","notDefault"])
     switch (type) {
         case "number": extendNumeric(json, schema); break
         case "string": extendString(json, schema); break
@@ -18,33 +20,25 @@ function extendSchema(json, schema, type, key, SETTINGS) {
     }
 }
 
-function extendPredefinedValue(json, schema, key) {
-    if (key in json) json[key] = json[key].concat(schema[key])
-    else json[key] = schema[key]
+function extendArrayKey(json, schema, keys) {
+    keys.filter(k => k in schema).map(key => {
+        if (key in json) json[key] = json[key].concat(schema[key].filter(x => !json[key].includes(x)))
+        else json[key] = schema[key]
+    })
 }
 
 function extendString(json, schema) {
-    extendSizeKeys(json, schema, "minLength", "maxLength")
     if ("pattern" in schema) json.pattern = schema.pattern
     if ("format" in schema) json.format = schema.format
-    if ("notFormat" in schema) {
-        if ("notFormat" in json) json.notFormat = json.notFormat.concat(schema.notFormat)
-        else json.notFormat = schema.notFormat
-    }
+    extendArrayKey(json, schema, ["notFormat"])
+    extendSizeKeys(json, schema, "minLength", "maxLength")
 }
 
 function extendNumeric(json, schema) {
-    let {multipleOf, notMultipleOf, minimum, maximum, exclusiveMinimum, exclusiveMaximum} = schema
+    let {minimum, maximum, exclusiveMinimum, exclusiveMaximum} = schema
     if ("integer" in schema) json.integer = schema.integer
 
-    if (multipleOf !== undefined) {
-        if ("multipleOf" in json) json.multipleOf = json.multipleOf.concat(multipleOf.filter(x => !json.multipleOf.includes(x)))
-        else json.multipleOf = multipleOf
-    }
-    if (notMultipleOf !== undefined) {
-        if ("notMultipleOf" in json) json.notMultipleOf = json.notMultipleOf.concat(notMultipleOf.filter(x => !json.notMultipleOf.includes(x)))
-        else json.notMultipleOf = notMultipleOf
-    }
+    extendArrayKey(json, schema, ["multipleOf","notMultipleOf"])
 
     if (minimum !== undefined) {
         if ("minimum" in json) {
@@ -101,16 +95,13 @@ function extendObject(json, schema, SETTINGS) {
     assignProperties(json, schema, ["properties","patternProperties"], SETTINGS.extend_propSchema)
     assignSchemaObject(json, schema, ["additionalProperties","unevaluatedProperties","propertyNames"], SETTINGS.extend_schemaObj)
     extendSizeKeys(json, schema, "minProperties", "maxProperties")
-
-    if ("required" in schema) {
-        if ("required" in json) json.required = json.required.concat(schema.required.filter(x => !json.required.includes(x)))
-        else json.required = schema.required
-    }
+    extendArrayKey(json, schema, ["required","notRequired","notAdditionalTypes","notUnevaluatedTypes"])
 }
 
 function extendArray(json, schema, SETTINGS) {
     assignSchemaObject(json, schema, ["items","unevaluatedItems"], SETTINGS.extend_schemaObj)
     extendSizeKeys(json, schema, "minItems", "maxItems")
+    extendArrayKey(json, schema, ["contains"])
     if ("uniqueItems" in schema) json.uniqueItems = schema.uniqueItems
 
     if ("prefixItems" in schema) {
@@ -133,11 +124,6 @@ function extendArray(json, schema, SETTINGS) {
         }
         // OWT dá overwrite completo do prefixItems antigo pelo novo
         else json.prefixItems = schema.prefixItems
-    }
-
-    if ("contains" in schema) {
-        if ("contains" in json) json.contains = json.contains.concat(schema.contains)
-        else json.contains = schema.contains
     }
 }
 
@@ -188,7 +174,7 @@ function assignSchemaObject(json, schema, keys, setting) {
 
 function assignSubschema(json, schema) {
     for (let t in schema.type) {
-        if (t in json.type) extendSchema(json.type[t], schema.type[t], t, null)
+        if (t in json.type && Object.keys(schema.type[t]).length > 0) extendSchema(json.type[t], schema.type[t], t, null)
         else json.type[t] = schema.type[t]
     }
 }

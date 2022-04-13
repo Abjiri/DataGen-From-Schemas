@@ -1,3 +1,28 @@
+function notSubschema(json) {
+    let notTypes = []
+
+    for (let t in json.type) {
+        if (!Object.keys(json.type[t]).length) { notTypes.push(t); delete json.type[t] }
+        else {
+            notGenericKeys(json.type[t])
+            switch (t) {
+                case "number": notNumeric(json.type[t]); break
+                case "string": notString(json.type[t]); break
+                case "object": notObject(json.type[t]); break
+                case "array": notArray(json.type[t]); break
+            }
+        }
+    }
+
+    if (!Object.keys(json.type).length) {
+        let types = ["string","number","object","array","null","boolean"]
+        types = types.filter(t => !notTypes.includes(t))
+
+        if (types.length > 1 && types.includes("null")) types.splice(types.indexOf("null"), 1)
+        for (let t of types) json.type[t] = {}
+    }
+}
+
 function notGenericKeys(json) {
     if ("const" in json) {
         json.notValues = json.const
@@ -52,18 +77,65 @@ function notNumeric(json) {
 function notString(json) {
     if ("pattern" in json) json.pattern = `^((?!(${json.pattern})).){${"minLength" in json ? json.minLength : 10},${"maxLength" in json ? json.maxLength : 30}}`
     if ("format" in json) json.notFormat = [json.format]
-    if ("maxLength" in json) {
-        json.minLength = json.maxLength+1
-        delete json.maxLength
+    notSizeKeys(json, "minLength", "maxLength")
+}
+
+function notObject(json) {
+    notProperties(json, ["properties","patternProperties"])
+    notOtherProperties(json, ["additionalProperties","unevaluatedProperties"])
+    if ("required" in json && !("properties" in json)) {json.notRequired = json.required; delete json.required}
+    if ("propertyNames" in json) notString(json.propertyNames.type.string)
+    notSizeKeys(json, "minProperties", "maxProperties")
+}
+
+function notArray(json) {
+    /* if ("contains" in json) {
+        if (!("minContains" in json || "maxContains" in json)) {json.minContains = 0; json.maxContains = 0}
+        else if ("max")
+    } */
+}
+
+function notSizeKeys(json, min, max) {
+    if (max in json) {
+        json[min] = json[max] + 1
+        delete json[max]
     }
-    else if ("minLength" in json) {
-        json.maxLength = json.minLength - (!json.minLength ? 0 : 1)
-        delete json.minLength
+    else if (min in json) {
+        json[max] = json[min] - (!json[min] ? 0 : 1)
+        delete json[min]
     }
+}
+
+function notProperties(json, keys) {
+    keys.filter(k => k in json).map(k => {
+        for (let p in json[k]) {
+            notSubschema(json[k][p])
+            if (!Object.keys(json[k][p]).length) delete json[k][p]
+        }
+    })
+}
+
+function notOtherProperties(json, keys) {
+    keys.filter(k => k in json).map(k => {
+        if (json[k] === false) json[k] = {type: {string: {}, number: {}, boolean: {}, null: {}, array: {}, object: {}}}
+        else {
+            let notTypes = Object.keys(json[k].type)
+            notSubschema(json[k])
+
+            notTypes = notTypes.filter(x => !Object.keys(json[k].type).includes(x))
+            if (!Object.keys(json[k].type).length) json[k] = false
+            else {
+                if (k == "additionalProperties") json.notAdditionalTypes = notTypes
+                else json.notUnevaluatedTypes = notTypes
+            }
+        }
+    })
 }
 
 module.exports = {
     notGenericKeys,
     notNumeric,
-    notString
+    notString,
+    notObject,
+    notArray
 }

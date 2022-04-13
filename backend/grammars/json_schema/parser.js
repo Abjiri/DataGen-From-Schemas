@@ -5968,9 +5968,10 @@ module.exports = /*
         if (boolean === false && current_key != "if") return boolean
 
         if (obj === null) {
-          if (boolean !== false && current_key == "not") return error("A schema da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
+          if (boolean !== false && current_key == "not") return error("Uma subschema dentro da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
           else obj = {type: ["string","integer","number","boolean","null","array","object"], booleanSchema: boolean}
         }
+        else if (["string","number","boolean","null","array","object"].every(t => obj.type.includes(t)) && current_key == "not") return error("Uma subschema dentro da chave 'not' não pode ser true ou {}, pois a sua negação impede a geração de qualquer valor!")
         else if ("not" in obj && obj.not === false) {
           if (!obj.type.length) obj.type = ["string","integer","number","boolean","null","array","object"]
           delete obj.not

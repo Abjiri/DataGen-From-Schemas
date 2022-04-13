@@ -285,12 +285,25 @@ function parseStringType(json) {
 }
 
 function parseObjectType(json, only_req, depth) {
+    if ("required" in json && "notRequired" in json) {
+        json.required = json.required.filter(x => !json.notRequired.includes(x))
+        delete json.notRequired
+    }
+    if ("notAdditionalTypes" in json && "additionalProperties" in json && "type" in json.additionalProperties) {
+        json.notAdditionalTypes.map(t => delete json.additionalProperties.type[t])
+        delete json.notAdditionalTypes
+    }
+    if ("notUnevaluatedTypes" in json && "unevaluatedProperties" in json && "type" in json.unevaluatedProperties) {
+        json.notUnevaluatedTypes.map(t => delete json.unevaluatedProperties.type[t])
+        delete json.notUnevaluatedTypes
+    }
+
     let str = "{\n", obj = {}
     let required = "required" in json ? json.required.length : 0
     let {minProps, maxProps, size} = objectSize(json, required)
-    
     let depSchemas = "dependentSchemas" in json ? json.dependentSchemas : {}
     let depSchemas_objects = []
+    
 
     // gerar as propriedades required
     if (required > 0) addProperties(json, obj, json.required, depSchemas, depSchemas_objects, depth)
@@ -403,7 +416,7 @@ function objectSize(json, required) {
             if ("patternProperties" in json) maxProps = Object.keys(json.patternProperties).length
             else if ("propertyNames" in json) maxProps = 3
             else if (!(!("additionalProperties" in json || "unevaluatedProperties" in json) || additional)) maxProps = 0
-            else {json.additionalProperties = trueSchema; maxProps = 3}
+            else if (!("additionalProperties" in json)) {json.additionalProperties = trueSchema; maxProps = 3}
         }
         else if (SETTINGS.random_props && minProps == maxProps && minProps > 0 && (!("additionalProperties" in json || "unevaluatedProperties" in json))) maxProps += 3
         else if (!maxProps) maxProps = 3
