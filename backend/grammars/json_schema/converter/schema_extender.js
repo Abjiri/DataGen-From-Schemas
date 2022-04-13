@@ -20,6 +20,26 @@ function extendPredefinedValue(json, schema, key) {
     else json[key] = schema[key]
 }
 
+function extendSizeKeys(json, schema, min, max) {
+    if (min in schema) {
+        if (min in json) {
+            if (schema[min] > json[min]) json[min] = schema[min]
+        } 
+        else json[min] = schema[min]
+
+        if (max in json && json[max] < json[min]) delete json[max]
+    }
+
+    if (max in schema) {
+        if (max in json) {
+            if (schema[max] < json[max]) json[max] = schema[max]
+        } 
+        else json[max] = schema[max]
+
+        if (min in json && json[min] > json[max]) delete json[min]
+    }
+}
+
 function extendString(json, schema) {
     if ("pattern" in schema) json.pattern = schema.pattern
     if ("format" in schema) json.format = schema.format
@@ -27,26 +47,7 @@ function extendString(json, schema) {
         if ("notFormat" in json) json.notFormat = json.notFormat.concat(schema.notFormat)
         else json.notFormat = schema.notFormat
     }
-
-    let {minLength, maxLength} = schema
-
-    if (minLength != undefined) {
-        if ("minLength" in json) {
-            if (minLength > json.minLength) json.minLength = minLength
-        } 
-        else json.minLength = minLength
-
-        if ("maxLength" in json && json.maxLength < json.minLength) delete json.maxLength
-    }
-
-    if (maxLength != undefined) {
-        if ("maxLength" in json) {
-            if (maxLength < json.maxLength) json.maxLength = maxLength
-        } 
-        else json.maxLength = maxLength
-
-        if ("minLength" in json && json.minLength > json.maxLength) delete json.minLength
-    }
+    extendSizeKeys(json, schema, "minLength", "maxLength")
 }
 
 function extendNumeric(json, schema) {
@@ -114,28 +115,42 @@ function extendNumeric(json, schema) {
 }
 
 function extendObject(json, schema) {
-    ["properties","patternProperties"].filter(k => k in schema).map(k => assignProperties(json, schema, k))
-    ["additionalProperties","unevaluatedProperties"].filter(k => k in schema).map(k => assignSchemaObject(json, schema, k))
+    assignProperties(json, schema, ["properties","patternProperties"])
+    assignObject(json, schema, ["additionalProperties","unevaluatedProperties","propertyNames"])
+    extendSizeKeys(json, schema, "minProperties", "maxProperties")
+    if ("required" in schema) {
+        if ("required" in json) json.required = json.required.concat(schema.required.filter(x => !json.required.includes(x)))
+        else json.required = schema.required
+    }
 }
 
-function assignProperties(json, schema, key) {
-    console.log("ya")
-    if (key in json) Object.assign(json[key], schema[key])
-    else json[key] = schema[key]
-}
-
-function assignSchemaObject(json, schema, key) {
-    console.log("yo")
-    if (key in json) {
-        if (typeof json[key] == "boolean") json[key] = schema[key]
-        else {
-            for (let t in schema[key].type) {
-                if (!(t in json[key].type)) json[key].type[t] = {}
-                Object.assign(json[key].type[t], schema[key].type[t])
+function assignProperties(json, schema, keys) {
+    keys.filter(k => k in schema).map(k => {
+        if (k in json) {
+            for (let p in schema[k]) {
+                if (p in json[k]) assignObjectSubschema(json[k][p], schema[k][p])
+                else json[k][p] = schema[k][p]
             }
         }
+        else json[k] = schema[k]
+    })
+}
+
+function assignObject(json, schema, keys) {
+    keys.filter(k => k in schema).map(k => {
+        if (k in json) {
+            if (typeof json[k] == "boolean" || typeof schema[k] == "boolean") json[k] = schema[k]
+            else assignObjectSubschema(json[k], schema[k])
+        }
+        else json[k] = schema[k]
+    })
+}
+
+function assignObjectSubschema(json, schema) {
+    for (let t in schema.type) {
+        if (t in json.type) extendSchema(json.type[t], schema.type[t], t, null)
+        else json.type[t] = schema.type[t]
     }
-    else json[key] = schema[key]
 }
 
 
