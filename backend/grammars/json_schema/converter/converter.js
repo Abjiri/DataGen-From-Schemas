@@ -5,12 +5,16 @@ const { structureUndefType } = require('./undefType')
 const { extendSchema } = require('./schema_extender')
 
 let SETTINGS = {
+    prob_if: 0.5,
     prob_patternProperty: 0.8,
     random_props: false,
     extend_propSchema: "OR", // "OR" / "OW" (overwrite)
     extend_prefixItems: "OR", // "OR" / "OWP" (overwrite parcial) / "OWT" (overwrite total) / "AP" (append) 
     extend_schemaObj: "OR" // "OR" / "OW" (overwrite)
 }
+
+// instância original da estrutura intermédia que aqui chega, com schemas, subschemas e pn_refs
+let original_json
 
 // tabs de indentação
 const indent = depth => "\t".repeat(depth)
@@ -25,7 +29,8 @@ let clone = x => JSON.parse(JSON.stringify(x))
 let a = x => console.log(JSON.stringify(x))
 
 function convert(json) {
-    return "<!LANGUAGE pt>\n" + parseJSON(json, 1)
+    original_json = json
+    return "<!LANGUAGE pt>\n" + parseJSON(json.schema, 1)
 }
 
 function parseJSON(json, depth) {
@@ -51,7 +56,7 @@ function parseSchemaComposition(json, key, type) {
     if (key == "oneOf") subschemas = [json[key][rand(json[key].length)]]
     if (key == "not") subschemas = [json[key]]
     if (key == "if") {
-        if ("typeSchema" in json[key] || (!("booleanSchema" in json[key]) && Math.random() > 0.5) || json[key].booleanSchema) { if ("then" in json) subschemas = [json[key], json.then] }
+        if ("typeSchema" in json[key] || (!("booleanSchema" in json[key]) && Math.random() < SETTINGS.prob_if) || json[key].booleanSchema) { if ("then" in json) subschemas = [json[key], json.then] }
         else if ("else" in json) subschemas = [{not: json[key]}, json.else]
 
         if ("then" in json) delete json.then
@@ -166,7 +171,6 @@ function parseNumericType(json, depth) {
     let any_frac = multipleOf.reduce((a,c) => a || (c%1 != 0), false)
     let max = null, min = null
     let upper = null, lower = null
-    let int_multiples = []
 
     if (maximum !== undefined) max = maximum
     if (exclusiveMaximum !== undefined) max = exclusiveMaximum - (any_frac ? 0.0000000001 : 1)
@@ -180,26 +184,10 @@ function parseNumericType(json, depth) {
     // mínimo múltiplo comum de todos os multipleOf
     let lcm = multipleOf.length == 1 ? multipleOf[0] : lcm_n_numbers(multipleOf)
 
-    if (max !== null && min !== null) {
-      upper = Math.floor(max/lcm)
-      lower = Math.ceil(min/lcm)
-      
-      if (any_frac && integer) {
-        let decimal_part = parseFloat((lcm % 1).toFixed(4))
-
-        for (let i = lower; i <= upper; i++) {
-          if ((decimal_part * i) % 1 == 0) int_multiples.push(i)
-        }
-      }
-    }
-    else if (max !== null) {
-      upper = Math.floor(max/lcm)
-      lower = upper - 100
-    }
-    else if (min !== null) {
-      lower = Math.ceil(min/lcm)
-      upper = lower + 100
-    }
+    if (max !== null) upper = Math.floor(max/lcm)
+    if (min !== null) lower = Math.ceil(min/lcm)
+    if (upper !== null && lower === null) lower = upper - 100
+    if (lower !== null && upper === null) upper = lower + 100
 
     // se não tiver quaisquer chaves de restrição, gera um inteiro/float aleatório
     if (!Object.keys(json).length || (Object.keys(json).length == 1 && "integer" in json)) return `'{{${integer ? "integer" : "float"}(-1000,1000)}}'`
@@ -223,15 +211,7 @@ ${indent(depth+1)}return gen.random(...multiples)
 ${indent(depth)}}`
         return `'{{multipleOf(${lcm})}}'`
     }
-    // se quiser um inteiro entre certos limites, determina os múltiplos possíveis no intervalo de valores e gera um deles aleatoriamente
-    else if (int_multiples.length > 0) {
-        if ("notMultipleOf" in json) return `gen => { 
-${indent(depth+1)}let multiples = ${JSON.stringify(int_multiples)}.map(x => ${lcm}*x)
-${indent(depth+1)}let final_multiples = multiples.filter(m => ${JSON.stringify(notMultipleOf)}.every(x => m%x != 0))
-${indent(depth+1)}return !final_multiples.length ? gen.random(...multiples) : gen.random(...final_multiples)
-${indent(depth)}}`
-        return `gen => { return gen.random(...${JSON.stringify(int_multiples)}) * ${lcm} }`
-    }
+    
     // se quiser um número entre certos limites, determina os múltiplos possíveis no intervalo de valores e gera um deles aleatoriamente
     if ("notMultipleOf" in json) return `gen => {
 ${indent(depth+1)}let multiples = ${lower < upper ? `gen.range(${lower},${upper+1})` : `[${lower}]`}.map(x => x*${lcm})
@@ -254,6 +234,7 @@ function parseStringType(json) {
             case "date": return `'{{xsd_dateTime("date",null,${JSON.stringify(minDate)},${JSON.stringify(defaultList)})}}'`
             case "time": return `'{{time("hh:mm:ss", 24, false, "00:00:00", "23:59:59")}}'`
             case "duration": return `'{{xsd_duration("P","P1Y",${JSON.stringify(defaultList)})}}'`
+            case "regex": return `'{{regex()}}'`
 
             case "email": case "idn-email":
                 return `gen => { return gen.stringOfSize(5,20).replace(/[^a-zA-Z]/g, '').toLowerCase() + "@" + gen.random("gmail","yahoo","hotmail","outlook") + ".com" }`
@@ -269,10 +250,17 @@ function parseStringType(json) {
             case "uri-reference": case "iri-reference": return `'{{pattern("((https?:\\/\\/(www\\.))|\/)[-a-zA-Z0-9@:%._]{2,32}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%_]{2,32})")}}'`
             case "uri-template": return `'{{pattern("https?:\\/\\/(www\\.)([-a-zA-Z0-9@:%._]{2,8}({[a-zA-Z]{3,10}})){1,5}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%_]{2,32})")}}'`
 
-            case "json-pointer": return "https://datagen.di.uminho.pt/json-schemas/"
-            case "relative-json-pointer": return "/json-schemas/"
+            case "json-pointer": case "relative-json-pointer":
+                let base_str = json.format == "json-pointer" ? '"https://datagen.di.uminho.pt' : '"'
+                let ids = original_json.subschemas.map(x => x.id).filter(x => !/^anon/.test(x))
 
-            case "regex": return `'{{regex()}}'`
+                if (ids.length > 0) return "'{{random(" + ids.map(x => base_str + x + '"').join(",") + ")}}'"
+                else {
+                    let types_with_keys = Object.keys(original_json.schema.type).filter(t => Object.keys(original_json.schema.type[t]).length > 0)
+                    let type = types_with_keys[rand(types_with_keys.length)]
+                    let key = Object.keys(original_json.schema.type[type])[rand(Object.keys(original_json.schema.type[type]).length)]
+                    return base_str + "/json-schemas/" + key + '"'
+                }
         }
     }
 
@@ -565,7 +553,7 @@ function parseArrayType(json, depth) {
     for (let i = arr.length; i < arrLen.len; i++) arr.push(parseJSON(nonPrefixedSchema, depth))
 
     // converter o array final para string da DSL
-    if (!("uniqueItems" in json && !arr.some(x => /^({\n|\[|gen => {\n\t*\/\/uniqueItems)/.test(x)))) {
+    if (!("uniqueItems" in json && !arr.some(x => /^({\n|\[|gen => {\n(\t*\/\/uniqueItems)?)/.test(x)))) {
         let str = "[\n"
         arr.map(x => str += `${indent(depth)}${x},\n`)
         return str == "[\n" ? "[]" : `${str.slice(0, -2)}\n${indent(depth-1)}]`
@@ -608,6 +596,8 @@ function parseNotArrayKeys(json) {
             json.notContainsTypes.map(t => delete notContains.type[t])
             delete json.notContainsTypes
         }
+
+        if (!Object.keys(notContains.type).length) notContains.type.null = {}
         json.notContains = notContains
     }
     if ("notItems" in json && "items" in json && "type" in json.items) {

@@ -24,9 +24,8 @@ router.post('/', (req, res) => {
     if ("$defs" in data[0].schema) delete data[0].schema.$defs
 
     // criar modelo DSL a partir dos dados da schemas
-    let model = jsonConverter.convert(data[0].schema)
+    let model = jsonConverter.convert(data[0])
     console.log('modelo criado')
-    //console.log(model)
     // gerar dataset
     
     let dataset = dslParser.parse(model)
