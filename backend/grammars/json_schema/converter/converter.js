@@ -387,10 +387,12 @@ function parseNotObjectKeys(json) {
     if ("notAdditionalProperties" in json && "additionalProperties" in json && "type" in json.additionalProperties) {
         json.notAdditionalProperties.map(t => delete json.additionalProperties.type[t])
         delete json.notAdditionalProperties
+        if (!Object.keys(json.additionalProperties.type).length) json.additionalProperties.type.null = {}
     }
     if ("notUnevaluatedProperties" in json && "unevaluatedProperties" in json && "type" in json.unevaluatedProperties) {
         json.notUnevaluatedProperties.map(t => delete json.unevaluatedProperties.type[t])
         delete json.notUnevaluatedProperties
+        if (!Object.keys(json.unevaluatedProperties.type).length) json.unevaluatedProperties.type.null = {}
     }
 }
 
@@ -603,10 +605,12 @@ function parseNotArrayKeys(json) {
     if ("notItems" in json && "items" in json && "type" in json.items) {
         json.notItems.map(t => delete json.items.type[t])
         delete json.notItems
+        if (!Object.keys(json.items.type).length) json.items.type.null = {}
     }
     if ("notUnevaluatedItems" in json && "unevaluatedItems" in json && "type" in json.unevaluatedItems) {
         json.notUnevaluatedItems.map(t => delete json.unevaluatedItems.type[t])
         delete json.notUnevaluatedItems
+        if (!Object.keys(json.unevaluatedItems.type).length) json.unevaluatedItems.type.null = {}
     }
 }
 

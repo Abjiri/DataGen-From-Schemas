@@ -3,7 +3,7 @@ var router = express.Router();
 const fs = require('fs')
 
 const dslParser = require('../grammars/datagen_dsl/parser')
-const xmlParser = require('../grammars/xml_schema/parser')
+const xmlParser = require('../grammars/xml_schema/parser/parser')
 
 const dslConverter = require('../grammars/datagen_dsl/conversions')
 const xmlConverter = require('../grammars/xml_schema/converter/converter');
