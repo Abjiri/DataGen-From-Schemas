@@ -21,6 +21,7 @@ router.post('/', (req, res) => {
     
     let resolved = resolve_refs(data, req.body.settings)
     if (resolved !== true) return res.status(201).jsonp({message: resolved})
+    
     if ("$defs" in data[0].schema) delete data[0].schema.$defs
 
     // criar modelo DSL a partir dos dados da schemas
@@ -34,7 +35,10 @@ router.post('/', (req, res) => {
 
     // converter dataset para o formato final
     if (format == "JSON") dataset = JSON.stringify(dslConverter.cleanJson(dataset.dataModel.data), null, 2)
-    if (format == "XML") dataset = dslConverter.jsonToXml(dataset.dataModel.data, data.xml_declaration)
+    if (format == "XML") {
+      let schema = data[0].subschemas.pop()
+      dataset = dslConverter.jsonToXml(dataset.dataModel.data, {root_name: /^anon\d+$/.test(schema.id) ? "dataset" : schema.id.split("/json-schemas/")[1]})
+    }
     console.log('dataset convertido')
 
     res.status(201).jsonp({dataset})
