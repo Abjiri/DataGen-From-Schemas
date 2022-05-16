@@ -47,7 +47,7 @@ export default {
       settings: {
         UNBOUNDED: 10,
         RECURSIV: {LOWER: 0, UPPER: 3},
-        OUTPUT: "XML"
+        OUTPUT: "JSON"
       }
     }
   },

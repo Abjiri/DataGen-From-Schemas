@@ -193,19 +193,19 @@ function parseNumericType(json, depth) {
     if (!Object.keys(json).length || (Object.keys(json).length == 1 && "integer" in json)) return `'{{${integer ? "integer" : "float"}(-1000,1000)}}'`
     // se não tiver chaves de range, gera um múltiplo aleatório da chave 'multipleOf' ou, se não tiver, 1
     else if (upper === null) {
-        if ("notMultipleOf" in json && "multipleOf" in json) return `gen => {
+        if ("notMultipleOf" in json && "multipleOf" in json) return `gen => { //numeric
 ${indent(depth+1)}let multiples = gen.range(1,100).filter(i => ${JSON.stringify(notMultipleOf)}.every(notMult => ${lcm}*i % notMult != 0)).map(x => ${lcm}*x)
 ${indent(depth+1)}let notInteger = ${notInteger}, final_multiples = !multiples.length ? gen.range(1,100).map(x => ${lcm}*x) : multiples
 ${indent(depth+1)}if (notInteger && final_multiples.some(m => m%1 != 0)) final_multiples = final_multiples.filter(m => m%1 != 0)
 ${indent(depth+1)}return gen.random(...final_multiples)
 ${indent(depth)}}`
-        else if ("notMultipleOf" in json) return `gen => {
+        else if ("notMultipleOf" in json) return `gen => { //numeric
 ${indent(depth+1)}for (let i = 0; i < 100; i++) {
 ${indent(depth+2)}let num = gen.${integer ? "integer" : "float"}(-1000, 1000)
 ${indent(depth+2)}if (${JSON.stringify(notMultipleOf)}.every(x => num%x != 0) || i==99) return num
 ${indent(depth+1)}}
 ${indent(depth)}}`
-        else if (notInteger && lcm%1 != 0) return `gen => {
+        else if (notInteger && lcm%1 != 0) return `gen => { //numeric
 ${indent(depth+1)}let multiples = gen.range(1,100).map(x => ${lcm}*x).filter(x => x%1 != 0)
 ${indent(depth+1)}return gen.random(...multiples)
 ${indent(depth)}}`
@@ -213,7 +213,7 @@ ${indent(depth)}}`
     }
     
     // se quiser um número entre certos limites, determina os múltiplos possíveis no intervalo de valores e gera um deles aleatoriamente
-    if ("notMultipleOf" in json) return `gen => {
+    if ("notMultipleOf" in json) return `gen => { //numeric
 ${indent(depth+1)}let multiples = ${lower < upper ? `gen.range(${lower},${upper+1})` : `[${lower}]`}.map(x => x*${lcm})
 ${indent(depth+1)}let final_multiples = multiples.filter(m => ${JSON.stringify(notMultipleOf)}.every(x => m%x != 0))
 ${indent(depth+1)}return !final_multiples.length ? gen.random(...multiples) : gen.random(...final_multiples)
@@ -251,16 +251,18 @@ function parseStringType(json) {
             case "uri-template": return `'{{pattern("https?:\\/\\/(www\\.)([-a-zA-Z0-9@:%._]{2,8}({[a-zA-Z]{3,10}})){1,5}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%_]{2,32})")}}'`
 
             case "json-pointer": case "relative-json-pointer":
-                let base_str = json.format == "json-pointer" ? '"https://datagen.di.uminho.pt' : '"'
+                let base_str = json.format == "json-pointer" ? "'https://datagen.di.uminho.pt" : "'"
                 let ids = original_json.subschemas.map(x => x.id).filter(x => !/^anon/.test(x))
 
-                if (ids.length > 0) return "'{{random(" + ids.map(x => base_str + x + '"').join(",") + ")}}'"
-                else {
-                    let types_with_keys = Object.keys(original_json.schema.type).filter(t => Object.keys(original_json.schema.type[t]).length > 0)
-                    let type = types_with_keys[rand(types_with_keys.length)]
-                    let key = Object.keys(original_json.schema.type[type])[rand(Object.keys(original_json.schema.type[type]).length)]
-                    return base_str + "/json-schemas/" + key + '"'
-                }
+                let random_id = null
+                if (ids.length > 0) random_id = ids[Math.floor(Math.random()*ids.length)]
+                let schema = random_id === null ? original_json.schema : original_json.subschemas.filter(x => x.id == random_id)[0].schema
+                
+                let types_with_keys = Object.keys(schema.type).filter(t => Object.keys(schema.type[t]).length > 0)
+                let type = types_with_keys[rand(types_with_keys.length)]
+                
+                if (random_id === null) return `'#/{{random("${Object.keys(schema.type[type]).join('","')}")}}'`
+                return base_str + random_id + `/{{random("${Object.keys(schema.type[type]).join('","')}")}}'`
         }
     }
 
@@ -555,7 +557,7 @@ function parseArrayType(json, depth) {
     for (let i = arr.length; i < arrLen.len; i++) arr.push(parseJSON(nonPrefixedSchema, depth))
 
     // converter o array final para string da DSL
-    if (!("uniqueItems" in json && !arr.some(x => /^({\n|\[|gen => {\n(\t*\/\/uniqueItems)?)/.test(x)))) {
+    if (!("uniqueItems" in json && !arr.some(x => /^({\n|\[|gen => {( \/\/[^u])?\n)/.test(x)))) {
         let str = "[\n"
         arr.map(x => str += `${indent(depth)}${x},\n`)
         return str == "[\n" ? "[]" : `${str.slice(0, -2)}\n${indent(depth-1)}]`
@@ -563,17 +565,23 @@ function parseArrayType(json, depth) {
     else {
         let convertItem = x => {
             if (x == "null") return x
+            if (/^'(#\/|(https:\/\/datagen.di.uminho.pt)?\/json-schemas)/.test(x)) return x.replace(/{{/g, "' + gen.").replace(/}}/g, " + '")
             if (/^'{{/.test(x)) return "gen." + x.slice(3,-3)
             if (/^gen => { return/.test(x)) return x.split("return ")[1].slice(0,-2)
+            if (/^gen => { \/\/numeric/.test(x)) return x.split("gen => { //numeric")[1].replace(/\n/g, "\n\t\t")
         }
 
-        return `gen => {
-${indent(depth)}//uniqueItems
+        return `gen => { //uniqueItems
 ${indent(depth)}let arr = []
 ${indent(depth)}for (let i = 0; i < ${arr.length}; i++) {
 ${indent(depth+1)}for (let j = 0; j < 10; j++) {
-${indent(depth+2)}let newItem${arr.map((x,i) => `\n${indent(depth+2)}if (i==${i}) newItem = ${convertItem(x)}`).join("")}
-${indent(depth+2)}if (!arr.includes(newItem) || j==9) {arr.push(newItem); break}
+${indent(depth+2)}let newItem
+${arr.map((x,i) => {
+    let str = "", multiline = /^gen => { \/\/numeric/.test(x)
+    if (multiline) str += `${indent(depth+2)}let item${i} = () => {${convertItem(x)}\n`
+    str += `${indent(depth+2)}if (i==${i}) newItem = ${!multiline ? convertItem(x) : `item${i}()`}\n`
+    return str
+}).join("")}${indent(depth+2)}if (!arr.includes(newItem) || j==9) {arr.push(newItem); break}
 ${indent(depth+1)}}\n${indent(depth)}}
 ${indent(depth)}return arr
 ${indent(depth-1)}}`
