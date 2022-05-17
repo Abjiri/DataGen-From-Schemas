@@ -1,12 +1,10 @@
 <template>
-    <v-container>
-        <codemirror
-            ref="text"
-            :value="text"
-            :options="options"
-            v-on="type ? { input: onChange } : {}"
-        />
-    </v-container>
+    <codemirror
+        ref="text"
+        :value="text"
+        :options="options"
+        v-on="type ? { input: onChange } : {}"
+    />
 </template>
 
 <script>

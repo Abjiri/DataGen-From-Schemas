@@ -16,11 +16,12 @@
       </v-row>
 
       <v-row class="fill-height mt-0">
+          <!-- <Codemirror :type="'input'" :mode="input_mode" v-bind:text="input" @changed="onChangeInput"/> -->
+        <Tabs/>
         <v-flex xs12 md6>
-          <Codemirror :type="'input'" :mode="input_mode" v-bind:text="input" @changed="onChangeInput"/>
-        </v-flex>
-        <v-flex xs12 md6>
-          <Codemirror :type="'output'" :mode="output_mode" v-bind:text="output"/>
+          <v-container>
+            <Codemirror :type="'output'" :mode="output_mode" v-bind:text="output"/>
+          </v-container>
         </v-flex>
       </v-row>
     </v-container>
@@ -30,19 +31,19 @@
 import SettingsXML from '@/components/Settings_XML'
 import ButtonGroup from '@/components/ButtonGroup'
 import Codemirror from '@/components/Codemirror'
+import Tabs from '@/components/Tabs'
 import axios from 'axios'
 
 export default {
   components: {
     SettingsXML,
     ButtonGroup,
-    Codemirror
+    Codemirror,
+    Tabs
   },
   data() {
     return {
-      input_mode: "javascript",
       output_mode: "javascript",
-      input: "",
       output: "",
       settings: {
         UNBOUNDED: 10,
@@ -52,7 +53,6 @@ export default {
     }
   },
   methods: {
-    onChangeInput(input) { this.input = input },
     updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
     updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
     async generate() {
