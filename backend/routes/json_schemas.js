@@ -12,17 +12,13 @@ const {resolve_refs} = require('../grammars/json_schema/converter/refs')
 // POST para gerar um dataset a partir de um XML schema
 router.post('/', (req, res) => {
   try {
-    let schemas = req.body.json.split("\n\n\n")
-
     // extrair dados da schema
-    let data = schemas.map(x => jsonParser.parse(x))
+    let data = req.body.schemas.map(x => jsonParser.parse(x))
     //console.log(JSON.stringify(data))
     console.log('schema parsed')
     
     let resolved = resolve_refs(data, req.body.settings)
     if (resolved !== true) return res.status(201).jsonp({message: resolved})
-    
-    if ("$defs" in data[0].schema) delete data[0].schema.$defs
 
     // criar modelo DSL a partir dos dados da schemas
     let model = jsonConverter.convert(data[0])

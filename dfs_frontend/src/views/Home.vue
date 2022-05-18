@@ -8,13 +8,16 @@
         @confirm="generate"
       >
         Deseja gerar o dataset a partir de que schema?
-        <div class="parameters">
-          <!-- <v-select
-            :items="items"
-            label="Outlined style"
-            outlined
-          ></v-select> -->
-        </div>
+        <v-select class="select-schema"
+          v-model="main_schema"
+          :items="schemas"
+          item-text="label"
+          item-value="key"
+          label="Selecionar"
+          outlined
+          return-object
+          single-line
+        ></v-select>
       </Modal>
       <v-row>
           <v-col sm="auto">
@@ -32,7 +35,7 @@
       </v-row>
 
       <v-row class="fill-height mt-0">
-        <Tabs :mode="input_mode" :codemirrors="inputs" @updateInput="updateInput" @updateTabs="updateInputs"/>
+        <Tabs :mode="input_mode" :hover="main_schema.key" :tabs="tabs" @updateInput="updateInput" @updateTabs="updateTabs" @hover="updateMain"/>
         <v-flex xs12 md6>
           <v-container>
             <Codemirror :type="'output'" :mode="output_mode" v-bind:text="output"/>
@@ -48,7 +51,7 @@ import ButtonGroup from '@/components/ButtonGroup'
 import Codemirror from '@/components/Codemirror'
 import Modal from '@/components/Modal'
 import Tabs from '@/components/Tabs'
-/* import axios from 'axios' */
+import axios from 'axios'
 
 export default {
   components: {
@@ -62,29 +65,38 @@ export default {
     return {
       input_mode: "javascript",
       output_mode: "javascript",
-      inputs: [{ input: "", key: "schema_1" }],
       output: "",
       settings: {
         UNBOUNDED: 10,
         RECURSIV: {LOWER: 0, UPPER: 3},
         OUTPUT: "JSON"
       },
-
+      
+      tabs: [{ label: "Schema 1", key: "schema_1", input: "", closable: false }],
+      main_schema: {label: "Schema 1", key: "schema_1"},
+      schemas: [{ label: "Schema 1", key: "schema_1" }],
       chooseSchema: false
     }
   },
   methods: {
-    updateInput(index, input) { this.inputs[index].input = input },
-    updateInputs(inputs) { this.inputs = inputs },
+    updateMain(key) { this.main_schema = this.schemas.find(s => s.key == key) },
+    updateInput(index, input) { this.tabs[index].input = input },
+    updateTabs(tabs) {
+      this.tabs = tabs
+      this.schemas = this.tabs.map(t => { return {label: t.label, key: t.key} })
+    },
     updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
     updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
     async generate() {
       this.chooseSchema = false
-      /* let {data} = await axios.post('http://localhost:3000/api/json_schema', {json: this.input, settings: this.settings})
+      let main_schema = this.tabs.find(s => s.key == this.main_schema.key).input
+      let other_schemas = this.tabs.filter(s => s.key != this.main_schema.key).map(s => s.input)
+      
+      let {data} = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings: this.settings})
       //let {data} = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.input, settings: this.settings})
 
       if ("dataset" in data) this.output = data.dataset
-      if ("message" in data) this.output = "ERRO!!\n\n" + data.message */
+      if ("message" in data) this.output = "ERRO!!\n\n" + data.message
     }
   }
 }
@@ -97,5 +109,10 @@ export default {
   align-items: center;
   width:auto;
   height:auto;
+}
+
+.select-schema {
+  display: flex;
+  padding-top: 20px;
 }
 </style>

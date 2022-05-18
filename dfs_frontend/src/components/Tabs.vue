@@ -22,28 +22,28 @@ export default {
   },
   props: {
     mode: String,
-    codemirrors: Array
+    hover: String,
+    tabs: Array
   },
   data() {
     return {
       input: "",
       tab: "schema_1",
-      created_tabs: 1,
-      tabs: [{ label: "Schema 1", key: "schema_1", closable: false }]
+      created_tabs: 1
     };
   },
   watch: {
-    tab() { this.input = this.codemirrors.find(cm => cm.key == this.tab).input },
-    tabs() {
-      let index = this.tabs.findIndex((tab,i) => tab.key != this.codemirrors[i].key)
-      if (index != -1) this.codemirrors.splice(index, 1)
-      this.$emit('updateTabs', this.codemirrors)
+    hover(key) { this.tab = key },
+    tabs() { this.$emit('updateTabs', this.tabs) },
+    tab() {
+      this.input = this.tabs.find(t => t.key == this.tab).input
+      this.$emit('hover', this.tab)
     }
   },
   methods: {
     onChangeInput(input) {
-      let index = this.codemirrors.findIndex(cm => cm.key == this.tab)
-      this.codemirrors[index].input = input
+      let index = this.tabs.findIndex(t => t.key == this.tab)
+      this.tabs[index].input = input
       this.$emit('updateInput', index, input)
     },
     addTab() {
@@ -51,14 +51,9 @@ export default {
       let item = "schema_" + this.created_tabs
 
       // update tabs
-      let newTabs = [{ label: "Schema " + this.created_tabs, key: item }]
+      let newTabs = [{ label: "Schema " + this.created_tabs, key: item, input: "" }]
       this.$refs.tab.addTab(...newTabs)
 
-      // update codemirrors
-      let newCM = { input: "", key: item }
-      this.codemirrors.push(newCM)
-
-      // update data
       this.tab = item
     },
     removeTab() { this.$refs.tab.removeTab(this.tab) }
