@@ -6,7 +6,7 @@
           <i class="v-icon mdi mdi-plus"></i>
         </span>
       </vue-tabs-chrome>
-      <Codemirror :type="'input'" :mode="input_mode" v-bind:text="input" @changed="onChangeInput"/>
+      <Codemirror :type="'input'" :mode="input_mode" :key="tab" v-bind:text="input" @changed="onChangeInput"/>
     </v-container>
   </v-flex>
 </template>
@@ -30,21 +30,15 @@ export default {
     };
   },
   watch: {
-    tab(newTab) {
-      this.input = this.codemirrors.find(cm => cm.key == newTab).input
-      console.log("|"+this.input+"|")
-      /* console.log("newTab:",newTab)
-      console.log("|"+this.input+"|")
-      console.log(this.codemirrors) */
-    }
+    tab() { this.input = this.codemirrors.find(cm => cm.key == this.tab).input }
   },
   methods: {
-    onChangeInput(input) { console.log("onChange"); this.codemirrors.find(cm => cm.key == this.tab).input = input },
+    onChangeInput(input) { this.codemirrors.find(cm => cm.key == this.tab).input = input },
     addTab() {
       let item = "schema_" + (this.tabs.length + 1)
 
       // update tabs
-      let newTabs = [{ label: "S" + item.slice(1), key: item }]
+      let newTabs = [{ label: "S" + item.slice(1).replace("_"," "), key: item }]
       this.$refs.tab.addTab(...newTabs)
 
       // update codemirrors
