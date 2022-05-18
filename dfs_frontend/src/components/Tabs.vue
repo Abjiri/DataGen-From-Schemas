@@ -24,6 +24,7 @@ export default {
     return {
       input_mode: "javascript",
       tab: "schema_1",
+      created_tabs: 1,
       input: "",
       tabs: [{ label: "Schema 1", key: "schema_1", closable: false }],
       codemirrors: [{ input: "", key: "schema_1" }]
@@ -35,10 +36,11 @@ export default {
   methods: {
     onChangeInput(input) { this.codemirrors.find(cm => cm.key == this.tab).input = input },
     addTab() {
-      let item = "schema_" + (this.tabs.length + 1)
+      this.created_tabs++
+      let item = "schema_" + this.created_tabs
 
       // update tabs
-      let newTabs = [{ label: "S" + item.slice(1).replace("_"," "), key: item }]
+      let newTabs = [{ label: "Schema " + this.created_tabs, key: item }]
       this.$refs.tab.addTab(...newTabs)
 
       // update codemirrors
@@ -49,7 +51,7 @@ export default {
       this.tab = item
     },
     removeTab() {
-      this.$refs.tab.removeTab(this.tab);
+      this.$refs.tab.removeTab(this.tab)
     }
   },
 };
