@@ -1,8 +1,24 @@
 <template>
     <v-container>
+      <Modal
+        title="Gerar dataset"
+        options
+        :visible="chooseSchema"
+        @close="chooseSchema=false"
+        @confirm="generate"
+      >
+        Deseja gerar o dataset a partir de que schema?
+        <div class="parameters">
+          <!-- <v-select
+            :items="items"
+            label="Outlined style"
+            outlined
+          ></v-select> -->
+        </div>
+      </Modal>
       <v-row>
           <v-col sm="auto">
-            <v-btn depressed dark color="indigo" @click="generate()">
+            <v-btn depressed dark color="indigo" @click="chooseSchema=true">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
@@ -30,14 +46,16 @@
 import SettingsXML from '@/components/Settings_XML'
 import ButtonGroup from '@/components/ButtonGroup'
 import Codemirror from '@/components/Codemirror'
+import Modal from '@/components/Modal'
 import Tabs from '@/components/Tabs'
-import axios from 'axios'
+/* import axios from 'axios' */
 
 export default {
   components: {
     SettingsXML,
     ButtonGroup,
     Codemirror,
+    Modal,
     Tabs
   },
   data() {
@@ -50,7 +68,9 @@ export default {
         UNBOUNDED: 10,
         RECURSIV: {LOWER: 0, UPPER: 3},
         OUTPUT: "JSON"
-      }
+      },
+
+      chooseSchema: false
     }
   },
   methods: {
@@ -59,12 +79,23 @@ export default {
     updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
     updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
     async generate() {
-      let {data} = await axios.post('http://localhost:3000/api/json_schema', {json: this.input, settings: this.settings})
+      this.chooseSchema = false
+      /* let {data} = await axios.post('http://localhost:3000/api/json_schema', {json: this.input, settings: this.settings})
       //let {data} = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.input, settings: this.settings})
 
       if ("dataset" in data) this.output = data.dataset
-      if ("message" in data) this.output = "ERRO!!\n\n" + data.message
+      if ("message" in data) this.output = "ERRO!!\n\n" + data.message */
     }
   }
 }
 </script>
+
+<style scoped>
+.parameters {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width:auto;
+  height:auto;
+}
+</style>
