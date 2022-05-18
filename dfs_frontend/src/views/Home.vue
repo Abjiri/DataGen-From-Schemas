@@ -80,7 +80,19 @@ export default {
   },
   methods: {
     updateMain(key) { this.main_schema = this.schemas.find(s => s.key == key) },
-    updateInput(index, input) { this.tabs[index].input = input },
+    updateInput(index, input) {
+      let new_label = this.searchSchemaId(input, this.tabs[index].key)
+
+      // dar update ao label da schema para o seu id, se tiver um
+      // ou para o label original da schema (Schema nr), se o user tiver apagado o id
+      if (new_label != this.tabs[index].label) {
+        this.tabs[index].label = new_label
+        this.schemas[index].label = new_label
+        if (this.main_schema.key == this.tabs[index].key) this.main_schema.label = new_label
+      }
+
+      this.tabs[index].input = input
+    },
     updateTabs(tabs) {
       this.tabs = tabs
       this.schemas = this.tabs.map(t => { return {label: t.label, key: t.key} })
@@ -97,6 +109,30 @@ export default {
 
       if ("dataset" in data) this.output = data.dataset
       if ("message" in data) this.output = "ERRO!!\n\n" + data.message
+    },
+    searchSchemaId(schema, label) {
+      let depth = 0, chunks = []
+
+      for (let i = 0; i < schema.length; i++) {
+        if (schema[i] == "{") {
+          if (!depth) chunks.push({init: i})
+          if (depth == 1) chunks[chunks.length-1].end = i
+          depth++
+        }
+        if (schema[i] == "}") {
+          if (depth == 2) chunks.push({init: i+1})
+          if (depth == 1) chunks[chunks.length-1].end = i+1
+          depth--
+        }
+      }
+
+      let id_regex = /"\$id":\s*"https:\/\/datagen.di.uminho.pt\/json-schemas\/[^",}]+"/
+      for (let i = 0; i < chunks.length; i++) {
+        let str = schema.substring(chunks[i].init, chunks[i].end)
+        if (id_regex.test(str)) return str.match(id_regex)[0].split('/json-schemas/')[1].slice(0,-1)
+      }
+
+      return "S" + label.slice(1).replace("_"," ")
     }
   }
 }
