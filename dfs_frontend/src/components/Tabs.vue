@@ -6,7 +6,7 @@
           <i class="v-icon mdi mdi-plus"></i>
         </span>
       </vue-tabs-chrome>
-      <Codemirror :type="'input'" :mode="input_mode" :key="tab" v-bind:text="input" @changed="onChangeInput"/>
+      <Codemirror :key="tab" :type="'input'" :mode="mode" :text="input" @changed="onChangeInput"/>
     </v-container>
   </v-flex>
 </template>
@@ -20,21 +20,32 @@ export default {
     VueTabsChrome,
     Codemirror
   },
+  props: {
+    mode: String,
+    codemirrors: Array
+  },
   data() {
     return {
-      input_mode: "javascript",
+      input: "",
       tab: "schema_1",
       created_tabs: 1,
-      input: "",
-      tabs: [{ label: "Schema 1", key: "schema_1", closable: false }],
-      codemirrors: [{ input: "", key: "schema_1" }]
+      tabs: [{ label: "Schema 1", key: "schema_1", closable: false }]
     };
   },
   watch: {
-    tab() { this.input = this.codemirrors.find(cm => cm.key == this.tab).input }
+    tab() { this.input = this.codemirrors.find(cm => cm.key == this.tab).input },
+    tabs() {
+      let index = this.tabs.findIndex((tab,i) => tab.key != this.codemirrors[i].key)
+      if (index != -1) this.codemirrors.splice(index, 1)
+      this.$emit('updateTabs', this.codemirrors)
+    }
   },
   methods: {
-    onChangeInput(input) { this.codemirrors.find(cm => cm.key == this.tab).input = input },
+    onChangeInput(input) {
+      let index = this.codemirrors.findIndex(cm => cm.key == this.tab)
+      this.codemirrors[index].input = input
+      this.$emit('updateInput', index, input)
+    },
     addTab() {
       this.created_tabs++
       let item = "schema_" + this.created_tabs
@@ -50,9 +61,7 @@ export default {
       // update data
       this.tab = item
     },
-    removeTab() {
-      this.$refs.tab.removeTab(this.tab)
-    }
+    removeTab() { this.$refs.tab.removeTab(this.tab) }
   },
 };
 </script>

@@ -16,8 +16,7 @@
       </v-row>
 
       <v-row class="fill-height mt-0">
-          <!-- <Codemirror :type="'input'" :mode="input_mode" v-bind:text="input" @changed="onChangeInput"/> -->
-        <Tabs/>
+        <Tabs :mode="input_mode" :codemirrors="inputs" @updateInput="updateInput" @updateTabs="updateInputs"/>
         <v-flex xs12 md6>
           <v-container>
             <Codemirror :type="'output'" :mode="output_mode" v-bind:text="output"/>
@@ -43,7 +42,9 @@ export default {
   },
   data() {
     return {
+      input_mode: "javascript",
       output_mode: "javascript",
+      inputs: [{ input: "", key: "schema_1" }],
       output: "",
       settings: {
         UNBOUNDED: 10,
@@ -53,6 +54,8 @@ export default {
     }
   },
   methods: {
+    updateInput(index, input) { this.inputs[index].input = input },
+    updateInputs(inputs) { this.inputs = inputs },
     updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
     updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
     async generate() {
