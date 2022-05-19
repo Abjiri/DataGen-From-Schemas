@@ -47,8 +47,7 @@
         <Tabs
           :mode="input_mode" 
           :hover="main_schema.key" 
-          :tabs="tabs" 
-          :errorUpload="error" 
+          :tabs="tabs"
           @updateInput="updateInput" 
           @updateTabs="updateTabs" 
           @hover="updateMain"
@@ -148,7 +147,6 @@ export default {
     async generate() {
       this.chooseSchema = false
       let tabs = aux.removeRepeatedSchemas(_.cloneDeep(this.tabs), this.main_schema.key)
-      console.log(tabs)
 
       let main_schema = tabs.find(s => s.key == this.main_schema.key).input
       let other_schemas = tabs.filter(s => s.key != this.main_schema.key && s.input.length > 0).map(s => s.input)

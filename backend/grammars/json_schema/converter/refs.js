@@ -136,9 +136,6 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
   
     let ids = Object.keys(refs_map)
     let queue = ids.filter(k => !refs_map[k].length)
-	console.log("ids:",ids)
-	console.log("queue:",queue)
-	console.log("refs_map:",refs_map)
   
     while (queue.length !== ids.length) {
       let unparsed_ids = ids.filter(k => !queue.includes(k))
@@ -150,7 +147,6 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
         for (let i = 0; i < refs_map[id].length; i++) {
           let ref = refs_map[id][i], schema, nested_ref = false
 		  nested_refs.push(ref)
-		  console.log("ref:",ref)
 
 		  let subschema_list = ids //!queue.length ? ids : queue
           let ref_id_index = subschema_list.findIndex(x => ref == x || ref.startsWith(x + "/") || ref.startsWith(x + "#"))

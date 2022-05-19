@@ -6,7 +6,7 @@
           <i class="v-icon mdi mdi-plus"></i>
         </span>
         <span slot="after" class="btn-add">
-          <input type="file" ref="file" @change="uploadSchema" style="display:none">
+          <input type="file" ref="file" accept=".json" @change="uploadSchema" style="display:none">
           <i class="v-icon mdi mdi-upload" @click="$refs.file.click()"></i>
         </span>
       </vue-tabs-chrome>
@@ -27,8 +27,7 @@ export default {
   props: {
     mode: String,
     hover: String,
-    tabs: Array,
-    errorUpload: Boolean
+    tabs: Array
   },
   data() {
     return {
