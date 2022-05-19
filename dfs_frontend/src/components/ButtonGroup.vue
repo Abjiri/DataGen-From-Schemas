@@ -13,7 +13,7 @@
 export default {
     data() {
         return {
-            format: "XML"
+            format: "JSON"
         }
     },
     methods: {

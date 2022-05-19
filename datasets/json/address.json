@@ -1,0 +1,11 @@
+{
+  "$id": "https://datagen.di.uminho.pt/json-schemas/address",
+  "type": "object",
+  "properties": {
+    "street_address": { "type": "string" },
+    "city": { "type": "string" },
+    "state": { "type": "string" }
+  },
+  "additionalProperties": false,
+  "required": ["street_address", "city", "state"]
+}

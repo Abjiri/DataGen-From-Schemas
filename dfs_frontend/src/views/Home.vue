@@ -1,5 +1,6 @@
 <template>
     <v-container>
+      <!-- modals -->
       <Modal
         title="Gerar dataset"
         options
@@ -19,9 +20,17 @@
           single-line
         ></v-select>
       </Modal>
+      <Modal
+        title="Erro"
+        :visible="error"
+        @close="error=false"
+      >
+        {{errorMsg}}
+      </Modal>
+
       <v-row>
           <v-col sm="auto">
-            <v-btn depressed dark color="indigo" @click="chooseSchema=true">
+            <v-btn depressed dark color="indigo" @click="askMainSchema">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
@@ -35,7 +44,16 @@
       </v-row>
 
       <v-row class="fill-height mt-0">
-        <Tabs :mode="input_mode" :hover="main_schema.key" :tabs="tabs" @updateInput="updateInput" @updateTabs="updateTabs" @hover="updateMain"/>
+        <Tabs
+          :mode="input_mode" 
+          :hover="main_schema.key" 
+          :tabs="tabs" 
+          :errorUpload="error" 
+          @updateInput="updateInput" 
+          @updateTabs="updateTabs" 
+          @hover="updateMain"
+          @errorUpload="errUpload"
+        />
         <v-flex xs12 md6>
           <v-container>
             <Codemirror :type="'output'" :mode="output_mode" v-bind:text="output"/>
@@ -46,12 +64,14 @@
 </template>
 
 <script>
+import _ from 'lodash'
+import axios from 'axios'
 import SettingsXML from '@/components/Settings_XML'
 import ButtonGroup from '@/components/ButtonGroup'
 import Codemirror from '@/components/Codemirror'
 import Modal from '@/components/Modal'
 import Tabs from '@/components/Tabs'
-import axios from 'axios'
+import aux from '@/utils/tabs'
 
 export default {
   components: {
@@ -75,13 +95,22 @@ export default {
       tabs: [{ label: "Schema 1", key: "schema_1", input: "", closable: false }],
       main_schema: {label: "Schema 1", key: "schema_1"},
       schemas: [{ label: "Schema 1", key: "schema_1" }],
-      chooseSchema: false
+
+      chooseSchema: false,
+      error: false,
+      errorMsg: ""
     }
   },
   methods: {
+    errUpload() {
+      this.errorMsg = "O ficheiro que escolheu não corresponde a uma schema. A extensão do ficheiro deve ser .json!"
+      this.error = true
+    },
+    updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
+    updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
     updateMain(key) { this.main_schema = this.schemas.find(s => s.key == key) },
     updateInput(index, input) {
-      let new_label = this.searchSchemaId(input, this.tabs[index].key)
+      let new_label = aux.searchSchemaId(input, this.tabs[index].key)
 
       // dar update ao label da schema para o seu id, se tiver um
       // ou para o label original da schema (Schema nr), se o user tiver apagado o id
@@ -93,46 +122,42 @@ export default {
 
       this.tabs[index].input = input
     },
-    updateTabs(tabs) {
+    updateTabs(tabs, index, upload) {
       this.tabs = tabs
       this.schemas = this.tabs.map(t => { return {label: t.label, key: t.key} })
+      if (upload) this.updateInput(index, this.tabs[index].input)
     },
-    updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
-    updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
+    askMainSchema() {
+      let ids = aux.getAllIds(this.tabs.map(t => t.input))
+
+      if (ids.length == new Set(ids).size) this.chooseSchema = true
+      else {
+        let next_ids = _.clone(ids)
+
+        for (let i = 0; i < ids.length; i++) {
+          next_ids.shift()
+
+          if (next_ids.includes(ids[i])) {
+            this.errorMsg = `Todas as schemas e subschemas devem ter ids únicos! Existe mais do que uma schema com o id '${ids[i]}'.`
+            this.error = true
+            break
+          }
+        }
+      }
+    },
     async generate() {
       this.chooseSchema = false
-      let main_schema = this.tabs.find(s => s.key == this.main_schema.key).input
-      let other_schemas = this.tabs.filter(s => s.key != this.main_schema.key).map(s => s.input)
+      let tabs = aux.removeRepeatedSchemas(_.cloneDeep(this.tabs), this.main_schema.key)
+      console.log(tabs)
+
+      let main_schema = tabs.find(s => s.key == this.main_schema.key).input
+      let other_schemas = tabs.filter(s => s.key != this.main_schema.key && s.input.length > 0).map(s => s.input)
       
       let {data} = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings: this.settings})
       //let {data} = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.input, settings: this.settings})
 
       if ("dataset" in data) this.output = data.dataset
       if ("message" in data) this.output = "ERRO!!\n\n" + data.message
-    },
-    searchSchemaId(schema, label) {
-      let depth = 0, chunks = []
-
-      for (let i = 0; i < schema.length; i++) {
-        if (schema[i] == "{") {
-          if (!depth) chunks.push({init: i})
-          if (depth == 1) chunks[chunks.length-1].end = i
-          depth++
-        }
-        if (schema[i] == "}") {
-          if (depth == 2) chunks.push({init: i+1})
-          if (depth == 1) chunks[chunks.length-1].end = i+1
-          depth--
-        }
-      }
-
-      let id_regex = /"\$id":\s*"https:\/\/datagen.di.uminho.pt\/json-schemas\/[^",}]+"/
-      for (let i = 0; i < chunks.length; i++) {
-        let str = schema.substring(chunks[i].init, chunks[i].end)
-        if (id_regex.test(str)) return str.match(id_regex)[0].split('/json-schemas/')[1].slice(0,-1)
-      }
-
-      return "S" + label.slice(1).replace("_"," ")
     }
   }
 }
