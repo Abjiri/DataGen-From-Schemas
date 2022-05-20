@@ -10,8 +10,8 @@
       >
         Deseja gerar o dataset a partir de que schema?
         <v-select class="select-schema"
-          v-model="main_schema"
-          :items="schemas"
+          :v-model="input_mode=='xml' ? xml_main_schema : json_main_schema"
+          :items="input_mode=='xml' ? xml_schemas : json_schemas"
           item-text="label"
           item-value="key"
           label="Selecionar"
@@ -46,14 +46,12 @@
       <v-row class="fill-height mt-0">
         <!-- consola input -->
         <v-flex xs12 md6>
-          <v-container v-if="input_mode=='xml'">
-            <Codemirror :type="'input'" :mode="input_mode" :text="xsd_input" @changed="onChangeInput"/>
-          </v-container>
-          <v-container v-else>
+          <v-container>
             <Tabs
+              :key="input_mode"
               :mode="input_mode" 
-              :hover="main_schema.key" 
-              :tabs="tabs"
+              :hover="input_mode=='xml' ? xml_main_schema.key : json_main_schema.key" 
+              :tabs="input_mode=='xml' ? xml_tabs : json_tabs"
               @updateInput="updateInput" 
               @updateTabs="updateTabs" 
               @hover="updateMain"
@@ -102,12 +100,14 @@ export default {
       },
 
       // from XML schemas
-      xsd_input: "",
+      xml_tabs: [{ label: "Schema", key: "schema_1", input: "", closable: false }],
+      xml_main_schema: {label: "Schema", key: "schema_1"},
+      xml_schemas: [{ label: "Schema", key: "schema_1" }],
       
       // from JSON schemas
-      tabs: [{ label: "Schema 1", key: "schema_1", input: "", closable: false }],
-      main_schema: {label: "Schema 1", key: "schema_1"},
-      schemas: [{ label: "Schema 1", key: "schema_1" }],
+      json_tabs: [{ label: "Schema 1", key: "schema_1", input: "", closable: false }],
+      json_main_schema: {label: "Schema 1", key: "schema_1"},
+      json_schemas: [{ label: "Schema 1", key: "schema_1" }],
 
       gen_request: false,
       chooseSchema: false,
@@ -123,52 +123,80 @@ export default {
     });
   },
   methods: {
+    varsByInputType() {
+      let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
+      let schemas = this.input_mode == "xml" ? this.xml_schemas : this.json_schemas
+      let main_schema = this.input_mode == "xml" ? this.xml_main_schema : this.json_main_schema
+      return {tabs, schemas, main_schema}
+    },
     errUpload() {
-      this.errorMsg = "O ficheiro que escolheu não corresponde a uma schema. A extensão do ficheiro deve ser .json!"
+      this.errorMsg = `O ficheiro que escolheu não corresponde a uma schema ${this.input_mode=="xml"?"XML":"JSON"}. A extensão do ficheiro deve ser ${this.input_mode=="xml"?".xsd":".json"}!`
       this.error = true
     },
-    onChangeInput(input) { this.xsd_input = input },
     updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
     updateOutputFormat(new_format) {
       this.settings.OUTPUT = new_format
       this.output_mode = new_format == "XML" ? "xml" : "javascript"
     },
-    updateMain(key) { this.main_schema = this.schemas.find(s => s.key == key) },
+    updateMain(key) {
+      let schemas = this.input_mode == "xml" ? this.xml_schemas : this.json_schemas
+      let main_schema = schemas.find(s => s.key == key)
+
+      if (this.input_mode == "xml") this.xml_main_schema = main_schema
+      else this.json_main_schema = main_schema
+    },
     updateInput(index, input) {
-      let new_label = aux.searchSchemaId(input, this.tabs[index].key)
+      let {tabs, schemas, main_schema} = this.varsByInputType()
+      let new_label
+
+      if (this.input_mode == "javascript") new_label = aux.searchJsonSchemaId(input, tabs[index].key)
+      else new_label = "Schema"//aux.searchXmlSchemaName(input, tabs[index].key)
 
       // dar update ao label da schema para o seu id, se tiver um
       // ou para o label original da schema (Schema nr), se o user tiver apagado o id
-      if (new_label != this.tabs[index].label) {
-        this.tabs[index].label = new_label
-        this.schemas[index].label = new_label
-        if (this.main_schema.key == this.tabs[index].key) this.main_schema.label = new_label
+      if (new_label != tabs[index].label) {
+        tabs[index].label = new_label
+        schemas[index].label = new_label
+        if (main_schema.key == tabs[index].key) main_schema.label = new_label
       }
 
-      this.tabs[index].input = input
+      tabs[index].input = input
     },
-    updateTabs(tabs, index, upload) {
-      this.tabs = tabs
-      this.schemas = this.tabs.map(t => { return {label: t.label, key: t.key} })
-      if (upload) this.updateInput(index, this.tabs[index].input)
+    updateTabs(new_tabs, index, upload) {
+      let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
+      tabs = new_tabs
+      
+      let schemas = tabs.map(t => { return {label: t.label, key: t.key} })
+      if (this.input_mode == "xml") this.xml_schemas = schemas
+      else this.json_schemas = schemas
+
+      if (upload) this.updateInput(index, tabs[index].input)
     },
     askMainSchema() {
-      let ids = aux.getAllIds(this.tabs.map(t => t.input))
+      let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
 
-      if (ids.length == new Set(ids).size) {
-        if (this.tabs.length == 1) this.generate()
+      if (this.input_mode == "xml") {
+        if (tabs.length == 1) this.generate()
         else this.chooseSchema = true
       }
       else {
-        let next_ids = _.clone(ids)
+        let ids = aux.getAllIds(tabs.map(t => t.input))
 
-        for (let i = 0; i < ids.length; i++) {
-          next_ids.shift()
+        if (ids.length == new Set(ids).size) {
+          if (tabs.length == 1) this.generate()
+          else this.chooseSchema = true
+        }
+        else {
+          let next_ids = _.clone(ids)
 
-          if (next_ids.includes(ids[i])) {
-            this.errorMsg = `Todas as schemas e subschemas devem ter ids únicos! Existe mais do que uma schema com o id '${ids[i]}'.`
-            this.error = true
-            break
+          for (let i = 0; i < ids.length; i++) {
+            next_ids.shift()
+
+            if (next_ids.includes(ids[i])) {
+              this.errorMsg = `Todas as schemas e subschemas devem ter ids únicos! Existe mais do que uma schema com o id '${ids[i]}'.`
+              this.error = true
+              break
+            }
           }
         }
       }
@@ -179,16 +207,16 @@ export default {
       let result
 
       if (this.input_mode == "xml") {
-        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xsd_input, settings: this.settings})
+        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, settings: this.settings})
       }
       else {
         let main_schema, other_schemas = []
 
-        if (this.tabs.length == 1) main_schema = this.tabs[0].input
+        if (this.json_tabs.length == 1) main_schema = this.json_tabs[0].input
         else {
-          let tabs = aux.removeRepeatedSchemas(_.cloneDeep(this.tabs), this.main_schema.key)
-          main_schema = tabs.find(s => s.key == this.main_schema.key).input
-          other_schemas = tabs.filter(s => s.key != this.main_schema.key && s.input.length > 0).map(s => s.input)
+          let tabs = aux.removeRepeatedSchemas(_.cloneDeep(this.json_tabs), this.json_main_schema.key)
+          main_schema = tabs.find(s => s.key == this.json_main_schema.key).input
+          other_schemas = tabs.filter(s => s.key != this.json_main_schema.key && s.input.length > 0).map(s => s.input)
         }
         
         result = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings: this.settings})

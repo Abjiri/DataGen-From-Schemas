@@ -1,11 +1,11 @@
 <template>
   <div class="fill-height">
     <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs" :style="`background-color: var(--${mode});`">
-      <span slot="after" class="btn-add" @click="addTab('')">
+      <span v-if="mode!='xml'" slot="after" class="btn-add" @click="addTab('')">
         <i class="v-icon mdi mdi-plus" style="color: white;"></i>
       </span>
       <span slot="after" class="btn-add">
-        <input type="file" ref="file" accept=".json" @change="uploadSchema" style="display:none">
+        <input type="file" ref="file" :accept="mode=='xml' ? '.xsd' : '.json'" @change="uploadSchema" style="display:none">
         <i class="v-icon mdi mdi-upload" style="color: white;" @click="$refs.file.click()"></i>
       </span>
     </vue-tabs-chrome>
@@ -69,19 +69,24 @@ export default {
     },
     removeTab() { this.$refs.tab.removeTab(this.tab) },
     uploadSchema() {
+      let extension = this.mode == "xml" ? /\.xsd$/ : /\.json$/
       let tab = this.tabs.find(t => t.key == this.tab)
+      
       let file = this.$refs.file.files[0]
       const reader = new FileReader()
 
-      if (/\.json$/.test(file.name)) {
+      if (extension.test(file.name)) {
         reader.onload = (res) => {
           let schema = res.currentTarget.result
 
-          if (!tab.input.length) this.input = schema
+          if (this.mode == "xml") this.input = schema
           else {
-            this.newTab_upload = true
-            // por algum motivo, ao dar upload para uma tab nova, todos os \n da schema passam a \r\n
-            this.addTab(schema.replace(/\r\n/g, "\n"))
+            if (!tab.input.length) this.input = schema
+            else {
+              this.newTab_upload = true
+              // por algum motivo, ao dar upload para uma tab nova, todos os \n da schema passam a \r\n
+              this.addTab(schema.replace(/\r\n/g, "\n"))
+            }
           }
         }
         reader.readAsText(file)

@@ -1,4 +1,4 @@
-function searchSchemaId(schema, old_label/* , labels */) {
+function searchJsonSchemaId(schema, old_label/* , labels */) {
     let depth = 0, chunks = []
 
     for (let i = 0; i < schema.length; i++) {
@@ -32,6 +32,11 @@ function searchSchemaId(schema, old_label/* , labels */) {
     }
 
     return "S" + old_label.slice(1).replace("_"," ")
+}
+
+function searchXmlSchemaName(/* schema, old_label */) {
+    /* let elem = /<[a-zA-Z][a-zA-Z0-9.\-_]*:element[^>]+>/.exec(schema)
+    let name = /name\s*=\s*"[^]+"/ */
 }
 
 function getAllIds(schemas) {
@@ -73,7 +78,8 @@ function removeRepeatedSchemas(tabs, main_schema_key) {
 }
 
 module.exports = {
-    searchSchemaId,
+    searchJsonSchemaId,
+    searchXmlSchemaName,
     getAllIds,
     removeRepeatedSchemas
 }
