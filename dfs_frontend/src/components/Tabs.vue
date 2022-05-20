@@ -30,10 +30,15 @@ export default {
   data() {
     return {
       input: "",
-      tab: "schema_1",
+      tab: "",
       created_tabs: 1,
       newTab_upload: false
     };
+  },
+  mounted() {
+    this.tab = this.hover
+    this.created_tabs = this.tabs.length
+    this.input = this.tabs.find(t => t.key == this.tab).input
   },
   watch: {
     hover(key) { this.tab = key },
