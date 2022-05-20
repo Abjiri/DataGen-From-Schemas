@@ -30,7 +30,7 @@
 
       <v-row>
           <v-col sm="auto">
-            <v-btn depressed :color='`var(--${input_mode})`' class="white--text" @click="askMainSchema">
+            <v-btn depressed :color='`var(--${input_mode})`' class="white--text" @click="input_mode=='xml' ? generate() : askMainSchema()">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
@@ -44,18 +44,28 @@
       </v-row>
 
       <v-row class="fill-height mt-0">
-        <Tabs
-          :mode="input_mode" 
-          :hover="main_schema.key" 
-          :tabs="tabs"
-          @updateInput="updateInput" 
-          @updateTabs="updateTabs" 
-          @hover="updateMain"
-          @errorUpload="errUpload"
-        />
+        <!-- consola input -->
+        <v-flex xs12 md6>
+          <v-container v-if="input_mode=='xml'">
+            <Codemirror :type="'input'" :mode="input_mode" :text="xsd_input" @changed="onChangeInput"/>
+          </v-container>
+          <v-container v-else>
+            <Tabs
+              :mode="input_mode" 
+              :hover="main_schema.key" 
+              :tabs="tabs"
+              @updateInput="updateInput" 
+              @updateTabs="updateTabs" 
+              @hover="updateMain"
+              @errorUpload="errUpload"
+            />
+          </v-container>
+        </v-flex>
+
+        <!-- CONSOLA OUTPUT -->
         <v-flex xs12 md6>
           <v-container>
-            <Codemirror :type="'output'" :mode="output_mode" :text="output"/>
+            <Codemirror :type="'output'" :mode="output_mode" :text="output" :generate="gen_request"/>
           </v-container>
         </v-flex>
       </v-row>
@@ -90,11 +100,16 @@ export default {
         RECURSIV: {LOWER: 0, UPPER: 3},
         OUTPUT: "XML"
       },
+
+      // from XML schemas
+      xsd_input: "",
       
+      // from JSON schemas
       tabs: [{ label: "Schema 1", key: "schema_1", input: "", closable: false }],
       main_schema: {label: "Schema 1", key: "schema_1"},
       schemas: [{ label: "Schema 1", key: "schema_1" }],
 
+      gen_request: false,
       chooseSchema: false,
       error: false,
       errorMsg: ""
@@ -112,8 +127,12 @@ export default {
       this.errorMsg = "O ficheiro que escolheu não corresponde a uma schema. A extensão do ficheiro deve ser .json!"
       this.error = true
     },
+    onChangeInput(input) { this.xsd_input = input },
     updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
-    updateOutputFormat(new_format) { this.settings.OUTPUT = new_format },
+    updateOutputFormat(new_format) {
+      this.settings.OUTPUT = new_format
+      this.output_mode = new_format == "XML" ? "xml" : "javascript"
+    },
     updateMain(key) { this.main_schema = this.schemas.find(s => s.key == key) },
     updateInput(index, input) {
       let new_label = aux.searchSchemaId(input, this.tabs[index].key)
@@ -136,7 +155,10 @@ export default {
     askMainSchema() {
       let ids = aux.getAllIds(this.tabs.map(t => t.input))
 
-      if (ids.length == new Set(ids).size) this.chooseSchema = true
+      if (ids.length == new Set(ids).size) {
+        if (this.tabs.length == 1) this.generate()
+        else this.chooseSchema = true
+      }
       else {
         let next_ids = _.clone(ids)
 
@@ -153,16 +175,29 @@ export default {
     },
     async generate() {
       this.chooseSchema = false
-      let tabs = aux.removeRepeatedSchemas(_.cloneDeep(this.tabs), this.main_schema.key)
+      this.gen_request = true
+      let result
 
-      let main_schema = tabs.find(s => s.key == this.main_schema.key).input
-      let other_schemas = tabs.filter(s => s.key != this.main_schema.key && s.input.length > 0).map(s => s.input)
-      
-      let {data} = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings: this.settings})
-      //let {data} = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.input, settings: this.settings})
+      if (this.input_mode == "xml") {
+        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xsd_input, settings: this.settings})
+      }
+      else {
+        let main_schema, other_schemas = []
 
-      if ("dataset" in data) this.output = data.dataset
-      if ("message" in data) this.output = "ERRO!!\n\n" + data.message
+        if (this.tabs.length == 1) main_schema = this.tabs[0].input
+        else {
+          let tabs = aux.removeRepeatedSchemas(_.cloneDeep(this.tabs), this.main_schema.key)
+          main_schema = tabs.find(s => s.key == this.main_schema.key).input
+          other_schemas = tabs.filter(s => s.key != this.main_schema.key && s.input.length > 0).map(s => s.input)
+        }
+        
+        result = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings: this.settings})
+      }
+
+      if ("dataset" in result.data) this.output = result.data.dataset
+      if ("message" in result.data) this.output = "ERRO!!\n\n" + result.data.message
+
+      this.gen_request = false
     }
   }
 }

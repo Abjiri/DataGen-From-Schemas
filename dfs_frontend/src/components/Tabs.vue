@@ -1,18 +1,16 @@
 <template>
-  <v-flex xs12 md6>
-    <v-container>
-      <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs" :style="`background-color: var(--${mode});`">
-        <span slot="after" class="btn-add" @click="addTab('')">
-          <i class="v-icon mdi mdi-plus" style="color: white;"></i>
-        </span>
-        <span slot="after" class="btn-add">
-          <input type="file" ref="file" accept=".json" @change="uploadSchema" style="display:none">
-          <i class="v-icon mdi mdi-upload" style="color: white;" @click="$refs.file.click()"></i>
-        </span>
-      </vue-tabs-chrome>
-      <Codemirror :key="tab" :type="'input'" :mode="mode" :text="input" @changed="onChangeInput"/>
-    </v-container>
-  </v-flex>
+  <div class="fill-height">
+    <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs" :style="`background-color: var(--${mode});`">
+      <span slot="after" class="btn-add" @click="addTab('')">
+        <i class="v-icon mdi mdi-plus" style="color: white;"></i>
+      </span>
+      <span slot="after" class="btn-add">
+        <input type="file" ref="file" accept=".json" @change="uploadSchema" style="display:none">
+        <i class="v-icon mdi mdi-upload" style="color: white;" @click="$refs.file.click()"></i>
+      </span>
+    </vue-tabs-chrome>
+    <Codemirror :key="tab" :type="'input'" :mode="mode" :text="input" @changed="onChangeInput"/>
+  </div>
 </template>
 
 <script>

@@ -22,7 +22,14 @@ export default {
     props: {
         type: String,
         mode: String,
-        text: String
+        text: String,
+        generate: Boolean
+    },
+    computed: {
+        codemirror() { return this.$refs.text.codemirror }
+    },
+    mounted() {
+        this.codemirror.setSize("100%", "100%")
     },
     data() {
         return {
@@ -46,11 +53,10 @@ export default {
     methods: {
         onChange(newText) { this.$emit('changed', newText) }
     },
-    computed: {
-        codemirror() { return this.$refs.text.codemirror }
-    },
-    mounted() {
-        this.codemirror.setSize("100%", "100%")
+    watch: {
+        generate(newFlag) {
+            if (newFlag) this.options.mode = "text/" + this.mode
+        }
     }
 }
 

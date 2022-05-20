@@ -30,7 +30,7 @@ export default {
 }
 </script>
 
-<style>
+<style scoped>
 .title {
     font-size: 1.25rem;
     font-family: "Roboto", sans-serif;
