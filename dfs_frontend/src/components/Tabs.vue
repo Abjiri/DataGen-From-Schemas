@@ -109,6 +109,10 @@ export default {
   background-color: rgba(0, 0, 0, .1);
 }
 
+.vue-tabs-chrome {
+  padding-top: 5px;
+}
+
 /* .tabs {
   padding-top: 0px;
   background: #FFFFFF;
