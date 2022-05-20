@@ -3,11 +3,11 @@
     <v-container>
       <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs">
         <span slot="after" class="btn-add" @click="addTab('')">
-          <i class="v-icon mdi mdi-plus"></i>
+          <i class="v-icon mdi mdi-plus" style="color: white;"></i>
         </span>
         <span slot="after" class="btn-add">
           <input type="file" ref="file" accept=".json" @change="uploadSchema" style="display:none">
-          <i class="v-icon mdi mdi-upload" @click="$refs.file.click()"></i>
+          <i class="v-icon mdi mdi-upload" style="color: white;" @click="$refs.file.click()"></i>
         </span>
       </vue-tabs-chrome>
       <Codemirror :key="tab" :type="'input'" :mode="mode" :text="input" @changed="onChangeInput"/>
@@ -111,6 +111,15 @@ export default {
 
 .vue-tabs-chrome {
   padding-top: 5px;
+  background-color: rgb(64,84,180);
+}
+
+.tabs-item {
+  color: white;
+}
+
+.active {
+  color: black !important;
 }
 
 /* .tabs {
