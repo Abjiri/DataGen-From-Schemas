@@ -29,16 +29,14 @@
       </Modal>
 
       <v-row>
-          <v-col sm="auto">
-            <v-btn depressed :color='`var(--${input_mode})`' class="white--text" @click="input_mode=='xml' ? generate() : askMainSchema()">
+          <v-col xs12 md6>
+            <v-btn style="margin-right: 25px;" depressed :color='`var(--${input_mode})`' class="white--text" @click="input_mode=='xml' ? generate() : askMainSchema()">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
-          </v-col>
-          <v-col>
             <SettingsXML @saved="updateSettings"/>
           </v-col>
-          <v-col class="justify-end">
+          <v-col xs12 md6 class="justify-end">
             <ButtonGroup :format="settings.OUTPUT" @changed="updateOutputFormat"/>
           </v-col>
       </v-row>
@@ -233,6 +231,11 @@ export default {
 
 <style scoped>
 @import '../utils/colors.css';
+
+.v-btn {
+  height: 45px !important;
+  margin-top: 5px !important;
+}
 
 .parameters {
   display: flex;

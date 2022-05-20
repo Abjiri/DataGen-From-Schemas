@@ -84,3 +84,11 @@ export default {
     }
 }
 </script>
+
+<style scoped>
+.v-btn--fab {
+    height: 45px !important;
+    width: 45px !important;
+    margin-top: 5px !important;
+}
+</style>
