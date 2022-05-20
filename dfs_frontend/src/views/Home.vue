@@ -30,7 +30,7 @@
 
       <v-row>
           <v-col sm="auto">
-            <v-btn depressed dark style="background-color: rgb(64,84,180);" @click="askMainSchema">
+            <v-btn depressed :color='`var(--${input_mode})`' class="white--text" @click="askMainSchema">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
@@ -39,7 +39,7 @@
             <SettingsXML @saved="updateSettings"/>
           </v-col>
           <v-col class="justify-end">
-            <ButtonGroup @changed="updateOutputFormat"/>
+            <ButtonGroup :format="settings.OUTPUT" @changed="updateOutputFormat"/>
           </v-col>
       </v-row>
 
@@ -55,7 +55,7 @@
         />
         <v-flex xs12 md6>
           <v-container>
-            <Codemirror :type="'output'" :mode="output_mode" v-bind:text="output"/>
+            <Codemirror :type="'output'" :mode="output_mode" :text="output"/>
           </v-container>
         </v-flex>
       </v-row>
@@ -82,13 +82,13 @@ export default {
   },
   data() {
     return {
-      input_mode: "javascript",
-      output_mode: "javascript",
+      input_mode: "xml",
+      output_mode: "xml",
       output: "",
       settings: {
         UNBOUNDED: 10,
         RECURSIV: {LOWER: 0, UPPER: 3},
-        OUTPUT: "JSON"
+        OUTPUT: "XML"
       },
       
       tabs: [{ label: "Schema 1", key: "schema_1", input: "", closable: false }],
@@ -99,6 +99,13 @@ export default {
       error: false,
       errorMsg: ""
     }
+  },
+  mounted() {
+    window.addEventListener('changed-input_mode', (event) => {
+      this.input_mode = event.detail.storage.mode
+      this.output_mode = event.detail.storage.mode
+      this.settings.OUTPUT = event.detail.storage.format
+    });
   },
   methods: {
     errUpload() {
@@ -162,6 +169,8 @@ export default {
 </script>
 
 <style scoped>
+@import '../utils/colors.css';
+
 .parameters {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,7 @@
 <template>
   <v-flex xs12 md6>
     <v-container>
-      <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs">
+      <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs" :style="`background-color: var(--${mode});`">
         <span slot="after" class="btn-add" @click="addTab('')">
           <i class="v-icon mdi mdi-plus" style="color: white;"></i>
         </span>
@@ -111,7 +111,6 @@ export default {
 
 .vue-tabs-chrome {
   padding-top: 5px;
-  background-color: rgb(64,84,180);
 }
 
 .tabs-item {
