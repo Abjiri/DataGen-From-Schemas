@@ -59,7 +59,6 @@ export default {
 <style>
 .container { height: 100%; }
 .vue-codemirror { height: 100%; }
-.CodeMirror { height: 100%; }
 .CodeMirror pre.CodeMirror-line, .CodeMirror pre.CodeMirror-line-like {
   font-size: smaller !important; 
 }

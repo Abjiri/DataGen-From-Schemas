@@ -30,7 +30,7 @@
 
       <v-row>
           <v-col sm="auto">
-            <v-btn depressed dark color="indigo" @click="askMainSchema">
+            <v-btn depressed dark style="background-color: rgb(64,84,180);" @click="askMainSchema">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
