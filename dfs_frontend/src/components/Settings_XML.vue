@@ -3,7 +3,6 @@
         <v-row>
             <v-col cols="12" sm="6">
                 <v-text-field
-                    :key="settings.recursiv.upper"
                     v-model="settings.recursiv.lower"
                     :rules="[rules.required, rules.nonNegative, rules.lessThanUpper]"
                     type="number"
@@ -12,7 +11,6 @@
             </v-col>
             <v-col cols="12" sm="6">
                 <v-text-field
-                    :key="settings.recursiv.lower"
                     v-model="settings.recursiv.upper"
                     :rules="[rules.required, rules.nonNegative, rules.moreThanLower]"
                     type="number"
