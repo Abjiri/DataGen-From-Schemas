@@ -59,7 +59,7 @@
                 <span class="label">Extensão de propriedades repetidas nas chaves 'properties' e 'patternProperties'</span>
                 <v-select class="select"
                     :rules="[rules.required]"
-                    :v-model="settings.extend_propSchema"
+                    v-model="settings.extend_propSchema"
                     :items="options1"
                     item-text="label"
                     item-value="key"
@@ -72,7 +72,7 @@
                 <span class="label">Extensão de chaves cujo valor é uma subschema</span>
                 <v-select class="select"
                     :rules="[rules.required]"
-                    :v-model="settings.extend_schemaObj"
+                    v-model="settings.extend_schemaObj"
                     :items="options1"
                     item-text="label"
                     item-value="key"
@@ -85,7 +85,7 @@
                 <span class="label">Extensão da chave 'prefixItems'</span>
                 <v-select style="padding-top: 39px;"
                     :rules="[rules.required]"
-                    :v-model="settings.extend_prefixItems"
+                    v-model="settings.extend_prefixItems"
                     :items="options2"
                     item-text="label"
                     item-value="key"

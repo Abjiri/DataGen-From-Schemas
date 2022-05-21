@@ -18,7 +18,7 @@
       >
         Deseja gerar o dataset a partir de que schema?
         <v-select class="select-schema"
-          :v-model="input_mode=='xml' ? xml_main_schema : json_main_schema"
+          v-model="main_schema"
           :items="input_mode=='xml' ? xml_schemas : json_schemas"
           item-text="label"
           item-value="key"
@@ -159,6 +159,9 @@ export default {
       this[format + "_main_schema"] = {label: "Schema", key: "schema_1"}
       this[format + "_schemas"] = [{ label: "Schema 1", key: "schema_1" }]
     })
+  },
+  computed: {
+    main_schema() { return this.input_mode=='xml' ? this.xml_main_schema : this.json_main_schema }
   },
   methods: {
     updateOutputFormat(new_format) { this.output_mode = new_format == "XML" ? "xml" : "javascript" },
