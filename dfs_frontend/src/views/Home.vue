@@ -39,8 +39,8 @@
         @close="closeSettings"
         @confirm="confirmSettings"
       >
-        <SettingsXML v-if="input_mode=='xml'" ref="settingsXML" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
-        <SettingsJSON v-else ref="settingsXML" :mode="input_mode" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
+        <SettingsXML v-if="input_mode=='xml'" ref="settingsXML" :settings="xml_settings" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
+        <SettingsJSON v-else ref="settingsXML" :settings="json_settings" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
       </Modal>
 
       <v-row>
@@ -127,13 +127,13 @@ export default {
       json_schemas: [{ label: "Schema 1", key: "schema_1" }],
       json_settings: {
         recursiv: {lower: 0, upper: 3},
-        prob_if: 0.5,
-        prob_patternProperty: 0.8,
+        prob_if: 50,
+        prob_patternProperty: 80,
         random_props: false,
-        extend_propSchema: "OR", // "OR" / "OW" (overwrite)
-        extend_prefixItems: "OR", // "OR" / "OWP" (overwrite parcial) / "OWT" (overwrite total) / "AP" (append) 
-        extend_schemaObj: "OR" // "OR" / "OW" (overwrite)
-      },
+        extend_propSchema: "OR",
+        extend_prefixItems: "OR",
+        extend_schemaObj: "OR"
+    },
 
       // modal de settings
       settings: false,
@@ -161,7 +161,13 @@ export default {
     })
   },
   computed: {
-    main_schema() { return this.input_mode=='xml' ? this.xml_main_schema : this.json_main_schema }
+    main_schema: {
+      get() { return this.input_mode == 'xml' ? this.xml_main_schema : this.json_main_schema },
+      set(value) {
+        if (this.input_mode == "xml") this.xml_main_schema = value
+        else this.json_main_schema = value
+      }
+    }
   },
   methods: {
     updateOutputFormat(new_format) { this.output_mode = new_format == "XML" ? "xml" : "javascript" },
@@ -174,7 +180,6 @@ export default {
     updateSettings(new_settings) {
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
       Object.assign(settings, new_settings)
-      console.log(settings)
     },
     varsByInputType() {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
@@ -218,6 +223,10 @@ export default {
     updateTabs(new_tabs, index, upload) {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
       tabs = new_tabs
+
+      // se tiver 2+ tabs, qualquer uma pode ser fechada; se só tiver 1, não pode
+      if (tabs.length == 1) tabs[0].closable = false
+      if (tabs.length > 1) tabs[0].closable = true
       
       let schemas = tabs.map(t => { return {label: t.label, key: t.key} })
       if (this.input_mode == "xml") this.xml_schemas = schemas

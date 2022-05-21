@@ -3,7 +3,7 @@
         <v-row>
             <v-col cols="12" sm="6">
                 <v-text-field
-                    v-model="settings.recursiv.lower"
+                    v-model="new_settings.recursiv.lower"
                     :rules="[rules.required, rules.nonNegative, rules.lessThanUpper]"
                     type="number"
                     label="Limite inferior de recursividade"
@@ -11,7 +11,7 @@
             </v-col>
             <v-col cols="12" sm="6">
                 <v-text-field
-                    v-model="settings.recursiv.upper"
+                    v-model="new_settings.recursiv.upper"
                     :rules="[rules.required, rules.nonNegative, rules.moreThanLower]"
                     type="number"
                     label="Limite superior de recursividade"
@@ -22,7 +22,7 @@
         <v-row>
             <v-col cols="12" sm="6">
                 <v-text-field
-                    v-model="settings.prob_if"
+                    v-model="new_settings.prob_if"
                     :rules="[rules.required, rules.probability]"
                     type="number"
                     min="0"
@@ -32,7 +32,7 @@
             </v-col>
             <v-col cols="12" sm="6">
                 <v-text-field
-                    v-model="settings.prob_patternProperty"
+                    v-model="new_settings.prob_patternProperty"
                     :rules="[rules.required, rules.probability]"
                     type="number"
                     min="0"
@@ -44,12 +44,12 @@
 
         <v-radio-group
             row
-            v-model="settings.random_props"
+            v-model="new_settings.random_props"
             :rules="[rules.required_bool]"
             label="Gerar propriedades aleatórias (dentro do tamanho indicado) se não forem especificadas 'additionalProperties' nem 'unevaluatedProperties'"
         >
-            <v-radio :label="'Sim'" :value="true" :color='`var(--${mode})`'/>
-            <v-radio :label="'Não'" :value="false" :color='`var(--${mode})`'/>
+            <v-radio :label="'Sim'" :value="true" color="var(--json)"/>
+            <v-radio :label="'Não'" :value="false" color="var(--json)"/>
         </v-radio-group>
 
         <v-row>
@@ -62,7 +62,7 @@
                 </v-tooltip>
                 <v-select class="select"
                     :rules="[rules.required]"
-                    v-model="settings.extend_propSchema"
+                    v-model="new_settings.extend_propSchema"
                     :items="options1"
                     item-text="label"
                     item-value="key"
@@ -95,7 +95,7 @@
                 </v-tooltip>
                 <v-select class="select"
                     :rules="[rules.required]"
-                    v-model="settings.extend_schemaObj"
+                    v-model="new_settings.extend_schemaObj"
                     :items="options1"
                     item-text="label"
                     item-value="key"
@@ -128,7 +128,7 @@
                 </v-tooltip>
                 <v-select style="padding-top: 39px;"
                     :rules="[rules.required]"
-                    v-model="settings.extend_prefixItems"
+                    v-model="new_settings.extend_prefixItems"
                     :items="options2"
                     item-text="label"
                     item-value="key"
@@ -162,21 +162,20 @@ import _ from 'lodash'
 
 export default {
     props: {
-        mode: String,
+        settings: Object,
         result: Number
     },
     data() {
         return {
             valid: true,
-            original_settings: {},
-            settings: {
+            new_settings: {
                 recursiv: {lower: 0, upper: 3},
                 prob_if: 50,
                 prob_patternProperty: 80,
                 random_props: false,
-                extend_propSchema: "OR", // "OR" / "OW" (overwrite)
-                extend_prefixItems: "OR", // "OR" / "OWP" (overwrite parcial) / "OWT" (overwrite total) / "AP" (append) 
-                extend_schemaObj: "OR" // "OR" / "OW" (overwrite)
+                extend_propSchema: "OR",
+                extend_prefixItems: "OR",
+                extend_schemaObj: "OR"
             },
             options1: [{key: "OR", label: "Extensão"}, {key: "OW", label: "Sobrescrição"}],
             options2: [{key: "OR", label: "Extensão"}, {key: "OWP", label: "Sobrescrição parcial"}, {key: "OWT", label: "Sobrescrição total"}, {key: "AP", label: "Concatenação"}],
@@ -184,19 +183,19 @@ export default {
                 required: v => !!v || "Valor obrigatório.",
                 required_bool: v => v === true || v === false || "Valor obrigatório.",
                 nonNegative: v => parseInt(v) >= 0 || "O valor não pode ser negativo.",
-                lessThanUpper: v => parseInt(v) <= parseInt(this.settings.recursiv.upper) || "Não pode ser maior que o limite superior.",
-                moreThanLower: v => parseInt(v) >= parseInt(this.settings.recursiv.lower) || "Não pode ser menor que o limite inferior.",
+                lessThanUpper: v => parseInt(v) <= parseInt(this.new_settings.recursiv.upper) || "Não pode ser maior que o limite superior.",
+                moreThanLower: v => parseInt(v) >= parseInt(this.new_settings.recursiv.lower) || "Não pode ser menor que o limite inferior.",
                 probability: v => parseInt(v) >= 0 && parseInt(v) <= 100 || "O valor deve ser uma probabilidade (entre 0 e 100)."
             }
         }
     },
-    mounted() { this.original_settings = _.cloneDeep(this.settings) },
+    mounted() { this.new_settings = _.cloneDeep(this.settings) },
     watch: {
         valid() { this.$emit('updateValid', 'javascript', this.valid) },
         result() {
-            if (this.result > 0) this.$emit('saved', this.settings)
+            if (this.result > 0) this.$emit('saved', this.new_settings)
             if (this.result < 0) {
-                this.settings = _.cloneDeep(this.original_settings)
+                this.new_settings = _.cloneDeep(this.settings)
                 this.$refs.form.resetValidation()
             }
         }

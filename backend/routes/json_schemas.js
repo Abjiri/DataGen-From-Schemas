@@ -9,11 +9,19 @@ const jsonConverter = require('../grammars/json_schema/converter/converter')
 
 const {resolve_refs} = require('../grammars/json_schema/converter/refs')
 
+function cleanSettings(settings) {
+  settings.recursiv.lower = parseInt(settings.recursiv.lower)
+  settings.recursiv.upper = parseInt(settings.recursiv.upper)
+  settings.prob_if = parseFloat(parseFloat(settings.prob_if).toFixed(2))/100
+  settings.prob_patternProperty = parseFloat(parseFloat(settings.prob_patternProperty).toFixed(2))/100
+}
+
 // POST para gerar um dataset a partir de um XML schema
 router.post('/', (req, res) => {
   try {
     // extrair dados da schema
     let data = req.body.schemas.map(x => jsonParser.parse(x))
+    cleanSettings(req.body.settings)
     //console.log(JSON.stringify(data))
     console.log('schema parsed')
     
