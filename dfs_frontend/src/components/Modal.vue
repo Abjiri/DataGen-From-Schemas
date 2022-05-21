@@ -3,7 +3,7 @@
       @input="$emit('update:visible',false)" 
       @keydown.esc="close"
       @click:outside="close"
-      width="500px"
+      width="600px"
     >
 
       <v-card style="z-index:2;">
@@ -36,8 +36,10 @@
             Cancelar
           </v-btn>
            <v-btn
+            :key="valid_settings"
             text
             class="button-confirmar"
+            :disabled="settings && !valid_settings" 
             @click="confirm()"
           >
             Confirmar
@@ -52,7 +54,9 @@ export default {
     props: {
         visible: Boolean,
         title: String,
-        options: Boolean
+        options: Boolean,
+        settings: Boolean,
+        valid_settings: Boolean
     },
     methods: {
         close() { this.$emit('close') },

@@ -2,6 +2,14 @@
     <v-container>
       <!-- modals -->
       <Modal
+        title="Erro"
+        :visible="error"
+        @close="error=false"
+      >
+        {{errorMsg}}
+      </Modal>
+
+      <Modal
         title="Gerar dataset"
         options
         :visible="chooseSchema"
@@ -20,12 +28,17 @@
           single-line
         ></v-select>
       </Modal>
+
       <Modal
-        title="Erro"
-        :visible="error"
-        @close="error=false"
+        title="Definições do processo de geração"
+        options
+        settings
+        :valid_settings="valid_settings"
+        :visible="settings"
+        @close="closeSettings"
+        @confirm="confirmSettings"
       >
-        {{errorMsg}}
+        <SettingsXML ref="settingsXML" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
       </Modal>
 
       <v-row>
@@ -34,10 +47,13 @@
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
-            <SettingsXML @saved="updateSettings"/>
+
+            <v-btn depressed fab small color="blue-grey lighten-4" @click="openSettings">
+                <v-icon>mdi-cog</v-icon>
+            </v-btn>
           </v-col>
           <v-col xs12 md6 class="justify-end">
-            <ButtonGroup :format="settings.OUTPUT" @changed="updateOutputFormat"/>
+            <ButtonGroup :format="xml_settings.OUTPUT" @changed="updateOutputFormat"/>
           </v-col>
       </v-row>
 
@@ -91,21 +107,26 @@ export default {
       input_mode: "xml",
       output_mode: "xml",
       output: "",
-      settings: {
-        UNBOUNDED: 10,
-        RECURSIV: {LOWER: 0, UPPER: 3},
-        OUTPUT: "XML"
-      },
 
       // from XML schemas
       xml_tabs: [{ label: "Schema", key: "schema_1", input: "", closable: false }],
       xml_main_schema: {label: "Schema", key: "schema_1"},
       xml_schemas: [{ label: "Schema", key: "schema_1" }],
+      xml_settings: {
+        UNBOUNDED: 10,
+        RECURSIV: {LOWER: 0, UPPER: 3},
+        OUTPUT: "XML"
+      },
       
       // from JSON schemas
       json_tabs: [{ label: "Schema 1", key: "schema_1", input: "", closable: false }],
       json_main_schema: {label: "Schema 1", key: "schema_1"},
       json_schemas: [{ label: "Schema 1", key: "schema_1" }],
+
+      // modal de settings
+      settings: false,
+      valid_settings: true,
+      result_settings: 0,
 
       gen_request: false,
       chooseSchema: false,
@@ -118,7 +139,7 @@ export default {
     window.addEventListener('changed-input_mode', (event) => {
       this.input_mode = event.detail.storage.mode
       this.output_mode = event.detail.storage.mode
-      this.settings.OUTPUT = event.detail.storage.format
+      this.xml_settings.OUTPUT = event.detail.storage.format
     })
 
     window.addEventListener('reset_schemas', (event) => {
@@ -129,6 +150,12 @@ export default {
     })
   },
   methods: {
+    openSettings() { this.result_settings = 0; this.settings = true },
+    closeSettings() { this.result_settings = -1; this.settings = false },
+    confirmSettings() { this.result_settings = 1; this.settings = false },
+    updateSettingsValidity(input_mode, new_valid) {
+      if (input_mode == this.input_mode) this.valid_settings = new_valid
+    },
     varsByInputType() {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
       let schemas = this.input_mode == "xml" ? this.xml_schemas : this.json_schemas
@@ -139,9 +166,9 @@ export default {
       this.errorMsg = `O ficheiro que escolheu não corresponde a uma schema ${this.input_mode=="xml"?"XML":"JSON"}. A extensão do ficheiro deve ser ${this.input_mode=="xml"?".xsd":".json"}!`
       this.error = true
     },
-    updateSettings(new_settings) { Object.assign(this.settings, new_settings) },
+    updateSettings(new_settings) { Object.assign(this.xml_settings, new_settings) },
     updateOutputFormat(new_format) {
-      this.settings.OUTPUT = new_format
+      this.xml_settings.OUTPUT = new_format
       this.output_mode = new_format == "XML" ? "xml" : "javascript"
     },
     updateMain(key) {
@@ -218,7 +245,7 @@ export default {
       let result
 
       if (this.input_mode == "xml") {
-        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, settings: this.settings})
+        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, settings: this.xml_settings})
       }
       else {
         let main_schema, other_schemas = []
@@ -230,7 +257,7 @@ export default {
           other_schemas = tabs.filter(s => s.key != this.json_main_schema.key && s.input.length > 0).map(s => s.input)
         }
         
-        result = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings: this.settings})
+        result = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings: this.xml_settings})
       }
 
       if ("dataset" in result.data) this.output = result.data.dataset
@@ -247,6 +274,12 @@ export default {
 
 .v-btn {
   height: 45px !important;
+  margin-top: 5px !important;
+}
+
+.v-btn--fab {
+  height: 45px !important;
+  width: 45px !important;
   margin-top: 5px !important;
 }
 
