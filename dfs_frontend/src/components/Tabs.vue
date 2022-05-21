@@ -61,10 +61,7 @@ export default {
       this.created_tabs++
       let item = "schema_" + this.created_tabs
 
-      // update tabs
-      let newTabs = [{ label: "Schema " + this.created_tabs, key: item, input }]
-      this.$refs.tab.addTab(...newTabs)
-
+      this.$refs.tab.addTab({ label: "Schema " + this.created_tabs, key: item, input })
       this.tab = item
     },
     removeTab() { this.$refs.tab.removeTab(this.tab) },
