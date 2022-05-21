@@ -2,10 +2,4 @@
     --xml: #1d7b33; /* from XML schemas */
     --json: #005dc2; /* from JSON schemas */
     --javascript: #005dc2; /* from JSON schemas */
-    --grey1: #efefef; /*Backgrounds*/
-    --grey2: #e0e0e0; /*Para botões secundários*/
-    --grey3: #595959; /*Para texto*/
-    --shadow:#A8A8A8; /*Sombras*/
-    --black: #101010;
-    --white: #FAFAFA;
 }

@@ -35,10 +35,12 @@
         settings
         :valid_settings="valid_settings"
         :visible="settings"
+        :more_width="input_mode!='xml'"
         @close="closeSettings"
         @confirm="confirmSettings"
       >
-        <SettingsXML ref="settingsXML" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
+        <SettingsXML v-if="input_mode=='xml'" ref="settingsXML" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
+        <SettingsJSON v-else ref="settingsXML" :mode="input_mode" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
       </Modal>
 
       <v-row>
@@ -87,6 +89,7 @@
 <script>
 import _ from 'lodash'
 import axios from 'axios'
+import SettingsJSON from '@/components/Settings_JSON'
 import SettingsXML from '@/components/Settings_XML'
 import ButtonGroup from '@/components/ButtonGroup'
 import Codemirror from '@/components/Codemirror'
@@ -96,6 +99,7 @@ import aux from '@/utils/tabs'
 
 export default {
   components: {
+    SettingsJSON,
     SettingsXML,
     ButtonGroup,
     Codemirror,
@@ -113,15 +117,23 @@ export default {
       xml_main_schema: {label: "Schema", key: "schema_1"},
       xml_schemas: [{ label: "Schema", key: "schema_1" }],
       xml_settings: {
-        UNBOUNDED: 10,
-        RECURSIV: {LOWER: 0, UPPER: 3},
-        OUTPUT: "XML"
+        recursiv: {lower: 0, upper: 3},
+        unbounded: 10
       },
       
       // from JSON schemas
       json_tabs: [{ label: "Schema 1", key: "schema_1", input: "", closable: false }],
       json_main_schema: {label: "Schema 1", key: "schema_1"},
       json_schemas: [{ label: "Schema 1", key: "schema_1" }],
+      json_settings: {
+        recursiv: {lower: 0, upper: 3},
+        prob_if: 0.5,
+        prob_patternProperty: 0.8,
+        random_props: false,
+        extend_propSchema: "OR", // "OR" / "OW" (overwrite)
+        extend_prefixItems: "OR", // "OR" / "OWP" (overwrite parcial) / "OWT" (overwrite total) / "AP" (append) 
+        extend_schemaObj: "OR" // "OR" / "OW" (overwrite)
+      },
 
       // modal de settings
       settings: false,
@@ -139,7 +151,6 @@ export default {
     window.addEventListener('changed-input_mode', (event) => {
       this.input_mode = event.detail.storage.mode
       this.output_mode = event.detail.storage.mode
-      this.xml_settings.OUTPUT = event.detail.storage.format
     })
 
     window.addEventListener('reset_schemas', (event) => {
@@ -150,11 +161,17 @@ export default {
     })
   },
   methods: {
+    updateOutputFormat(new_format) { this.output_mode = new_format == "XML" ? "xml" : "javascript" },
     openSettings() { this.result_settings = 0; this.settings = true },
     closeSettings() { this.result_settings = -1; this.settings = false },
     confirmSettings() { this.result_settings = 1; this.settings = false },
     updateSettingsValidity(input_mode, new_valid) {
       if (input_mode == this.input_mode) this.valid_settings = new_valid
+    },
+    updateSettings(new_settings) {
+      let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
+      Object.assign(settings, new_settings)
+      console.log(settings)
     },
     varsByInputType() {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
@@ -165,11 +182,6 @@ export default {
     errUpload() {
       this.errorMsg = `O ficheiro que escolheu não corresponde a uma schema ${this.input_mode=="xml"?"XML":"JSON"}. A extensão do ficheiro deve ser ${this.input_mode=="xml"?".xsd":".json"}!`
       this.error = true
-    },
-    updateSettings(new_settings) { Object.assign(this.xml_settings, new_settings) },
-    updateOutputFormat(new_format) {
-      this.xml_settings.OUTPUT = new_format
-      this.output_mode = new_format == "XML" ? "xml" : "javascript"
     },
     updateMain(key) {
       let schemas = this.input_mode == "xml" ? this.xml_schemas : this.json_schemas
@@ -243,9 +255,12 @@ export default {
       this.chooseSchema = false
       this.gen_request = true
       let result
+      
+      let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
+      settings.OUTPUT = this.output_mode == "xml" ? "XML" : "JSON"
 
       if (this.input_mode == "xml") {
-        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, settings: this.xml_settings})
+        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, settings})
       }
       else {
         let main_schema, other_schemas = []
@@ -257,7 +272,7 @@ export default {
           other_schemas = tabs.filter(s => s.key != this.json_main_schema.key && s.input.length > 0).map(s => s.input)
         }
         
-        result = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings: this.xml_settings})
+        result = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings})
       }
 
       if ("dataset" in result.data) this.output = result.data.dataset

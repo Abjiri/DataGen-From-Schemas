@@ -8,11 +8,18 @@ const xmlParser = require('../grammars/xml_schema/parser/parser')
 const dslConverter = require('../grammars/datagen_dsl/conversions')
 const xmlConverter = require('../grammars/xml_schema/converter/converter');
 
+function cleanSettings(settings) {
+  settings.unbounded = parseInt(settings.unbounded)
+  settings.recursiv.lower = parseInt(settings.recursiv.lower)
+  settings.recursiv.upper = parseInt(settings.recursiv.upper)
+}
+
 // POST para gerar um dataset a partir de um XML schema
 router.post('/', (req, res) => {
   try {
     // extrair dados da schema
     let data = xmlParser.parse(req.body.xsd)
+    cleanSettings(req.body.settings)
     //console.log(JSON.stringify(data))
     console.log('schema parsed')
     

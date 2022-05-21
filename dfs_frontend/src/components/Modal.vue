@@ -3,7 +3,7 @@
       @input="$emit('update:visible',false)" 
       @keydown.esc="close"
       @click:outside="close"
-      width="600px"
+      :width="more_width ? '1000px' : '600px'"
     >
 
       <v-card style="z-index:2;">
@@ -56,7 +56,8 @@ export default {
         title: String,
         options: Boolean,
         settings: Boolean,
-        valid_settings: Boolean
+        valid_settings: Boolean,
+        more_width: Boolean
     },
     methods: {
         close() { this.$emit('close') },

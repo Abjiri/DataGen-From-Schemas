@@ -1,34 +1,32 @@
 <template>
     <v-form ref="form" v-model="valid" lazy-validation class="px-3">
+        <v-row>
+            <v-col cols="12" sm="6">
+                <v-text-field
+                    :key="settings.recursiv.upper"
+                    v-model="settings.recursiv.lower"
+                    :rules="[rules.required, rules.nonNegative, rules.lessThanUpper]"
+                    type="number"
+                    label="Limite inferior de recursividade"
+                />
+            </v-col>
+            <v-col cols="12" sm="6">
+                <v-text-field
+                    :key="settings.recursiv.lower"
+                    v-model="settings.recursiv.upper"
+                    :rules="[rules.required, rules.nonNegative, rules.moreThanLower]"
+                    type="number"
+                    label="Limite superior de recursividade"
+                />
+            </v-col>
+        </v-row>
+        
         <v-text-field
-            v-model="settings.UNBOUNDED"
+            v-model="settings.unbounded"
             :rules="[rules.required, rules.nonNegative]"
             type="number"
             label='Máximo de ocorrências quando maxOccurs="unbounded"' 
         />
-
-        <v-container class="px-0">
-            <v-row>
-                <v-col cols="12" sm="6">
-                    <v-text-field
-                        :key="settings.RECURSIV.UPPER"
-                        v-model="settings.RECURSIV.LOWER"
-                        :rules="[rules.required, rules.nonNegative, rules.lessThanUpper]"
-                        type="number"
-                        label="Limite inferior de recursividade"
-                    />
-                </v-col>
-                <v-col cols="12" sm="6">
-                    <v-text-field
-                        :key="settings.RECURSIV.LOWER"
-                        v-model="settings.RECURSIV.UPPER"
-                        :rules="[rules.required, rules.nonNegative, rules.moreThanLower]"
-                        type="number"
-                        label="Limite superior de recursividade"
-                    />
-                </v-col>
-            </v-row>
-        </v-container>
     </v-form>
 </template>
 
@@ -44,14 +42,14 @@ export default {
             valid: true,
             original_settings: {},
             settings: {
-                UNBOUNDED: 10,
-                RECURSIV: {LOWER: 0, UPPER: 3}
+                unbounded: 10,
+                recursiv: {lower: 0, upper: 3}
             },
             rules: {
                 required: v => !!v || "Valor obrigatório.",
                 nonNegative: v => parseInt(v) >= 0 || "O valor não pode ser negativo.",
-                lessThanUpper: v => parseInt(v) <= parseInt(this.settings.RECURSIV.UPPER) || "Não pode ser maior que o limite superior.",
-                moreThanLower: v => parseInt(v) >= parseInt(this.settings.RECURSIV.LOWER) || "Não pode ser menor que o limite inferior."
+                lessThanUpper: v => parseInt(v) <= parseInt(this.settings.recursiv.upper) || "Não pode ser maior que o limite superior.",
+                moreThanLower: v => parseInt(v) >= parseInt(this.settings.recursiv.lower) || "Não pode ser menor que o limite inferior."
             }
         }
     },
