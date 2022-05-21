@@ -16,9 +16,10 @@ export default {
     },
     data() {
         return {
-            from_format: "XML"
+            from_format: ""
         }
     },
+    mounted() { this.from_format = this.format },
     methods: {
         updateFormat() { this.$emit('changed', this.from_format) }
     },

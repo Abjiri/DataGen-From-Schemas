@@ -1,8 +1,18 @@
 <template>
     <nav>
+        <Modal
+            title="Aviso"
+            options
+            :visible="warning"
+            @close="cancelChange"
+            @confirm="resetSchemas"
+        >
+            {{warningMsg}}
+        </Modal>
+
         <v-app-bar flat app dark :color="color()">
             <span class="title inline">DataGen From </span>
-            <ButtonGroup class="type-schema" :format="format" @changed="update"/>
+            <ButtonGroup :key="rollback" class="type-schema" :format="format" @changed="update"/>
             <span class="title"> Schemas</span>
             <v-spacer></v-spacer>
             <!--v-btn color="grey">
@@ -15,17 +25,52 @@
 
 <script>
 import ButtonGroup from '@/components/ButtonGroup'
+import Modal from '@/components/Modal'
 
 export default {
     components: {
-        ButtonGroup
+        ButtonGroup,
+        Modal
     },
     props: {
         format: String
     },
+    data() {
+        return {
+            get no_input() { return localStorage.getItem("no_input") },
+            new_format: "",
+            rollback: 0,
+            warning: false,
+            warningMsg: ""
+        }
+    },
     methods: {
-        update(format) { this.$emit('changed', format) },
-        color() { return "var(--" + this.format.toLowerCase() + ")" }
+        color() { return "var(--" + this.format.toLowerCase() + ")" },
+        update(format) {
+            if (this.no_input == true) { this.emitChange(format) }
+            else {
+                this.new_format = format
+                this.warningMsg = `Se mudar o tipo de schema a processar, perderá a(s) schema(s) ${this.format} que introduziu. Deseja proceder?`
+                this.warning = true
+            }
+        },
+        cancelChange() {
+            this.rollback++
+            this.warning = false
+        },
+        resetSchemas() {
+            this.warning = false
+            localStorage.setItem("no_input", 1)
+            this.emitChange(this.new_format)
+        },
+        emitChange(new_format) {
+            let old_format = this.format
+            this.$emit('changed', new_format)
+
+            window.dispatchEvent(new CustomEvent("reset_schemas", {
+                detail: { storage: {format: old_format.toLowerCase()} }
+            }))
+        }
     }
 }
 </script>

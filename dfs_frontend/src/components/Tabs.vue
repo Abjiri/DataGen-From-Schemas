@@ -122,6 +122,10 @@ export default {
   color: white;
 }
 
+.tabs-item:hover {
+  color: black;
+}
+
 .active {
   color: black !important;
 }

@@ -113,12 +113,20 @@ export default {
       errorMsg: ""
     }
   },
+  created() { localStorage.setItem("no_input", 1) },
   mounted() {
     window.addEventListener('changed-input_mode', (event) => {
       this.input_mode = event.detail.storage.mode
       this.output_mode = event.detail.storage.mode
       this.settings.OUTPUT = event.detail.storage.format
-    });
+    })
+
+    window.addEventListener('reset_schemas', (event) => {
+      let format = event.detail.storage.format
+      this[format + "_tabs"] = [{ label: "Schema 1", key: "schema_1", input: "", closable: false }]
+      this[format + "_main_schema"] = {label: "Schema", key: "schema_1"}
+      this[format + "_schemas"] = [{ label: "Schema 1", key: "schema_1" }]
+    })
   },
   methods: {
     varsByInputType() {
@@ -159,6 +167,11 @@ export default {
       }
 
       tabs[index].input = input
+
+      // dar update à flag de input existente no localStorage
+      let no_input = tabs.every(t => !t.input.length) ? 1 : 0
+      let lsVar = localStorage.getItem("no_input")
+      if (lsVar != no_input) localStorage.setItem("no_input", no_input)
     },
     updateTabs(new_tabs, index, upload) {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
