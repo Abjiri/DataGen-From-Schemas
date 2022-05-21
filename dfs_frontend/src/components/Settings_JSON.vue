@@ -68,8 +68,14 @@
                     single-line
                 ></v-select>
             </v-col>
+
             <v-col cols="12" sm="4">
-                <span class="label">Extensão de chaves cujo valor é uma subschema</span>
+                <v-tooltip top max-width="500px">
+                    <template v-slot:activator="{ on }">
+                        <span class="label" v-on="on">Extensão de chaves cujo valor é uma subschema</span>
+                    </template>
+                    <span>Como proceder ao estender alguma destas chaves ('propertyNames', 'additionalProperties', 'unevaluatedProperties', 'items' ou 'unevaluatedItems') com uma chave igual, através de chaves de combinação de schemas?</span>
+                </v-tooltip>
                 <v-select class="select"
                     :rules="[rules.required]"
                     v-model="settings.extend_schemaObj"
@@ -81,8 +87,14 @@
                     single-line
                 ></v-select>
             </v-col>
+
             <v-col cols="12" sm="4">
-                <span class="label">Extensão da chave 'prefixItems'</span>
+                <v-tooltip top max-width="500px">
+                    <template v-slot:activator="{ on }">
+                        <span class="label" v-on="on">Extensão da chave 'prefixItems'</span>
+                    </template>
+                    <span>Como proceder ao estender a chave 'prefixItems' com uma chave igual, através de chaves de combinação de schemas?</span>
+                </v-tooltip>
                 <v-select style="padding-top: 39px;"
                     :rules="[rules.required]"
                     v-model="settings.extend_prefixItems"
@@ -92,7 +104,24 @@
                     label="Selecionar"
                     outlined
                     single-line
-                ></v-select>
+                    v-on="on"
+                >
+                    <template #item="data">
+                        <v-tooltip top max-width="420px">
+                            <template v-slot:activator="{ on }">
+                                <v-layout wrap v-on="on">
+                                    <v-list-item-content>
+                                        <v-list-item-title>{{data.item.label}}</v-list-item-title>
+                                    </v-list-item-content>
+                                </v-layout>
+                            </template>
+                            <span v-if="data.item.key=='OR'">Para todas as schemas que se encontram no mesmo índice, as da chave-base são estendidas com as respetivas schemas da nova chave. Se a chave nova tiver mais elementos do que a base, os elementos extra são também concatenados.</span>
+                            <span v-if="data.item.key=='OWP'">Sobrescreve apenas as schemas da chave-base com uma schema correspondente no mesmo índice, na chave nova. Se a chave nova tiver mais elementos do que a base, os elementos extra são também concatenados.</span>
+                            <span v-if="data.item.key=='OWT'">O valor da chave-base é apagado totalmente e substítuido pelo array do novo 'prefixItems'.</span>
+                            <span v-if="data.item.key=='AP'">Os elementos do novo 'prefixItems' são concatenados aos da chave-base.</span>
+                        </v-tooltip>
+                    </template>
+                </v-select>
             </v-col>
         </v-row>
     </v-form>
