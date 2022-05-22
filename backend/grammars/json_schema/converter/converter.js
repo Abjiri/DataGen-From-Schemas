@@ -4,17 +4,9 @@ const deepEqual = require('deep-equal');
 const { structureUndefType } = require('./undefType')
 const { extendSchema } = require('./schema_extender')
 
-let SETTINGS = {
-    prob_if: 0.5,
-    prob_patternProperty: 0.8,
-    random_props: false,
-    extend_propSchema: "OR", // "OR" / "OW" (overwrite)
-    extend_prefixItems: "OR", // "OR" / "OWP" (overwrite parcial) / "OWT" (overwrite total) / "AP" (append) 
-    extend_schemaObj: "OR" // "OR" / "OW" (overwrite)
-}
-
 // instância original da estrutura intermédia que aqui chega, com schemas, subschemas e pn_refs
 let original_json
+let SETTINGS = {}
 
 // tabs de indentação
 const indent = depth => "\t".repeat(depth)
@@ -28,8 +20,9 @@ let rand = len => Math.floor(Math.random()*len)
 let clone = x => JSON.parse(JSON.stringify(x))
 let a = x => console.log(JSON.stringify(x))
 
-function convert(json) {
+function convert(json, user_settings) {
     original_json = json
+    SETTINGS = user_settings
     return "<!LANGUAGE pt>\n" + parseJSON(json.schema, 1)
 }
 

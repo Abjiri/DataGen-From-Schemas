@@ -24,7 +24,7 @@ router.post('/', (req, res) => {
     console.log('schema parsed')
     
     for (let i = 0; i < data.unbounded_min; i++) {
-      if (data.unbounded_min[i] > req.body.settings.UNBOUNDED) {
+      if (data.unbounded_min[i] > req.body.settings.unbounded) {
         let message = `Um elemento na schema tem minOccurs='${data.unbounded_min[i]}' e maxOccurs='unbounded', o que é inválido porque o máximo de repetições geráveis está definido como '${req.body.unbounded}'.`
         return res.status(201).jsonp({message})
       }
@@ -41,7 +41,7 @@ router.post('/', (req, res) => {
     
     // gerar dataset
     let dataset = dslParser.parse(model)
-    let format = req.body.settings.OUTPUT
+    let format = req.body.settings.output
     console.log('dataset gerado')
 
     // converter dataset para o formato final

@@ -8,7 +8,7 @@ function resolve_refs(data, settings) {
 			let subschema = data[i].subschemas[j]
 			
 			if (subschema.refs.length > 0) {
-				let resolved = resolve_localRefs(subschema.schema, subschema.id, subschema.refs, subschema.anchors, data[i].pn_refs, settings.RECURSIV)
+				let resolved = resolve_localRefs(subschema.schema, subschema.id, subschema.refs, subschema.anchors, data[i].pn_refs, settings.recursiv)
 				if (resolved !== true) return resolved
 			}
 			
@@ -200,9 +200,7 @@ function resolve_foreignRefs(refs, anchors, pn_refs) {
 }
 
 function resolve_recursiveRefs(json, ref, schema_ref, recursiv) {
-	Object.keys(recursiv).map(k => recursiv[k] = parseInt(recursiv[k]))
-
-	let occurs = Math.floor(Math.random() * ((recursiv.UPPER+1) - recursiv.LOWER) + recursiv.LOWER)
+	let occurs = Math.floor(Math.random() * ((recursiv.upper+1) - recursiv.lower) + recursiv.lower)
 	let ref_path = get_refPath(json, ref, [], 0)
 	
 	// um not não pode ter referência recursiva
@@ -227,7 +225,7 @@ function resolve_recursiveRefs(json, ref, schema_ref, recursiv) {
 	for (let i = 0; i < occurs; i++) {
 		// garantir que tem o limite inferior de recursividade manualmente, impedindo que gere arrays/objetos vazios que não tenham recursividade
 		ref_path.map((x,j) => {
-			if (i < recursiv.LOWER && j == recFlag_depth) {
+			if (i < recursiv.lower && j == recFlag_depth) {
 				// nr de elementos/props que é necessário gerar para garantir que inclui a referência recursiva
 				let offset
 				if (recursiv_type == "schema_array") offset = ref_path[j+1] + 1

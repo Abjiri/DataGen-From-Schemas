@@ -55,7 +55,7 @@
             </v-btn>
           </v-col>
           <v-col xs12 md6 class="justify-end">
-            <ButtonGroup :format="xml_settings.OUTPUT" @changed="updateOutputFormat"/>
+            <ButtonGroup :format="output_format" @changed="updateOutputFormat"/>
           </v-col>
       </v-row>
 
@@ -110,6 +110,7 @@ export default {
     return {
       input_mode: "xml",
       output_mode: "xml",
+      output_format: "XML",
       output: "",
 
       // from XML schemas
@@ -149,8 +150,10 @@ export default {
   created() { localStorage.setItem("no_input", 1) },
   mounted() {
     window.addEventListener('changed-input_mode', (event) => {
+      console.log(event.detail.storage)
       this.input_mode = event.detail.storage.mode
       this.output_mode = event.detail.storage.mode
+      this.output_format = event.detail.storage.format
     })
 
     window.addEventListener('reset_schemas', (event) => {
@@ -170,7 +173,6 @@ export default {
     }
   },
   methods: {
-    updateOutputFormat(new_format) { this.output_mode = new_format == "XML" ? "xml" : "javascript" },
     openSettings() { this.result_settings = 0; this.settings = true },
     closeSettings() { this.result_settings = -1; this.settings = false },
     confirmSettings() { this.result_settings = 1; this.settings = false },
@@ -180,6 +182,10 @@ export default {
     updateSettings(new_settings) {
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
       Object.assign(settings, new_settings)
+    },
+    updateOutputFormat(new_format) {
+      this.output_format = new_format
+      this.output_mode = new_format == "XML" ? "xml" : "javascript"
     },
     varsByInputType() {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
@@ -269,7 +275,7 @@ export default {
       let result
       
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
-      settings.OUTPUT = this.output_mode == "xml" ? "XML" : "JSON"
+      settings.output = this.output_format
 
       if (this.input_mode == "xml") {
         result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, settings})
