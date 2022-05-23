@@ -63,7 +63,7 @@ function normalizeName(name, end_prefix) {
 }
 
 
-function convert(xsd, st, ct, user_settings) {
+function convert(xsd, st, ct, main_elem, user_settings) {
    let str = "<!LANGUAGE pt>\n{\n"
    let depth = 1
    
@@ -78,15 +78,13 @@ function convert(xsd, st, ct, user_settings) {
    let elements = xsd.content.filter(x => x.element == "element")
    if (!elements.length) str += indent(depth) + "DFXS_EMPTY_XML: true\n"
    else {
-      //for (let i = 0; i < elements.length; i++) {
-         let {elem_str, _} = parseElement(elements[0], depth, {}, true)
+      let {elem_str, _} = parseElement(elements.find(x => x.attrs.name == main_elem), depth, {}, true)
 
-         if (elem_str.length > 0) {
-            str += indent(depth) + elem_str
-            //if (i < elements.length-1) str += ","
-            str += "\n"
-         }
-      //}
+      if (elem_str.length > 0) {
+         str += indent(depth) + elem_str
+         //if (i < elements.length-1) str += ","
+         str += "\n"
+      }
    }
 
 

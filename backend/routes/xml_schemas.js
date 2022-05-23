@@ -31,7 +31,7 @@ router.post('/', (req, res) => {
     }
 
     // criar modelo DSL a partir dos dados da schemas
-    let model = xmlConverter.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.settings)
+    let model = xmlConverter.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.element, req.body.settings)
     console.log('modelo criado')
     // Write data in 'Output.txt' .
     fs.writeFile('modelo.txt', model, (err) => {
@@ -54,5 +54,14 @@ router.post('/', (req, res) => {
     res.status(201).jsonp(err)
   }
 });
+
+router.post('/elements', (req, res) => {
+  try {
+    let data = xmlParser.parse(req.body.xsd)
+    res.status(201).jsonp({elements: data.xsd.content.filter(x => x.element == "element").map(x => x.attrs.name)})
+  } catch (err) {
+    res.status(201).jsonp(err)
+  }
+})
 
 module.exports = router;

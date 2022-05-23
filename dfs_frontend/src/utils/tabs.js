@@ -34,11 +34,6 @@ function searchJsonSchemaId(schema, old_label/* , labels */) {
     return "S" + old_label.slice(1).replace("_"," ")
 }
 
-function searchXmlSchemaName(/* schema, old_label */) {
-    /* let elem = /<[a-zA-Z][a-zA-Z0-9.\-_]*:element[^>]+>/.exec(schema)
-    let name = /name\s*=\s*"[^]+"/ */
-}
-
 function getAllIds(schemas) {
     return schemas.reduce((acc, cur) => {
         let id_matches = cur.matchAll(/"\$id":\s*"(https:\/\/datagen.di.uminho.pt)?\/json-schemas\/[^",}]+"/g)
@@ -79,7 +74,6 @@ function removeRepeatedSchemas(tabs, main_schema_key) {
 
 module.exports = {
     searchJsonSchemaId,
-    searchXmlSchemaName,
     getAllIds,
     removeRepeatedSchemas
 }

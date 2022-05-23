@@ -19,7 +19,7 @@
         Deseja gerar o dataset a partir de que schema?
         <v-select class="select-schema"
           v-model="main_schema"
-          :items="input_mode=='xml' ? xml_schemas : json_schemas"
+          :items="input_mode=='xml' ? xml_schemas[0].elements : json_schemas"
           item-text="label"
           item-value="key"
           label="Selecionar"
@@ -45,7 +45,7 @@
 
       <v-row>
           <v-col xs12 md6>
-            <v-btn style="margin-right: 25px;" depressed :color='`var(--${input_mode})`' class="white--text" @click="input_mode=='xml' ? generate() : askMainSchema()">
+            <v-btn style="margin-right: 25px;" depressed :color='`var(--${input_mode})`' class="white--text" @click="input_mode=='xml' ? askXmlMainSchema() : askJsonMainSchema()">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
@@ -116,7 +116,8 @@ export default {
       // from XML schemas
       xml_tabs: [{ label: "Schema", key: "schema_1", input: "", closable: false }],
       xml_main_schema: {label: "Schema", key: "schema_1"},
-      xml_schemas: [{ label: "Schema", key: "schema_1" }],
+      xml_element: {},
+      xml_schemas: [{ label: "Schema", key: "schema_1", elements: [] }],
       xml_settings: {
         recursiv: {lower: 0, upper: 3},
         unbounded: 10
@@ -150,7 +151,6 @@ export default {
   created() { localStorage.setItem("no_input", 1) },
   mounted() {
     window.addEventListener('changed-input_mode', (event) => {
-      console.log(event.detail.storage)
       this.input_mode = event.detail.storage.mode
       this.output_mode = event.detail.storage.mode
       this.output_format = event.detail.storage.format
@@ -161,13 +161,18 @@ export default {
       this[format + "_tabs"] = [{ label: "Schema 1", key: "schema_1", input: "", closable: false }]
       this[format + "_main_schema"] = {label: "Schema", key: "schema_1"}
       this[format + "_schemas"] = [{ label: "Schema 1", key: "schema_1" }]
+
+      if (format == "xml") {
+        this.xml_schemas[0].elements = []
+        this.xml_element = {}
+      }
     })
   },
   computed: {
     main_schema: {
-      get() { return this.input_mode == 'xml' ? this.xml_main_schema : this.json_main_schema },
+      get() { return this.input_mode == 'xml' ? this.xml_element : this.json_main_schema },
       set(value) {
-        if (this.input_mode == "xml") this.xml_main_schema = value
+        if (this.input_mode == "xml") this.xml_element = value
         else this.json_main_schema = value
       }
     }
@@ -209,7 +214,7 @@ export default {
       let new_label
 
       if (this.input_mode == "javascript") new_label = aux.searchJsonSchemaId(input, tabs[index].key)
-      else new_label = "Schema"//aux.searchXmlSchemaName(input, tabs[index].key)
+      else new_label = "Schema"
 
       // dar update ao label da schema para o seu id, se tiver um
       // ou para o label original da schema (Schema nr), se o user tiver apagado o id
@@ -240,7 +245,7 @@ export default {
 
       if (upload) this.updateInput(index, tabs[index].input)
     },
-    askMainSchema() {
+    askJsonMainSchema() {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
 
       if (this.input_mode == "xml") {
@@ -269,6 +274,28 @@ export default {
         }
       }
     },
+    async askXmlMainSchema() {
+      let {data} = await axios.post('http://localhost:3000/api/xml_schema/elements', {xsd: this.xml_tabs[0].input})
+
+      if ("elements" in data) {
+        if (!data.elements.length) this.output = "ERRO!!\n\n" + "A schema não tem nenhum <element> global para gerar um dataset!"
+        else {
+          if (data.elements.length == 1) {
+            this.xml_element = {label: data.elements[0], key: "elem_1"}
+            this.generate()
+          }
+          else {
+            data.elements.map((e,i) => {
+              let elem = {label: e, key: "elem_"+i}
+              this.xml_schemas[0].elements.push(elem)
+              if (!("key" in this.xml_element) && !i) this.xml_element = elem
+            })
+            this.chooseSchema = true
+          }
+        }
+      }
+      if ("message" in data) this.output = "ERRO!!\n\n" + data.message
+    },
     async generate() {
       this.chooseSchema = false
       this.gen_request = true
@@ -278,7 +305,7 @@ export default {
       settings.output = this.output_format
 
       if (this.input_mode == "xml") {
-        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, settings})
+        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, element: this.xml_element.label, settings})
       }
       else {
         let main_schema, other_schemas = []
