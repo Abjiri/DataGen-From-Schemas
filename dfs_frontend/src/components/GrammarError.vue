@@ -7,7 +7,7 @@
 				</div>
 			</div>
 		</div>
-		<div class="fill-height">
+		<div class="grammar-error">
 			<h4 style="text-align: center; padding-bottom: 20px;">Existe um erro no modelo!</h4>
 			<div v-for="(error, idx) in errors" :key="idx" style="padding: 0 40px 0 40px;">
 				<div v-html="error.message"></div>
@@ -135,9 +135,17 @@ ol > div > li::marker {
 	font-weight: bold;
 }
 
+h4 {
+	margin-top: 0px !important;
+	padding-top: 15px;
+}
+
 .grammar-error {
-  outline: 2px solid black;
-  outline-offset: -1px;
+  border: 2px solid black;
+  border-top: none;
+  border-radius: 0 0 5px 5px;
+  outline-offset: -2px;
   background-color: white !important;
+  padding-bottom: 50px;
 }
 </style>
