@@ -79,7 +79,8 @@
         <!-- CONSOLA OUTPUT -->
         <v-flex xs12 md6>
           <v-container>
-            <Codemirror :type="'output'" :mode="output_mode" :text="output" :generate="gen_request"/>
+            <GrammarError v-if="grammar_errors.length>0" :errors="grammar_errors"/>
+            <Codemirror v-else :type="'output'" :mode="output_mode" :text="output" :generate="gen_request"/>
           </v-container>
         </v-flex>
       </v-row>
@@ -93,9 +94,10 @@ import SettingsJSON from '@/components/Settings_JSON'
 import SettingsXML from '@/components/Settings_XML'
 import ButtonGroup from '@/components/ButtonGroup'
 import Codemirror from '@/components/Codemirror'
+import GrammarError from '@/components/GrammarError.vue'
 import Modal from '@/components/Modal'
 import Tabs from '@/components/Tabs'
-import aux from '@/utils/tabs'
+import aux from '@/utils/js_aux'
 
 export default {
   components: {
@@ -104,7 +106,8 @@ export default {
     ButtonGroup,
     Codemirror,
     Modal,
-    Tabs
+    Tabs,
+    GrammarError
   },
   data() {
     return {
@@ -145,6 +148,7 @@ export default {
       gen_request: false,
       chooseSchema: false,
       error: false,
+      grammar_errors: [],
       errorMsg: ""
     }
   },
@@ -276,9 +280,20 @@ export default {
     },
     async askXmlMainSchema() {
       let {data} = await axios.post('http://localhost:3000/api/xml_schema/elements', {xsd: this.xml_tabs[0].input})
+      
+      if ("message" in data) this.grammar_errors = [aux.translateMsg(data)]
+      else if ("elements" in data) {
+        if (!data.elements.length) {
+          let lines = this.xml_tabs[0].input.split("\n")
 
-      if ("elements" in data) {
-        if (!data.elements.length) this.output = "ERRO!!\n\n" + "A schema não tem nenhum <element> global para gerar um dataset!"
+          this.grammar_errors = [{
+            message: "A schema não tem nenhum <element> global para gerar um dataset!",
+            location: {
+              start: {line: 1, column: 1},
+              end: {line: lines.length, column: lines[lines.length-1].length}
+            }
+          }]
+        }
         else {
           if (data.elements.length == 1) {
             this.xml_element = {label: data.elements[0], key: "elem_1"}
@@ -294,7 +309,6 @@ export default {
           }
         }
       }
-      if ("message" in data) this.output = "ERRO!!\n\n" + data.message
     },
     async generate() {
       this.chooseSchema = false
@@ -310,18 +324,24 @@ export default {
       else {
         let main_schema, other_schemas = []
 
-        if (this.json_tabs.length == 1) main_schema = this.json_tabs[0].input
+        if (this.json_tabs.length == 1) main_schema = this.json_tabs[0]
         else {
           let tabs = aux.removeRepeatedSchemas(_.cloneDeep(this.json_tabs), this.json_main_schema.key)
-          main_schema = tabs.find(s => s.key == this.json_main_schema.key).input
-          other_schemas = tabs.filter(s => s.key != this.json_main_schema.key && s.input.length > 0).map(s => s.input)
+          main_schema = tabs.find(s => s.key == this.json_main_schema.key)
+          other_schemas = tabs.filter(s => s.key != this.json_main_schema.key && s.input.length > 0)
         }
         
         result = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings})
       }
 
-      if ("dataset" in result.data) this.output = result.data.dataset
-      if ("message" in result.data) this.output = "ERRO!!\n\n" + result.data.message
+      if ("message" in result.data) {
+        this.grammar_errors = [aux.translateMsg(result.data)]
+        if ("schema_key" in result.data) this.updateMain(result.data.schema_key)
+      }
+      else {
+        this.grammar_errors = []
+        this.output = result.data.dataset
+      }
 
       this.gen_request = false
     }

@@ -18,9 +18,11 @@ function cleanSettings(settings) {
 
 // POST para gerar um dataset a partir de um XML schema
 router.post('/', (req, res) => {
+  let schema_key = ""
+
   try {
     // extrair dados da schema
-    let data = req.body.schemas.map(x => jsonParser.parse(x))
+    let data = req.body.schemas.map(x => {schema_key = x.key; return jsonParser.parse(x.input)})
     cleanSettings(req.body.settings)
     //console.log(JSON.stringify(data))
     console.log('schema parsed')
@@ -47,7 +49,7 @@ router.post('/', (req, res) => {
 
     res.status(201).jsonp({dataset})
   } catch (err) {
-    res.status(201).jsonp(err)
+    res.status(201).jsonp({...err, schema_key: schema_key})
   }
 });
 

@@ -72,8 +72,31 @@ function removeRepeatedSchemas(tabs, main_schema_key) {
     return tabs
 }
 
+function translateMsg(error) {
+    if (/^Expected/.test(error.message)) {
+        let expected = error.message.split("Expected ")[1].split(" but")[0].split(/,? or |, /)
+        if (error.found !== null) expected.push(JSON.stringify(error.found))
+
+        expected.map(x => {
+            let quoted = /^"[^"]+"$/.test(x)
+            let value = /"</.test(x) ? '"<&#8203;' + x.slice(2) : x
+            if (quoted) value = value.slice(1, -1)
+
+            error.message = error.message.replace(x, `${quoted?'"':''}<b>${value}</b>${quoted?'"':''}`)
+        })
+
+        error.message = error.message.replace("Expected", "Era esperado")
+                                     .replace(/,? or/, " ou")
+                                     .replace("but end of input found", "mas o input chegou ao fim")
+                                     .replace("but", "mas foi encontrado")
+                                     .replace(" found", "")
+    }
+    return error
+}
+
 module.exports = {
     searchJsonSchemaId,
     getAllIds,
-    removeRepeatedSchemas
+    removeRepeatedSchemas,
+    translateMsg
 }
