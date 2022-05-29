@@ -76,6 +76,7 @@ export default {
       confirm() { this.$emit('confirm') },
       copy() {
         navigator.clipboard.writeText(this.model)
+        this.$buefy.toast.open("Modelo copiado!")
       },
       download() {
         let element = document.createElement('a')
@@ -94,6 +95,8 @@ export default {
 </script>
 
 <style scoped>
+@import '../utils/buefy.css';
+
 .message {
   margin: 20px 5%;
 }
