@@ -44,7 +44,7 @@
       </Modal>
 
       <v-row>
-          <v-col xs12 md6>
+          <v-col xs="12" sm="12" md="6">
             <v-btn style="margin-right: 25px;" depressed :color='`var(--${input_mode})`' class="white--text" @click="input_mode=='xml' ? askXmlMainSchema() : askJsonMainSchema()">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
@@ -54,8 +54,19 @@
                 <v-icon>mdi-cog</v-icon>
             </v-btn>
           </v-col>
-          <v-col xs12 md6 class="justify-end">
+          <v-col xs="4" sm="4" md="2">
             <ButtonGroup :format="output_format" @changed="updateOutputFormat"/>
+          </v-col>
+          <v-col xs="4" sm="4" md="2">
+          </v-col>
+          <v-col xs="4" sm="4" md="2">
+            <div v-if="output.length>0" class="d-flex justify-end">
+              <input class="filename-input" v-model="filename"/>
+              <v-btn depressed :color='`var(--${input_mode})`' class="white--text" @click="download">
+                <span>Download</span>
+                <v-icon right>mdi-download</v-icon>
+              </v-btn>
+              </div>
           </v-col>
       </v-row>
 
@@ -80,7 +91,7 @@
         <v-flex xs12 md6>
           <v-container>
             <GrammarError v-if="grammar_errors.length>0" :errors="grammar_errors"/>
-            <Codemirror v-else :type="'output'" :mode="output_mode" :text="output" :generate="gen_request"/>
+            <Codemirror v-else :type="'output'" :mode="output_mode" :text="output" :generate="last_gen_request" @changed="updateOutput"/>
           </v-container>
         </v-flex>
       </v-row>
@@ -115,6 +126,7 @@ export default {
       output_mode: "xml",
       output_format: "XML",
       output: "",
+      filename: "dataset",
 
       // from XML schemas
       xml_tabs: [{ label: "Schema", key: "schema_1", input: "", closable: false }],
@@ -145,7 +157,7 @@ export default {
       valid_settings: true,
       result_settings: 0,
 
-      gen_request: false,
+      last_gen_request: "",
       chooseSchema: false,
       error: false,
       grammar_errors: [],
@@ -195,6 +207,10 @@ export default {
     updateOutputFormat(new_format) {
       this.output_format = new_format
       this.output_mode = new_format == "XML" ? "xml" : "javascript"
+    },
+    updateOutput(output) {
+      this.output = output
+      if (!output.length) this.filename = "dataset"
     },
     varsByInputType() {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
@@ -312,14 +328,15 @@ export default {
     },
     async generate() {
       this.chooseSchema = false
-      this.gen_request = true
-      let result
+      this.last_gen_request = this.output_format
+      let result, filename = ""
       
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
       settings.output = this.output_format
 
       if (this.input_mode == "xml") {
-        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, element: this.xml_element.label, settings})
+        filename = this.xml_element.label
+        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, element: filename, settings})
       }
       else {
         let main_schema, other_schemas = []
@@ -331,6 +348,7 @@ export default {
           other_schemas = tabs.filter(s => s.key != this.json_main_schema.key && s.input.length > 0)
         }
         
+        filename = main_schema.label
         result = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings})
       }
 
@@ -343,7 +361,24 @@ export default {
         this.output = result.data.dataset
       }
 
-      this.gen_request = false
+      this.filename = filename
+    },
+    async download() {
+      if (!this.output.length) {
+        this.errorMsg = "É necessário gerar um dataset primeiro!"
+        this.error = true
+      }
+      else {
+        let element = document.createElement('a')
+        element.style.display = 'none'
+
+        element.setAttribute('href', `data:text/plain;charset=utf-8,` + encodeURIComponent(this.output))
+        element.setAttribute('download', this.filename + "." + (this.last_gen_request == "XML" ? "xml" : "json"))
+
+        document.body.appendChild(element)
+        element.click()
+        document.body.removeChild(element)
+      }
     }
   }
 }
@@ -374,5 +409,15 @@ export default {
 .select-schema {
   display: flex;
   padding-top: 20px;
+}
+
+.filename-input {
+  border: 1px solid rgba(60, 60, 60, .29);
+  border-radius: 4px;
+  padding: 0.2em 0.6em;
+  margin-top: 5px;
+  margin-right: 5px;
+  background: transparent;
+  transition: background-color .5s;
 }
 </style>

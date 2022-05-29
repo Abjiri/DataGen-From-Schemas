@@ -23,7 +23,7 @@ export default {
         type: String,
         mode: String,
         text: String,
-        generate: Boolean
+        generate: String
     },
     computed: {
         codemirror() { return this.$refs.text.codemirror }
@@ -54,8 +54,8 @@ export default {
         onChange(newText) { this.$emit('changed', newText) }
     },
     watch: {
-        generate(newFlag) {
-            if (newFlag) this.options.mode = "text/" + this.mode
+        generate() {
+            this.options.mode = "text/" + this.mode
         }
     }
 }
