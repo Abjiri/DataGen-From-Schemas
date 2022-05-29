@@ -61,7 +61,7 @@
             </v-btn>
 
             <v-btn depressed fab small color="blue-grey lighten-4" @click="openSettings">
-                <v-icon>mdi-cog</v-icon>
+              <v-icon>mdi-cog</v-icon>
             </v-btn>
           </v-col>
 
@@ -425,6 +425,10 @@ export default {
 .v-btn--fab {
   height: 48px !important;
   width: 48px !important;
+}
+
+.v-btn--fab:focus::before {
+  opacity: 0 !important;
 }
 
 .parameters {
