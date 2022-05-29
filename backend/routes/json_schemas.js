@@ -47,7 +47,7 @@ router.post('/', (req, res) => {
     }
     console.log('dataset convertido')
 
-    res.status(201).jsonp({dataset})
+    res.status(201).jsonp({model, dataset})
   } catch (err) {
     res.status(201).jsonp({...err, schema_key: schema_key})
   }

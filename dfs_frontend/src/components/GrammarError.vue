@@ -143,7 +143,7 @@ h4 {
 .grammar-error {
   border: 2px solid black;
   border-top: none;
-  border-radius: 0 0 5px 5px;
+  border-radius: 0 0 10px 10px;
   outline-offset: -2px;
   background-color: white !important;
   padding-bottom: 50px;

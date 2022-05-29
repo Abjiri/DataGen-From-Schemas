@@ -9,9 +9,20 @@
       <v-card style="z-index:2;">
         <v-card-title class="text-h5 grey lighten-2">
           {{$props.title ? $props.title : "Mensagem"}}
+
+          <v-spacer></v-spacer>
+
+          <div v-if="model!==undefined" class="btns">
+            <v-btn ref="copy" fab depressed color="grey lighten-2" @click="copy">
+              <v-icon>mdi-content-copy</v-icon>
+            </v-btn>
+            <v-btn ref="download" fab depressed color="grey lighten-2" @click="download">
+              <v-icon>mdi-download</v-icon>
+            </v-btn>
+          </div>
         </v-card-title>
 
-        <div class="message">
+        <div :class="model!==undefined ? '' : 'message'">
           <slot></slot>
         </div>
 
@@ -52,22 +63,53 @@
 <script>
 export default {
     props: {
-        visible: Boolean,
-        title: String,
-        options: Boolean,
-        settings: Boolean,
-        valid_settings: Boolean,
-        more_width: Boolean
+      visible: Boolean,
+      title: String,
+      options: Boolean,
+      settings: Boolean,
+      valid_settings: Boolean,
+      more_width: Boolean,
+      model: String
     },
     methods: {
-        close() { this.$emit('close') },
-        confirm() { this.$emit('confirm') }
+      close() { this.$emit('close') },
+      confirm() { this.$emit('confirm') },
+      copy() {
+        navigator.clipboard.writeText(this.model)
+        this.$refs.copy.blur()
+        /* this.$notify({
+          group: 'notif',
+          title: 'Modelo copiado!'
+        }); */
+      },
+      download() {
+        let element = document.createElement('a')
+        element.style.display = 'none'
+
+        element.setAttribute('href', `data:text/plain;charset=utf-8,` + encodeURIComponent(this.model))
+        element.setAttribute('download', "DataGen_model.txt")
+
+        document.body.appendChild(element)
+        element.click()
+        document.body.removeChild(element)
+        this.$refs.download.blur()
+      }
     }
 }
 </script>
 
 <style scoped>
-  .message {
-    margin: 20px 5%;
-  }
+.message {
+  margin: 20px 5%;
+}
+
+.btns {
+  display: flex;
+  align-items: flex-end;
+}
+
+.v-btn--fab {
+  height: 45px !important;
+  width: 45px !important;
+}
 </style>

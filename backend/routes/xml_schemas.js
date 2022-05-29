@@ -34,10 +34,10 @@ router.post('/', (req, res) => {
     let model = xmlConverter.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.element, req.body.settings)
     console.log('modelo criado')
     // Write data in 'Output.txt' .
-    fs.writeFile('modelo.txt', model, (err) => {
+    /* fs.writeFile('modelo.txt', model, (err) => {
         // In case of a error throw err.
         if (err) throw err;
-    })
+    }) */
     
     // gerar dataset
     let dataset = dslParser.parse(model)
@@ -49,7 +49,7 @@ router.post('/', (req, res) => {
     if (format == "XML") dataset = dslConverter.jsonToXml(dataset.dataModel.data, {xml_declaration: data.xml_declaration})
     console.log('dataset convertido')
 
-    res.status(201).jsonp({dataset})
+    res.status(201).jsonp({model, dataset})
   } catch (err) {
     res.status(201).jsonp(err)
   }

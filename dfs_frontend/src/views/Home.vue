@@ -12,8 +12,8 @@
       <Modal
         title="Gerar dataset"
         options
-        :visible="chooseSchema"
-        @close="chooseSchema=false"
+        :visible="choose_schema"
+        @close="choose_schema=false"
         @confirm="generate"
       >
         Deseja gerar o dataset a partir de que schema?
@@ -43,8 +43,18 @@
         <SettingsJSON v-else ref="settingsXML" :settings="json_settings" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
       </Modal>
 
+      <Modal
+        title="Modelo intermédio gerado na DSL do DataGen"
+        more_width
+        :model="model"
+        :visible="show_model"
+        @close="show_model=false"
+      >
+        <Codemirror type="output" mode="javascript" :text="model"/>
+      </Modal>
+
       <v-row>
-          <v-col xs="12" sm="12" md="6">
+          <v-col xs="6" sm="6" md="3">
             <v-btn style="margin-right: 25px;" depressed :color='`var(--${input_mode})`' class="white--text" @click="input_mode=='xml' ? askXmlMainSchema() : askJsonMainSchema()">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
@@ -54,12 +64,24 @@
                 <v-icon>mdi-cog</v-icon>
             </v-btn>
           </v-col>
-          <v-col xs="4" sm="4" md="2">
+
+          <v-col xs="6" sm="6" md="3" align="end">
+            <v-btn
+              v-if="output.length>0"
+              depressed
+              :color='`var(--${input_mode})`'
+              class="white--text"
+              @click="show_model=true"
+            >
+              <span>Modelo intermédio</span>
+            </v-btn>
+          </v-col>
+
+          <v-col xs="6" sm="6" md="3">
             <ButtonGroup :format="output_format" @changed="updateOutputFormat"/>
           </v-col>
-          <v-col xs="4" sm="4" md="2">
-          </v-col>
-          <v-col xs="4" sm="4" md="2">
+
+          <v-col xs="6" sm="6" md="3">
             <div v-if="output.length>0" class="d-flex justify-end">
               <input class="filename-input" v-model="filename"/>
               <v-btn depressed :color='`var(--${input_mode})`' class="white--text" @click="download">
@@ -91,7 +113,7 @@
         <v-flex xs12 md6>
           <v-container>
             <GrammarError v-if="grammar_errors.length>0" :errors="grammar_errors"/>
-            <Codemirror v-else :type="'output'" :mode="output_mode" :text="output" :generate="last_gen_request" @changed="updateOutput"/>
+            <Codemirror v-else type="output" :mode="output_mode" :text="output" :generate="last_gen_request" @changed="updateOutput"/>
           </v-container>
         </v-flex>
       </v-row>
@@ -122,6 +144,7 @@ export default {
   },
   data() {
     return {
+      // input e output
       input_mode: "xml",
       output_mode: "xml",
       output_format: "XML",
@@ -157,8 +180,12 @@ export default {
       valid_settings: true,
       result_settings: 0,
 
+      // modal do modelo intermédio
+      model: "",
+      show_model: false,
+
       last_gen_request: "",
-      chooseSchema: false,
+      choose_schema: false,
       error: false,
       grammar_errors: [],
       errorMsg: ""
@@ -182,6 +209,8 @@ export default {
         this.xml_schemas[0].elements = []
         this.xml_element = {}
       }
+
+      this.output = ""
     })
   },
   computed: {
@@ -193,7 +222,12 @@ export default {
       }
     }
   },
+  watch: {
+    output() { if (!this.output.length) this.filename = "dataset" },
+    grammar_errors() { if (this.grammar_errors.length > 0) this.output = "" }
+  },
   methods: {
+    updateOutput(output) { this.output = output },
     openSettings() { this.result_settings = 0; this.settings = true },
     closeSettings() { this.result_settings = -1; this.settings = false },
     confirmSettings() { this.result_settings = 1; this.settings = false },
@@ -207,10 +241,6 @@ export default {
     updateOutputFormat(new_format) {
       this.output_format = new_format
       this.output_mode = new_format == "XML" ? "xml" : "javascript"
-    },
-    updateOutput(output) {
-      this.output = output
-      if (!output.length) this.filename = "dataset"
     },
     varsByInputType() {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
@@ -270,14 +300,14 @@ export default {
 
       if (this.input_mode == "xml") {
         if (tabs.length == 1) this.generate()
-        else this.chooseSchema = true
+        else this.choose_schema = true
       }
       else {
         let ids = aux.getAllIds(tabs.map(t => t.input))
 
         if (ids.length == new Set(ids).size) {
           if (tabs.length == 1) this.generate()
-          else this.chooseSchema = true
+          else this.choose_schema = true
         }
         else {
           let next_ids = _.clone(ids)
@@ -321,13 +351,13 @@ export default {
               this.xml_schemas[0].elements.push(elem)
               if (!("key" in this.xml_element) && !i) this.xml_element = elem
             })
-            this.chooseSchema = true
+            this.choose_schema = true
           }
         }
       }
     },
     async generate() {
-      this.chooseSchema = false
+      this.choose_schema = false
       this.last_gen_request = this.output_format
       let result, filename = ""
       
@@ -358,12 +388,13 @@ export default {
       }
       else {
         this.grammar_errors = []
+        this.model = result.data.model
         this.output = result.data.dataset
       }
 
       this.filename = filename
     },
-    async download() {
+    download() {
       if (!this.output.length) {
         this.errorMsg = "É necessário gerar um dataset primeiro!"
         this.error = true
@@ -388,14 +419,12 @@ export default {
 @import '../utils/colors.css';
 
 .v-btn {
-  height: 45px !important;
-  margin-top: 5px !important;
+  height: 48px !important;
 }
 
 .v-btn--fab {
-  height: 45px !important;
-  width: 45px !important;
-  margin-top: 5px !important;
+  height: 48px !important;
+  width: 48px !important;
 }
 
 .parameters {
@@ -415,7 +444,6 @@ export default {
   border: 1px solid rgba(60, 60, 60, .29);
   border-radius: 4px;
   padding: 0.2em 0.6em;
-  margin-top: 5px;
   margin-right: 5px;
   background: transparent;
   transition: background-color .5s;

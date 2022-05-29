@@ -1,6 +1,12 @@
 <template>
   <v-app id="app">
     <Navbar :format="from_format" @changed="updateFromFormat"/>
+
+    <notifications
+      group="notif"
+      animation-name="v-fade-top"
+    />
+
     <v-main>
       <router-view/>
     </v-main>

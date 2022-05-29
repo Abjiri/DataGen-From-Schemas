@@ -16,6 +16,7 @@ import 'codemirror/mode/javascript/javascript.js'
 import 'codemirror/mode/xml/xml.js'
 import 'codemirror/theme/dracula.css'
 import 'codemirror/keymap/sublime'
+import 'codemirror/addon/display/autorefresh'
 
 export default {
     components: { codemirror },
@@ -37,6 +38,7 @@ export default {
                 tabSize: 4,
                 styleActiveLine: true,
                 lineNumbers: true,
+                autoRefresh: true,
                 line: true,
                 foldGutter: true,
                 styleSelectedText: true,
