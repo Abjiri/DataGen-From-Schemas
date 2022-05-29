@@ -76,10 +76,6 @@ export default {
       confirm() { this.$emit('confirm') },
       copy() {
         navigator.clipboard.writeText(this.model)
-        /* this.$notify({
-          group: 'notif',
-          title: 'Modelo copiado!'
-        }); */
       },
       download() {
         let element = document.createElement('a')
