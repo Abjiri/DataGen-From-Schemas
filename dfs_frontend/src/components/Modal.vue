@@ -13,10 +13,10 @@
           <v-spacer></v-spacer>
 
           <div v-if="model!==undefined" class="btns">
-            <v-btn ref="copy" fab depressed color="grey lighten-2" @click="copy">
+            <v-btn ref="copy" fab depressed color="grey lighten-2" @click="copy" @mouseleave="$event.target.blur()">
               <v-icon>mdi-content-copy</v-icon>
             </v-btn>
-            <v-btn ref="download" fab depressed color="grey lighten-2" @click="download">
+            <v-btn ref="download" fab depressed color="grey lighten-2" @click="download" @mouseleave="$event.target.blur()">
               <v-icon>mdi-download</v-icon>
             </v-btn>
           </div>
@@ -76,7 +76,6 @@ export default {
       confirm() { this.$emit('confirm') },
       copy() {
         navigator.clipboard.writeText(this.model)
-        this.$refs.copy.blur()
         /* this.$notify({
           group: 'notif',
           title: 'Modelo copiado!'
