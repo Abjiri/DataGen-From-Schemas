@@ -6,7 +6,7 @@
       </span>
       <span slot="after" class="btn-add">
         <input type="file" ref="file" :accept="mode=='xml' ? '.xsd' : '.json'" @change="uploadSchema" style="display:none">
-        <i class="v-icon mdi mdi-upload" style="color: white;" @click="$refs.file.click()"></i>
+        <i class="v-icon mdi mdi-upload" style="color: white;" @click="loading ? true : $refs.file.click()"></i>
       </span>
     </vue-tabs-chrome>
     <Codemirror :key="tab" :type="'input'" :mode="mode" :text="input" @changed="onChangeInput"/>
@@ -24,6 +24,7 @@ export default {
   },
   props: {
     mode: String,
+    loading: Boolean,
     hover: String,
     tabs: Array
   },
@@ -58,11 +59,13 @@ export default {
       this.$emit('updateInput', index, input)
     },
     addTab(input) {
-      this.created_tabs++
-      let item = "schema_" + this.created_tabs
+      if (!this.loading) {
+        this.created_tabs++
+        let item = "schema_" + this.created_tabs
 
-      this.$refs.tab.addTab({ label: "Schema " + this.created_tabs, key: item, input })
-      this.tab = item
+        this.$refs.tab.addTab({ label: "Schema " + this.created_tabs, key: item, input })
+        this.tab = item
+      }
     },
     removeTab() { this.$refs.tab.removeTab(this.tab) },
     uploadSchema() {

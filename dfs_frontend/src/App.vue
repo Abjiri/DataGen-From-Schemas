@@ -1,9 +1,6 @@
 <template>
   <v-app id="app">
     <Navbar :format="from_format" @changed="updateFromFormat"/>
-
-    <div class="notices is-top"></div>
-
     <v-main>
       <router-view/>
     </v-main>

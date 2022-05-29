@@ -55,12 +55,25 @@
 
       <v-row>
           <v-col xs="6" sm="6" md="3">
-            <v-btn style="margin-right: 25px;" depressed :color='`var(--${input_mode})`' class="white--text" @click="input_mode=='xml' ? askXmlMainSchema() : askJsonMainSchema()">
+            <v-btn
+              style="margin-right: 25px;"
+              depressed
+              :color='`var(--${input_mode})`'
+              :disabled="loading"
+              class="white--text"
+              @click="!loading ? (input_mode=='xml' ? askXmlMainSchema() : askJsonMainSchema()) : true">
               <span>Gerar</span>
               <v-icon right>mdi-reload</v-icon>
             </v-btn>
 
-            <v-btn depressed fab small color="blue-grey lighten-4" @click="openSettings">
+            <v-btn
+              depressed
+              fab 
+              small 
+              color="blue-grey lighten-4" 
+              :disabled="loading"
+              @click="openSettings"
+            >
               <v-icon>mdi-cog</v-icon>
             </v-btn>
           </v-col>
@@ -70,6 +83,7 @@
               v-if="output.length>0"
               depressed
               :color='`var(--${input_mode})`'
+              :disabled="loading"
               class="white--text"
               @click="show_model=true"
             >
@@ -78,13 +92,30 @@
           </v-col>
 
           <v-col xs="6" sm="6" md="3">
-            <ButtonGroup :format="output_format" @changed="updateOutputFormat"/>
+            <div class="d-flex">
+              <ButtonGroup :format="output_format" @changed="updateOutputFormat" style="margin-right: 20px;"/>
+              <loading-progress v-if="loading"
+                :key="input_mode"
+                style="width: 48px; height: 48px;"
+                indeterminate="indeterminate"
+                size="50"
+                rotate
+                fillDuration="5"
+                rotationDuration="2.5"
+                :class="input_mode=='xml' ? 'xml-stroke' : 'json-stroke'"
+              />
+            </div>
           </v-col>
 
           <v-col xs="6" sm="6" md="3">
             <div v-if="output.length>0" class="d-flex justify-end">
               <input class="filename-input" v-model="filename"/>
-              <v-btn depressed :color='`var(--${input_mode})`' class="white--text" @click="download">
+              <v-btn
+                depressed 
+                :color='`var(--${input_mode})`' 
+                :disabled="loading"
+                class="white--text" @click="download"
+              >
                 <span>Download</span>
                 <v-icon right>mdi-download</v-icon>
               </v-btn>
@@ -99,6 +130,7 @@
             <Tabs
               :key="input_mode"
               :mode="input_mode" 
+              :loading="loading"
               :hover="input_mode=='xml' ? xml_main_schema.key : json_main_schema.key" 
               :tabs="input_mode=='xml' ? xml_tabs : json_tabs"
               @updateInput="updateInput" 
@@ -183,6 +215,9 @@ export default {
       // modal do modelo intermédio
       model: "",
       show_model: false,
+
+      loading: false,
+      send_req: false,
 
       last_gen_request: "",
       choose_schema: false,
@@ -357,12 +392,15 @@ export default {
       }
     },
     async generate() {
+      console.log("generate")
+      this.send_req = true
       this.choose_schema = false
       this.last_gen_request = this.output_format
       let result, filename = ""
       
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
       settings.output = this.output_format
+      setTimeout(() => { if (this.send_req) this.loading = true}, 3000)
 
       if (this.input_mode == "xml") {
         filename = this.xml_element.label
@@ -392,6 +430,8 @@ export default {
         this.output = result.data.dataset
       }
 
+      this.loading = false
+      this.send_req = false
       this.filename = filename
     },
     download() {
@@ -415,7 +455,7 @@ export default {
 }
 </script>
 
-<style scoped>
+<style>
 @import '../utils/colors.css';
 
 .v-btn {
@@ -449,7 +489,29 @@ export default {
   border-radius: 4px;
   padding: 0.2em 0.6em;
   margin-right: 5px;
+  margin-left: 20px;
   background: transparent;
   transition: background-color .5s;
+}
+
+.xml-stroke * .progress {
+  stroke: var(--xml) !important;
+}
+
+.json-stroke * .progress {
+  stroke: var(--json) !important;
+}
+
+.xml-stroke * .background {
+  stroke: #ddd !important;
+}
+
+.json-stroke * .background {
+  stroke: #ddd !important;
+}
+
+svg {
+  width: 48px;
+  height: 48px;
 }
 </style>
