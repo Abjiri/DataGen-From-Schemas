@@ -1,10 +1,19 @@
 <template>
+  <div>
+    <Modal
+        title="Erro ao registar"
+        :visible="reg_error"
+        @close="reg_error=false"
+    >
+      {{error_msg}}
+    </Modal>
+
     <v-dialog :value="visible" 
       @input="$emit('update:visible',false)" 
       @keydown.esc="close"
       @click:outside="close"
       min-width="360px"
-      max-width="600px"
+      max-width="650px"
     >
       <v-tabs v-model="tab" show-arrows :background-color="`var(--${format.toLowerCase()}-primary)`" icons-and-text dark grow>
         <v-tabs-slider :color="`var(--${format.toLowerCase()}-primary)`"/>
@@ -37,7 +46,7 @@
                   <v-col class="d-flex" cols="12" sm="6" xsm="12"/>
                   <v-spacer></v-spacer>
                   <v-col class="d-flex" cols="12" sm="3" xsm="12" align-end>
-                    <v-btn x-large block :disabled="!valid" color="success" @click="login">Login</v-btn>
+                    <v-btn x-large block :disabled="!valid" color="success" @click="login()">Login</v-btn>
                   </v-col>
                 </v-row>
               </v-form>
@@ -85,7 +94,7 @@
                   </v-col>
                   <v-spacer></v-spacer>
                   <v-col class="d-flex ml-auto" cols="12" sm="3" xsm="12">
-                    <v-btn x-large block :disabled="!valid" color="success" @click="validate">Registar</v-btn>
+                    <v-btn x-large block :disabled="!valid" color="success" @click="register">Registar</v-btn>
                   </v-col>
                 </v-row>
               </v-form>
@@ -94,12 +103,17 @@
         </v-tab-item>
       </v-tabs>
     </v-dialog>
+  </div>
 </template>  
 
 <script>
+import Modal from '@/components/Modal'
 import axios from 'axios'
 
 export default {
+  components: {
+    Modal
+  },
   computed: {
     passwordMatch() { return () => this.password === this.verify || "As passwords devem coincidir." }
   },
@@ -107,17 +121,35 @@ export default {
     close() { this.$emit('close') },
     async login() {
       if (this.$refs.loginForm.validate()) {
-        let res = await axios.post('/api/utilizadores/verificar/', {
-          email: this.loginEmail,
-          password: this.loginPassword
-        })
-        
-        localStorage.setItem('token', res.data.token)
+        let res = await axios.post('/api/utilizadores/login/', {email: this.loginEmail, password: this.loginPassword})
+        /* let token = "aaa" */
+        localStorage.setItem('token', /* token */ res.data.token)
+
+        this.$buefy.toast.open("Login bem-sucedido!")
         this.$emit('logged_in')
         this.close()
       }
     },
-    validate() {},
+    async register() {
+      try {
+        await axios.post('/api/utilizadores/registar', {
+          nome: this.firstName.trim() + " " + this.lastName.trim(),
+          email: this.email,
+          password: this.password
+        })
+        
+        let res = await axios.post('/api/utilizadores/login/', {email: this.email, password: this.password})
+        localStorage.setItem('token', res.data.token)
+
+        this.$buefy.toast.open("Registado com sucesso!")
+        this.$emit('logged_in')
+        this.close()
+      }
+      catch(error) {
+        this.error_msg = error.response.data.error
+        this.reg_error = true
+      }
+    },
     reset() {
       this.$refs.form.reset();
     },
@@ -135,10 +167,15 @@ export default {
         {name:"Login", icon:"mdi-account"},
         {name:"Registar", icon:"mdi-account-outline"}
     ],
+
     valid: true,
     show1: false,
     show2: false,
     show3: false,
+
+    // erro de registo
+    reg_error: false,
+    error_msg: "",
     
     // registar
     firstName: "",

@@ -43,6 +43,7 @@
 import ButtonGroup from '@/components/ButtonGroup'
 import UserAuth from '@/components/UserAuth'
 import Modal from '@/components/Modal'
+import axios from 'axios'
 
 export default {
     components: {
@@ -91,7 +92,16 @@ export default {
             window.dispatchEvent(new CustomEvent("reset_schemas", {
                 detail: { storage: {format: old_format.toLowerCase()} }
             }))
-        }
+        },
+        logout() {
+            axios.post('/api/utilizadores/logout', {token: localStorage.getItem('token')})
+                .then(data => {
+                    localStorage.removeItem('token')
+                    this.session = false
+                    this.$buefy.toast.open("Logout bem-sucedido!")
+                })
+                .catch(error => console.log(error))
+        },
     }
 }
 </script>
