@@ -101,7 +101,7 @@ export default {
                     this.$buefy.toast.open("Logout bem-sucedido!")
                 })
                 .catch(error => console.log(error))
-        },
+        }
     }
 }
 </script>

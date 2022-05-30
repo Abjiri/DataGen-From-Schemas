@@ -10,6 +10,7 @@
 
     <v-dialog :value="visible" 
       @input="$emit('update:visible',false)" 
+      @keydown.enter="!tab ? login() : register()"
       @keydown.esc="close"
       @click:outside="close"
       min-width="360px"
@@ -18,9 +19,9 @@
       <v-tabs v-model="tab" show-arrows :background-color="`var(--${format.toLowerCase()}-primary)`" icons-and-text dark grow>
         <v-tabs-slider :color="`var(--${format.toLowerCase()}-primary)`"/>
 
-        <v-tab v-for="(tab,i) in tabs" :key="i">
-          <v-icon large>{{ tab.icon }}</v-icon>
-          <div class="caption py-1">{{ tab.name }}</div>
+        <v-tab v-for="(item,i) in tabs" :key="i">
+          <v-icon large>{{ item.icon }}</v-icon>
+          <div class="caption py-1">{{ item.name }}</div>
         </v-tab>
 
         <v-tab-item>
@@ -46,7 +47,7 @@
                   <v-col class="d-flex" cols="12" sm="6" xsm="12"/>
                   <v-spacer></v-spacer>
                   <v-col class="d-flex" cols="12" sm="3" xsm="12" align-end>
-                    <v-btn x-large block :disabled="!valid" color="success" @click="login()">Login</v-btn>
+                    <v-btn x-large block :disabled="!valid" color="success" @click="login">Login</v-btn>
                   </v-col>
                 </v-row>
               </v-form>
