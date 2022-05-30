@@ -10,26 +10,44 @@
             {{warningMsg}}
         </Modal>
 
-        <v-app-bar flat app dark :color="color()">
+        <UserAuth
+            :format="format" 
+            :visible="user_auth" 
+            @close="user_auth=false"
+            @logged_in="session=true"
+        />
+
+        <v-app-bar flat app dark :color="color('primary')">
             <span class="title inline">DataGen From </span>
             <ButtonGroup :key="rollback" class="type-schema" :format="format" @changed="update"/>
             <span class="title"> Schemas</span>
             <v-spacer></v-spacer>
-            <!--v-btn color="grey">
-                <span>Logout</span>
-                <v-icon right>mdi-logout</v-icon>
-            </v-btn-->
+
+            <div v-if="!session" class="btns">
+                <v-btn :color="color('secondary')" @click="user_auth=true">
+                    <span>Entrar</span>
+                    <v-icon right>mdi-login</v-icon>
+                </v-btn>
+            </div>
+            <div v-else class="btns">
+                <v-btn :color="color('secondary')" @click="logout">
+                    <span>Logout</span>
+                    <v-icon right>mdi-logout</v-icon>
+                </v-btn>
+            </div>
         </v-app-bar>
     </nav>
 </template>
 
 <script>
 import ButtonGroup from '@/components/ButtonGroup'
+import UserAuth from '@/components/UserAuth'
 import Modal from '@/components/Modal'
 
 export default {
     components: {
         ButtonGroup,
+        UserAuth,
         Modal
     },
     props: {
@@ -37,6 +55,9 @@ export default {
     },
     data() {
         return {
+            session: false,
+            user_auth: null,
+
             get no_input() { return localStorage.getItem("no_input") },
             new_format: "",
             rollback: 0,
@@ -45,7 +66,7 @@ export default {
         }
     },
     methods: {
-        color() { return "var(--" + this.format.toLowerCase() + ")" },
+        color(type) { return `var(--${this.format.toLowerCase()}-${type})` },
         update(format) {
             if (this.no_input == true) { this.emitChange(format) }
             else {
@@ -97,4 +118,9 @@ export default {
 }
 
 .vs--single.vs--open .vs__selected { position: inherit; }
+
+.btns {
+  display: flex;
+  align-items: flex-end;
+}
 </style>

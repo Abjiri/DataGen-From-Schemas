@@ -1,6 +1,6 @@
 <template>
   <div class="fill-height">
-    <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs" :style="`background-color: var(--${mode});`">
+    <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs" :style="`background-color: var(--${mode}-primary);`">
       <span v-if="mode!='xml'" slot="after" class="btn-add" @click="addTab('')">
         <i class="v-icon mdi mdi-plus" style="color: white;"></i>
       </span>

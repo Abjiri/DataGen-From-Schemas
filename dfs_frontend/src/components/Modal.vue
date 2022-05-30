@@ -9,14 +9,16 @@
       <v-card style="z-index:2;">
         <v-card-title class="text-h5 grey lighten-2">
           {{$props.title ? $props.title : "Mensagem"}}
-
           <v-spacer></v-spacer>
 
           <div v-if="model!==undefined" class="btns">
-            <v-btn ref="copy" fab depressed color="grey lighten-2" @click="copy" @mouseleave="$event.target.blur()">
+            <v-btn fab depressed color="grey lighten-2" @click="use" @mouseleave="$event.target.blur()">
+              <v-icon>mdi-open-in-new</v-icon>
+            </v-btn>
+            <v-btn fab depressed color="grey lighten-2" @click="copy" @mouseleave="$event.target.blur()">
               <v-icon>mdi-content-copy</v-icon>
             </v-btn>
-            <v-btn ref="download" fab depressed color="grey lighten-2" @click="download" @mouseleave="$event.target.blur()">
+            <v-btn fab depressed color="grey lighten-2" @click="download" @mouseleave="$event.target.blur()">
               <v-icon>mdi-download</v-icon>
             </v-btn>
           </div>
@@ -74,6 +76,9 @@ export default {
     methods: {
       close() { this.$emit('close') },
       confirm() { this.$emit('confirm') },
+      use() {
+        window.location.href = "http://localhost:12080/"//"https://datagen.di.uminho.pt/"
+      },
       copy() {
         navigator.clipboard.writeText(this.model)
         this.$buefy.toast.open("Modelo copiado!")

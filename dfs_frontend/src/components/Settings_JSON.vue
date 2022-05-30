@@ -48,8 +48,8 @@
             :rules="[rules.required_bool]"
             label="Gerar propriedades aleatórias (dentro do tamanho indicado) se não forem especificadas 'additionalProperties' nem 'unevaluatedProperties'"
         >
-            <v-radio :label="'Sim'" :value="true" color="var(--json)"/>
-            <v-radio :label="'Não'" :value="false" color="var(--json)"/>
+            <v-radio :label="'Sim'" :value="true" color="var(--json-primary)"/>
+            <v-radio :label="'Não'" :value="false" color="var(--json-primary)"/>
         </v-radio-group>
 
         <v-row>

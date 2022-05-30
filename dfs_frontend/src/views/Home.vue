@@ -58,7 +58,7 @@
             <v-btn
               style="margin-right: 25px;"
               depressed
-              :color='`var(--${input_mode})`'
+              :color='`var(--${input_mode}-primary)`'
               :disabled="loading"
               class="white--text"
               @click="!loading ? (input_mode=='xml' ? askXmlMainSchema() : askJsonMainSchema()) : true">
@@ -82,7 +82,7 @@
             <v-btn
               v-if="output.length>0"
               depressed
-              :color='`var(--${input_mode})`'
+              :color='`var(--${input_mode}-primary)`'
               :disabled="loading"
               class="white--text"
               @click="show_model=true"
@@ -112,7 +112,7 @@
               <input class="filename-input" v-model="filename"/>
               <v-btn
                 depressed 
-                :color='`var(--${input_mode})`' 
+                :color='`var(--${input_mode}-primary)`' 
                 :disabled="loading"
                 class="white--text" @click="download"
               >
@@ -392,7 +392,6 @@ export default {
       }
     },
     async generate() {
-      console.log("generate")
       this.send_req = true
       this.choose_schema = false
       this.last_gen_request = this.output_format
