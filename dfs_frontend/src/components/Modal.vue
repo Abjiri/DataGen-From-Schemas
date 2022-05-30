@@ -12,15 +12,41 @@
           <v-spacer></v-spacer>
 
           <div v-if="model!==undefined" class="btns">
-            <v-btn fab depressed color="grey lighten-2" @click="use" @mouseleave="$event.target.blur()">
-              <v-icon>mdi-open-in-new</v-icon>
-            </v-btn>
-            <v-btn fab depressed color="grey lighten-2" @click="copy" @mouseleave="$event.target.blur()">
-              <v-icon>mdi-content-copy</v-icon>
-            </v-btn>
-            <v-btn fab depressed color="grey lighten-2" @click="download" @mouseleave="$event.target.blur()">
-              <v-icon>mdi-download</v-icon>
-            </v-btn>
+            <v-tooltip top max-width="420px">
+              <template v-slot:activator="{ on }">
+                <v-btn fab depressed color="grey lighten-2" v-on="on" @click="copy" @mouseleave="$event.target.blur()">
+                  <v-icon>mdi-content-copy</v-icon>
+                </v-btn>
+              </template>
+              <span>Copiar para a área de tranferência</span>
+            </v-tooltip>
+
+            <v-tooltip top max-width="420px">
+              <template v-slot:activator="{ on }">
+                <v-btn fab depressed color="grey lighten-2" v-on="on" @click="download" @mouseleave="$event.target.blur()">
+                  <v-icon>mdi-download</v-icon>
+                </v-btn>
+              </template>
+              <span>Download</span>
+            </v-tooltip>
+
+            <v-tooltip top max-width="420px">
+              <template v-slot:activator="{ on }">
+                <v-btn fab depressed color="grey lighten-2" v-on="on" @click="use" @mouseleave="$event.target.blur()">
+                  <v-icon>mdi-open-in-new</v-icon>
+                </v-btn>
+              </template>
+              <span>Editar o modelo no DataGen</span>
+            </v-tooltip>
+            
+            <v-tooltip top max-width="420px">
+              <template v-slot:activator="{ on }">
+                <v-btn fab depressed color="grey lighten-2" v-on="on" @click="save" @mouseleave="$event.target.blur()">
+                  <v-icon>mdi-content-save</v-icon>
+                </v-btn>
+              </template>
+              <span>Guardar modelo</span>
+            </v-tooltip>
           </div>
         </v-card-title>
 
@@ -76,6 +102,7 @@ export default {
     methods: {
       close() { this.$emit('close') },
       confirm() { this.$emit('confirm') },
+      save() {},
       use() {
         window.location.href = "http://localhost:12080/"//"https://datagen.di.uminho.pt/"
       },
