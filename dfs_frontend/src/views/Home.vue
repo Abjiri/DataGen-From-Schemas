@@ -142,7 +142,7 @@
       </v-col>
     </v-row>
 
-    <v-row class="fill-height mt-0">
+    <v-row class="wrap mt-0">
       <!-- consola input -->
       <v-flex xs12 md6>
         <v-container>
@@ -522,6 +522,10 @@ export default {
 
 <style>
 @import '../utils/colors.css';
+
+.wrap {
+  height: calc( 100% - 64px );
+}
 
 .v-btn {
   height: 48px !important;

@@ -29,9 +29,6 @@ export default {
     computed: {
         codemirror() { return this.$refs.text.codemirror }
     },
-    mounted() {
-        this.codemirror.setSize("100%", "100%")
-    },
     data() {
         return {
             options: {
@@ -67,6 +64,7 @@ export default {
 <style>
 .container { height: 100%; }
 .vue-codemirror { height: 100%; }
+/* .CodeMirror { height: 100%; } */
 .CodeMirror pre.CodeMirror-line, .CodeMirror pre.CodeMirror-line-like {
   font-size: smaller !important; 
 }

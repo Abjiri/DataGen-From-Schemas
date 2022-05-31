@@ -36,4 +36,8 @@ export default {
 
 <style scoped>
 @import './utils/colors.css';
+
+.wrap {
+  height: calc( 100% - 64px );
+}
 </style>

@@ -132,18 +132,4 @@ export default {
 .active {
   color: black !important;
 }
-
-/* .tabs {
-  padding-top: 0px;
-  background: #FFFFFF;
-}
-
-.tabs-main {
-  background: rgba(0, 0, 0, .1);
-}
-
-.tabs-divider {
-  z-index: 100;
-  position: relative;
-} */
 </style>
