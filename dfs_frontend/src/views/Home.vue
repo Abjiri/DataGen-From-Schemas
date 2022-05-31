@@ -113,7 +113,7 @@
 
       <v-col xs="6" sm="6" md="3">
         <div class="d-flex">
-          <ButtonGroup :format="output_format" @changed="updateOutputFormat" style="margin-right: 20px;"/>
+          <ButtonGroup :format="output_format" :loading="loading" @changed="updateOutputFormat" style="margin-right: 20px;"/>
           <loading-progress v-if="loading"
             :key="input_mode"
             style="width: 48px; height: 48px;"
@@ -425,11 +425,14 @@ export default {
       
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
       settings.output = this.output_format
-      setTimeout(() => { if (this.send_req) this.loading = true}, 3000)
+      setTimeout(() => {
+        if (this.send_req) this.loading = true
+        window.dispatchEvent(new CustomEvent("loading", {detail: { storage: {loading: true} }}))
+      }, 3000)
 
       if (this.input_mode == "xml") {
         filename = this.xml_element.label
-        result = await axios.post('http://localhost:3000/api/xml_schema/', {xsd: this.xml_tabs[0].input, element: filename, settings})
+        result = await this.sendGenRequest("xml", {xsd: this.xml_tabs[0].input, element: filename, settings})
       }
       else {
         let main_schema, other_schemas = []
@@ -442,22 +445,35 @@ export default {
         }
         
         filename = main_schema.label
-        result = await axios.post('http://localhost:3000/api/json_schema', {schemas: [main_schema, ...other_schemas], settings})
+        result = await this.sendGenRequest("json", {schemas: [main_schema, ...other_schemas], settings})
       }
+      
+      if (result !== undefined) {
+        if ("message" in result.data) {
+          this.grammar_errors = [aux.translateMsg(result.data)]
+          if ("schema_key" in result.data) this.updateMain(result.data.schema_key)
+        }
+        else {
+          this.grammar_errors = []
+          this.model = result.data.model
+          this.output = result.data.dataset
+        }
 
-      if ("message" in result.data) {
-        this.grammar_errors = [aux.translateMsg(result.data)]
-        if ("schema_key" in result.data) this.updateMain(result.data.schema_key)
-      }
-      else {
-        this.grammar_errors = []
-        this.model = result.data.model
-        this.output = result.data.dataset
+        this.filename = filename
       }
 
       this.loading = false
       this.send_req = false
-      this.filename = filename
+      window.dispatchEvent(new CustomEvent("loading", {detail: { storage: {loading: false} }}))
+    },
+    async sendGenRequest(type, body) {
+      try {
+        return await axios.post(`http://localhost:3000/api/${type}_schema/`, body, {timeout: 35000})
+      } 
+      catch (err) {
+        this.errorMsg = "A operação de geração do dataset excedeu o tempo limite!"
+        this.error = true
+      }
     },
     download() {
       if (!this.output.length) {
@@ -544,11 +560,11 @@ export default {
 }
 
 .xml-stroke * .progress {
-  stroke: var(--xml) !important;
+  stroke: var(--xml-primary) !important;
 }
 
 .json-stroke * .progress {
-  stroke: var(--json) !important;
+  stroke: var(--json-primary) !important;
 }
 
 .xml-stroke * .background {

@@ -19,18 +19,18 @@
 
         <v-app-bar flat app dark :color="color('primary')">
             <span class="title inline">DataGen From </span>
-            <ButtonGroup :key="rollback" class="type-schema" :format="format" @changed="update"/>
+            <ButtonGroup :key="rollback" class="type-schema" :format="format" :loading="loading" @changed="update"/>
             <span class="title"> Schemas</span>
             <v-spacer></v-spacer>
 
             <div v-if="!session" class="btns">
-                <v-btn :color="color('secondary')" @click="user_auth=true">
+                <v-btn :color="color('secondary')" :disabled="loading" @click="user_auth=true">
                     <span>Entrar</span>
                     <v-icon right>mdi-login</v-icon>
                 </v-btn>
             </div>
             <div v-else class="btns">
-                <v-btn :color="color('secondary')" @click="logout">
+                <v-btn :color="color('secondary')" :disabled="loading" @click="logout">
                     <span>Logout</span>
                     <v-icon right>mdi-logout</v-icon>
                 </v-btn>
@@ -59,6 +59,7 @@ export default {
             get token() { return localStorage.getItem("token") },
             session: false,
             user_auth: null,
+            loading: false,
 
             get no_input() { return localStorage.getItem("no_input") },
             new_format: "",
@@ -69,6 +70,7 @@ export default {
     },
     mounted() {
         if (this.token !== null) this.session = true
+        window.addEventListener('loading', (event) => { this.loading = event.detail.storage.loading })
     },
     methods: {
         color(type) { return `var(--${this.format.toLowerCase()}-${type})` },
@@ -93,9 +95,7 @@ export default {
             let old_format = this.format
             this.$emit('changed', new_format)
 
-            window.dispatchEvent(new CustomEvent("reset_schemas", {
-                detail: { storage: {format: old_format.toLowerCase()} }
-            }))
+            window.dispatchEvent(new CustomEvent("reset_schemas", {detail: { storage: {format: old_format.toLowerCase()} }}))
         },
         logout() {
             axios.post('/api/utilizadores/logout', {token: this.token})
@@ -106,9 +106,7 @@ export default {
                     this.session = false
                     this.$buefy.toast.open("Logout bem-sucedido!")
 
-                    window.dispatchEvent(new CustomEvent("session", {
-                        detail: { storage: {session: false} }
-                    }))
+                    window.dispatchEvent(new CustomEvent("session", {detail: { storage: {session: false} }}))
                 })
                 .catch(error => console.log(error))
         }

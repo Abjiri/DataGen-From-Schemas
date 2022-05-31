@@ -128,10 +128,7 @@ export default {
           
           localStorage.setItem('token', res.data.token)
           localStorage.setItem('user', JSON.stringify(res2.data))
-          
-          window.dispatchEvent(new CustomEvent("session", {
-              detail: { storage: {session: true} }
-          }))
+          window.dispatchEvent(new CustomEvent("session", {detail: { storage: {session: true} }}))
 
           this.$buefy.toast.open("Login bem-sucedido!")
           this.$emit('logged_in')
