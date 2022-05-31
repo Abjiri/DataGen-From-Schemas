@@ -41,7 +41,7 @@
             
             <v-tooltip v-if="session" top max-width="420px">
               <template v-slot:activator="{ on }">
-                <v-btn fab depressed color="grey lighten-2" v-on="on" @click="save" @mouseleave="$event.target.blur()">
+                <v-btn fab depressed color="grey lighten-2" v-on="on" @click="$emit('save_model')" @mouseleave="$event.target.blur()">
                   <v-icon>mdi-content-save</v-icon>
                 </v-btn>
               </template>

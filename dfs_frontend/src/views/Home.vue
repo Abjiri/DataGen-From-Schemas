@@ -1,155 +1,174 @@
 <template>
-    <v-container>
-      <!-- modals -->
-      <Modal
-        title="Erro"
-        :visible="error"
-        @close="error=false"
-      >
-        {{errorMsg}}
-      </Modal>
+  <v-container>
+    <!-- modals -->
+    <Modal
+      title="Erro"
+      :visible="error"
+      @close="error=false"
+    >
+      {{errorMsg}}
+    </Modal>
 
-      <Modal
-        title="Gerar dataset"
-        options
-        :visible="choose_schema"
-        @close="choose_schema=false"
-        @confirm="generate"
-      >
-        Deseja gerar o dataset a partir de que schema?
-        <v-select class="select-schema"
-          v-model="main_schema"
-          :items="input_mode=='xml' ? xml_schemas[0].elements : json_schemas"
-          item-text="label"
-          item-value="key"
-          label="Selecionar"
-          outlined
-          return-object
-          single-line
-        ></v-select>
-      </Modal>
+    <Modal
+      title="Gerar dataset"
+      options
+      :visible="choose_schema"
+      @close="choose_schema=false"
+      @confirm="generate"
+    >
+      Deseja gerar o dataset a partir de que schema?
+      <v-select class="select-schema"
+        v-model="main_schema"
+        :items="input_mode=='xml' ? xml_schemas[0].elements : json_schemas"
+        item-text="label"
+        item-value="key"
+        label="Selecionar"
+        outlined
+        return-object
+        single-line
+      ></v-select>
+    </Modal>
 
-      <Modal
-        title="Definições do processo de geração"
-        options
-        settings
-        :valid_settings="valid_settings"
-        :visible="settings"
-        :more_width="input_mode!='xml'"
-        @close="closeSettings"
-        @confirm="confirmSettings"
-      >
-        <SettingsXML v-if="input_mode=='xml'" ref="settingsXML" :settings="xml_settings" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
-        <SettingsJSON v-else ref="settingsXML" :settings="json_settings" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
-      </Modal>
+    <Modal
+      title="Definições do processo de geração"
+      options
+      settings
+      :valid_settings="valid_settings"
+      :visible="settings"
+      :more_width="input_mode!='xml'"
+      @close="closeSettings"
+      @confirm="confirmSettings"
+    >
+      <SettingsXML v-if="input_mode=='xml'" ref="settingsXML" :settings="xml_settings" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
+      <SettingsJSON v-else ref="settingsXML" :settings="json_settings" :result="result_settings" @updateValid="updateSettingsValidity" @saved="updateSettings"/>
+    </Modal>
 
-      <Modal
-        title="Modelo intermédio gerado na DSL do DataGen"
-        more_width
-        :model="model"
-        :visible="show_model"
-        @close="show_model=false"
-      >
-        <Codemirror type="output" mode="javascript" :text="model"/>
-      </Modal>
+    <Modal
+      title="Modelo intermédio gerado na DSL do DataGen"
+      more_width
+      :model="model"
+      :visible="show_model"
+      @close="show_model=false"
+      @save_model="save_model=true"
+    >
+      <Codemirror type="output" mode="javascript" :text="model"/>
+    </Modal>
+    
+    <Modal
+      title="Guardar Modelo"
+      options
+      :visible="save_model"
+      @close="save_model=false"
+      @confirm="saveModel"
+    >
+      <v-form ref="form" v-model="valid" lazy-validation class="px-3">
+        <v-text-field v-model="title" :rules="[required]" autofocus label='Título'/>
+        <v-textarea v-model="description" :rules="[required]" auto-grow label='Descrição' />
+        <v-switch v-model="visibility" :rules="[required]">
+          <template v-slot:label>
+            <span v-if="visibility"><v-icon>mdi-lock-open</v-icon> Público</span>
+            <span v-else><v-icon>mdi-lock</v-icon> Privado</span>
+          </template>
+        </v-switch>
+      </v-form>
+    </Modal>
 
-      <v-row>
-          <v-col xs="6" sm="6" md="3">
-            <v-btn
-              style="margin-right: 25px;"
-              depressed
-              :color='`var(--${input_mode}-primary)`'
-              :disabled="loading"
-              class="white--text"
-              @click="!loading ? (input_mode=='xml' ? askXmlMainSchema() : askJsonMainSchema()) : true">
-              <span>Gerar</span>
-              <v-icon right>mdi-reload</v-icon>
-            </v-btn>
+    <v-row>
+      <v-col xs="6" sm="6" md="3">
+        <v-btn
+          style="margin-right: 25px;"
+          depressed
+          :color='`var(--${input_mode}-primary)`'
+          :disabled="loading"
+          class="white--text"
+          @click="!loading ? (input_mode=='xml' ? askXmlMainSchema() : askJsonMainSchema()) : true"
+        >
+          Gerar<v-icon right>mdi-reload</v-icon>
+        </v-btn>
 
-            <v-btn
-              depressed
-              fab 
-              small 
-              color="blue-grey lighten-4" 
-              :disabled="loading"
-              @click="openSettings"
-            >
-              <v-icon>mdi-cog</v-icon>
-            </v-btn>
-          </v-col>
+        <v-btn
+          depressed
+          fab 
+          small 
+          color="blue-grey lighten-4" 
+          :disabled="loading"
+          @click="openSettings"
+        >
+          <v-icon>mdi-cog</v-icon>
+        </v-btn>
+      </v-col>
 
-          <v-col xs="6" sm="6" md="3" align="end">
-            <v-btn
-              v-if="output.length>0"
-              depressed
-              :color='`var(--${input_mode}-primary)`'
-              :disabled="loading"
-              class="white--text"
-              @click="show_model=true"
-            >
-              <span>Modelo intermédio</span>
-            </v-btn>
-          </v-col>
+      <v-col xs="6" sm="6" md="3" align="end">
+        <v-btn
+          v-if="output.length>0"
+          depressed
+          :color='`var(--${input_mode}-primary)`'
+          :disabled="loading"
+          class="white--text"
+          @click="show_model=true"
+        >
+          Modelo intermédio
+        </v-btn>
+      </v-col>
 
-          <v-col xs="6" sm="6" md="3">
-            <div class="d-flex">
-              <ButtonGroup :format="output_format" @changed="updateOutputFormat" style="margin-right: 20px;"/>
-              <loading-progress v-if="loading"
-                :key="input_mode"
-                style="width: 48px; height: 48px;"
-                indeterminate="indeterminate"
-                size="50"
-                rotate
-                fillDuration="5"
-                rotationDuration="2.5"
-                :class="input_mode=='xml' ? 'xml-stroke' : 'json-stroke'"
-              />
-            </div>
-          </v-col>
+      <v-col xs="6" sm="6" md="3">
+        <div class="d-flex">
+          <ButtonGroup :format="output_format" @changed="updateOutputFormat" style="margin-right: 20px;"/>
+          <loading-progress v-if="loading"
+            :key="input_mode"
+            style="width: 48px; height: 48px;"
+            indeterminate="indeterminate"
+            size="50"
+            rotate
+            fillDuration="5"
+            rotationDuration="2.5"
+            :class="input_mode=='xml' ? 'xml-stroke' : 'json-stroke'"
+          />
+        </div>
+      </v-col>
 
-          <v-col xs="6" sm="6" md="3">
-            <div v-if="output.length>0" class="d-flex justify-end">
-              <input class="filename-input" v-model="filename"/>
-              <v-btn
-                depressed 
-                :color='`var(--${input_mode}-primary)`' 
-                :disabled="loading"
-                class="white--text" @click="download"
-              >
-                <span>Download</span>
-                <v-icon right>mdi-download</v-icon>
-              </v-btn>
-              </div>
-          </v-col>
-      </v-row>
+      <v-col xs="6" sm="6" md="3">
+        <div v-if="output.length>0" class="d-flex justify-end">
+          <input class="filename-input" v-model="filename"/>
+          <v-btn
+            depressed 
+            :color='`var(--${input_mode}-primary)`' 
+            :disabled="loading"
+            class="white--text" @click="download"
+          >
+            Download<v-icon right>mdi-download</v-icon>
+          </v-btn>
+        </div>
+      </v-col>
+    </v-row>
 
-      <v-row class="fill-height mt-0">
-        <!-- consola input -->
-        <v-flex xs12 md6>
-          <v-container>
-            <Tabs
-              :key="input_mode"
-              :mode="input_mode" 
-              :loading="loading"
-              :hover="input_mode=='xml' ? xml_main_schema.key : json_main_schema.key" 
-              :tabs="input_mode=='xml' ? xml_tabs : json_tabs"
-              @updateInput="updateInput" 
-              @updateTabs="updateTabs" 
-              @hover="updateMain"
-              @errorUpload="errUpload"
-            />
-          </v-container>
-        </v-flex>
+    <v-row class="fill-height mt-0">
+      <!-- consola input -->
+      <v-flex xs12 md6>
+        <v-container>
+          <Tabs
+            :key="input_mode"
+            :mode="input_mode" 
+            :loading="loading"
+            :hover="input_mode=='xml' ? xml_main_schema.key : json_main_schema.key" 
+            :tabs="input_mode=='xml' ? xml_tabs : json_tabs"
+            @updateInput="updateInput" 
+            @updateTabs="updateTabs" 
+            @hover="updateMain"
+            @errorUpload="errUpload"
+          />
+        </v-container>
+      </v-flex>
 
-        <!-- CONSOLA OUTPUT -->
-        <v-flex xs12 md6>
-          <v-container>
-            <GrammarError v-if="grammar_errors.length>0" :errors="grammar_errors"/>
-            <Codemirror v-else type="output" :mode="output_mode" :text="output" :generate="last_gen_request" @changed="updateOutput"/>
-          </v-container>
-        </v-flex>
-      </v-row>
-    </v-container>
+      <!-- CONSOLA OUTPUT -->
+      <v-flex xs12 md6>
+        <v-container>
+          <GrammarError v-if="grammar_errors.length>0" :errors="grammar_errors"/>
+          <Codemirror v-else type="output" :mode="output_mode" :text="output" :generate="last_gen_request" @changed="updateOutput"/>
+        </v-container>
+      </v-flex>
+    </v-row>
+  </v-container>
 </template>
 
 <script>
@@ -213,12 +232,19 @@ export default {
       result_settings: 0,
 
       // modal do modelo intermédio
-      model: "",
       show_model: false,
+      save_model: false,
+      model: "",
+      title: "",
+      description: "",
+      visibility: false,
+      valid: true,
+      required: v => !!v || "Valor obrigatório.",
 
       loading: false,
       send_req: false,
 
+      get token() { return localStorage.getItem("token") },
       last_gen_request: "",
       choose_schema: false,
       error: false,
@@ -448,6 +474,29 @@ export default {
         document.body.appendChild(element)
         element.click()
         document.body.removeChild(element)
+      }
+    },
+    async saveModel() {
+      if (this.token === null) {
+        this.errorMsg = "Precisa de iniciar sessão para efetuar esta operação!"
+        this.error = true
+      }
+      else {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`
+        await axios.post('/api/modelos/adicionar', {
+          user: JSON.parse(this.token)._id,
+          modelo: this.model,
+          titulo: this.title,
+          descricao: this.description,
+          visibilidade: this.visibility,
+          dataCriacao: new Date()
+        })
+        
+        this.title = ""
+        this.description = ""
+        this.switch = false
+        this.save_model = false
+        this.$buefy.toast.open("Modelo guardado!")
       }
     }
   }
