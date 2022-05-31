@@ -64,7 +64,7 @@
       <v-form ref="form" v-model="valid" lazy-validation class="px-3">
         <v-text-field v-model="title" :rules="[required]" label='Título'/>
         <v-textarea v-model="description" :rules="[required]" auto-grow label='Descrição' />
-        <v-switch v-model="visibility" :rules="[required]">
+        <v-switch v-model="visibility">
           <template v-slot:label>
             <span v-if="visibility"><v-icon>mdi-lock-open</v-icon> Público</span>
             <span v-else><v-icon>mdi-lock</v-icon> Privado</span>
@@ -495,6 +495,7 @@ export default {
         this.title = ""
         this.description = ""
         this.switch = false
+        this.valid = true
         this.save_model = false
         this.$buefy.toast.open("Modelo guardado!")
       }
