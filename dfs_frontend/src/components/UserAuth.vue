@@ -122,17 +122,25 @@ export default {
     close() { this.$emit('close') },
     async login() {
       if (this.$refs.loginForm.validate()) {
-        /* let res = await axios.post('/api/utilizadores/login/', {email: this.loginEmail, password: this.loginPassword}) */
-        let token = "aaa"
-        localStorage.setItem('token', token /* res.data.token */)
-        
-        window.dispatchEvent(new CustomEvent("session", {
-            detail: { storage: {session: true} }
-        }))
+        try {
+          let res = await axios.post('/api/utilizadores/login/', {email: this.loginEmail, password: this.loginPassword})
+          let res2 = await axios.get('/api/utilizadores/' + res.data.token)
+          /* let token = "aaa" */
+          localStorage.setItem('token', /* token */ res.data.token)
+          localStorage.setItem('user', JSON.stringify(res2.data))
+          
+          window.dispatchEvent(new CustomEvent("session", {
+              detail: { storage: {session: true} }
+          }))
 
-        this.$buefy.toast.open("Login bem-sucedido!")
-        this.$emit('logged_in')
-        this.close()
+          this.$buefy.toast.open("Login bem-sucedido!")
+          this.$emit('logged_in')
+          this.close()
+      }
+      catch(error) {
+        this.error_msg = error.response.data.error
+        this.reg_error = true
+      }
       }
     },
     async register() {
@@ -144,7 +152,10 @@ export default {
         })
         
         let res = await axios.post('/api/utilizadores/login/', {email: this.email, password: this.password})
+        let res2 = await axios.get('/api/utilizadores/' + res.data.token)
+        
         localStorage.setItem('token', res.data.token)
+        localStorage.setItem('user', JSON.stringify(res2.data))
 
         this.$buefy.toast.open("Registado com sucesso!")
         this.$emit('logged_in')

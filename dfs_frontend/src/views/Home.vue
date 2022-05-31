@@ -62,7 +62,7 @@
       @confirm="saveModel"
     >
       <v-form ref="form" v-model="valid" lazy-validation class="px-3">
-        <v-text-field v-model="title" :rules="[required]" autofocus label='Título'/>
+        <v-text-field v-model="title" :rules="[required]" label='Título'/>
         <v-textarea v-model="description" :rules="[required]" auto-grow label='Descrição' />
         <v-switch v-model="visibility" :rules="[required]">
           <template v-slot:label>
@@ -484,7 +484,7 @@ export default {
       else {
         axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`
         await axios.post('/api/modelos/adicionar', {
-          user: JSON.parse(this.token)._id,
+          user: JSON.parse(localStorage.getItem('user'))._id,
           modelo: this.model,
           titulo: this.title,
           descricao: this.description,

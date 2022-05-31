@@ -133,7 +133,6 @@ export default {
         document.body.appendChild(element)
         element.click()
         document.body.removeChild(element)
-        this.$refs.download.blur()
       }
     }
 }

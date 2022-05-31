@@ -98,9 +98,10 @@ export default {
             }))
         },
         logout() {
-            /* axios.post('/api/utilizadores/logout', {token: this.token})
+            axios.post('/api/utilizadores/logout', {token: this.token})
                 .then(data => {
                     localStorage.removeItem('token')
+                    localStorage.removeItem('user')
                     this.session = false
                     this.$buefy.toast.open("Logout bem-sucedido!")
 
@@ -108,14 +109,15 @@ export default {
                         detail: { storage: {session: false} }
                     }))
                 })
-                .catch(error => console.log(error)) */
-            localStorage.removeItem('token')
+                .catch(error => console.log(error))
+            /* localStorage.removeItem('token')
+            localStorage.removeItem('user')
             this.session = false
             this.$buefy.toast.open("Logout bem-sucedido!")
 
             window.dispatchEvent(new CustomEvent("session", {
                 detail: { storage: {session: false} }
-            }))
+            })) */
         }
     }
 }
