@@ -39,7 +39,7 @@
               <span>Editar o modelo no DataGen</span>
             </v-tooltip>
             
-            <v-tooltip top max-width="420px">
+            <v-tooltip v-if="session" top max-width="420px">
               <template v-slot:activator="{ on }">
                 <v-btn fab depressed color="grey lighten-2" v-on="on" @click="save" @mouseleave="$event.target.blur()">
                   <v-icon>mdi-content-save</v-icon>
@@ -98,6 +98,19 @@ export default {
       valid_settings: Boolean,
       more_width: Boolean,
       model: String
+    },
+    data() {
+      return {
+        get token() { return localStorage.getItem("token") },
+        session: false
+      }
+    },
+    mounted() {
+      if (this.token !== null) this.session = true
+
+      window.addEventListener('session', (event) => {
+        this.session = event.detail.storage.session
+      })
     },
     methods: {
       close() { this.$emit('close') },

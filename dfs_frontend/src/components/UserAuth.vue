@@ -122,9 +122,13 @@ export default {
     close() { this.$emit('close') },
     async login() {
       if (this.$refs.loginForm.validate()) {
-        let res = await axios.post('/api/utilizadores/login/', {email: this.loginEmail, password: this.loginPassword})
-        /* let token = "aaa" */
-        localStorage.setItem('token', /* token */ res.data.token)
+        /* let res = await axios.post('/api/utilizadores/login/', {email: this.loginEmail, password: this.loginPassword}) */
+        let token = "aaa"
+        localStorage.setItem('token', token /* res.data.token */)
+        
+        window.dispatchEvent(new CustomEvent("session", {
+            detail: { storage: {session: true} }
+        }))
 
         this.$buefy.toast.open("Login bem-sucedido!")
         this.$emit('logged_in')

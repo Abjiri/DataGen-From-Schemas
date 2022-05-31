@@ -56,6 +56,7 @@ export default {
     },
     data() {
         return {
+            get token() { return localStorage.getItem("token") },
             session: false,
             user_auth: null,
 
@@ -65,6 +66,9 @@ export default {
             warning: false,
             warningMsg: ""
         }
+    },
+    mounted() {
+        if (this.token !== null) this.session = true
     },
     methods: {
         color(type) { return `var(--${this.format.toLowerCase()}-${type})` },
@@ -94,13 +98,24 @@ export default {
             }))
         },
         logout() {
-            axios.post('/api/utilizadores/logout', {token: localStorage.getItem('token')})
+            /* axios.post('/api/utilizadores/logout', {token: this.token})
                 .then(data => {
                     localStorage.removeItem('token')
                     this.session = false
                     this.$buefy.toast.open("Logout bem-sucedido!")
+
+                    window.dispatchEvent(new CustomEvent("session", {
+                        detail: { storage: {session: false} }
+                    }))
                 })
-                .catch(error => console.log(error))
+                .catch(error => console.log(error)) */
+            localStorage.removeItem('token')
+            this.session = false
+            this.$buefy.toast.open("Logout bem-sucedido!")
+
+            window.dispatchEvent(new CustomEvent("session", {
+                detail: { storage: {session: false} }
+            }))
         }
     }
 }
