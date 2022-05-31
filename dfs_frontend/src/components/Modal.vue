@@ -29,15 +29,6 @@
               </template>
               <span>Download</span>
             </v-tooltip>
-
-            <v-tooltip top max-width="420px">
-              <template v-slot:activator="{ on }">
-                <v-btn fab depressed color="grey lighten-2" v-on="on" @click="use" @mouseleave="$event.target.blur()">
-                  <v-icon>mdi-open-in-new</v-icon>
-                </v-btn>
-              </template>
-              <span>Editar o modelo no DataGen</span>
-            </v-tooltip>
             
             <v-tooltip v-if="session" top max-width="420px">
               <template v-slot:activator="{ on }">
@@ -115,10 +106,6 @@ export default {
     methods: {
       close() { this.$emit('close') },
       confirm() { this.$emit('confirm') },
-      save() {},
-      use() {
-        window.location.href = "http://localhost:12080/"//"https://datagen.di.uminho.pt/"
-      },
       copy() {
         navigator.clipboard.writeText(this.model)
         this.$buefy.toast.open("Modelo copiado!")

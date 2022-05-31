@@ -102,6 +102,7 @@ export default {
                 .then(data => {
                     localStorage.removeItem('token')
                     localStorage.removeItem('user')
+
                     this.session = false
                     this.$buefy.toast.open("Logout bem-sucedido!")
 
@@ -110,14 +111,6 @@ export default {
                     }))
                 })
                 .catch(error => console.log(error))
-            /* localStorage.removeItem('token')
-            localStorage.removeItem('user')
-            this.session = false
-            this.$buefy.toast.open("Logout bem-sucedido!")
-
-            window.dispatchEvent(new CustomEvent("session", {
-                detail: { storage: {session: false} }
-            })) */
         }
     }
 }

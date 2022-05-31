@@ -125,8 +125,8 @@ export default {
         try {
           let res = await axios.post('/api/utilizadores/login/', {email: this.loginEmail, password: this.loginPassword})
           let res2 = await axios.get('/api/utilizadores/' + res.data.token)
-          /* let token = "aaa" */
-          localStorage.setItem('token', /* token */ res.data.token)
+          
+          localStorage.setItem('token', res.data.token)
           localStorage.setItem('user', JSON.stringify(res2.data))
           
           window.dispatchEvent(new CustomEvent("session", {
@@ -153,7 +153,7 @@ export default {
         
         let res = await axios.post('/api/utilizadores/login/', {email: this.email, password: this.password})
         let res2 = await axios.get('/api/utilizadores/' + res.data.token)
-        
+
         localStorage.setItem('token', res.data.token)
         localStorage.setItem('user', JSON.stringify(res2.data))
 
