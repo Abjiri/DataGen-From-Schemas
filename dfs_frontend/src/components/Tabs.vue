@@ -1,15 +1,31 @@
 <template>
   <div class="fill-height">
-    <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs" :style="`background-color: var(--${mode}-primary);`">
-      <span v-if="mode!='xml'" slot="after" class="btn-add" @click="addTab('')">
+    <div v-if="no_datasets" class="no-tabs" :style="`background-color: var(--${input_mode}-primary);`"/> 
+
+    <vue-tabs-chrome v-else 
+      class="tabs" 
+      ref="tab" 
+      v-model="tab" 
+      :tabs="tabs"
+      :on-close="closeTab"
+      :style="`background-color: var(--${input_mode}-primary);`"
+    >
+      <span v-if="cm_type=='input' && input_mode!='xml'" slot="after" class="btn-add" @click="loading ? true : addTab('')">
         <i class="v-icon mdi mdi-plus" style="color: white;"></i>
       </span>
-      <span slot="after" class="btn-add">
-        <input type="file" ref="file" :accept="mode=='xml' ? '.xsd' : '.json'" @change="uploadSchema" style="display:none">
+      <span v-if="cm_type=='input'" slot="after" class="btn-add">
+        <input type="file" ref="file" :accept="input_mode=='xml' ? '.xsd' : '.json'" @change="uploadSchema" style="display:none">
         <i class="v-icon mdi mdi-upload" style="color: white;" @click="loading ? true : $refs.file.click()"></i>
       </span>
     </vue-tabs-chrome>
-    <Codemirror :key="tab" :type="type" :mode="mode" :text="content" @changed="onChangeInput"/>
+
+    <Codemirror
+      :key="tab" 
+      :type="cm_type" 
+      :mode="cm_type=='input' ? input_mode : output_mode" 
+      :text="content" 
+      @changed="onChangeInput"
+    />
   </div>
 </template>
 
@@ -23,11 +39,14 @@ export default {
     Codemirror
   },
   props: {
-    type: String,
-    mode: String,
+    cm_type: String,
+    input_mode: String,
+    output_mode: String,
     loading: Boolean,
     hover: String,
-    tabs: Array
+    tabs: Array,
+    generate: String,
+    no_datasets: Boolean
   },
   data() {
     return {
@@ -45,19 +64,23 @@ export default {
   watch: {
     hover(key) { this.tab = key },
     tabs() {
-      this.$emit('updateTabs', this.tabs, this.tabs.findIndex(t => t.key == this.tab), this.newTab_upload)
-      this.newTab_upload = false
+      if (this.cm_type == "input") {
+        this.$emit('updateTabs', this.cm_type, this.tabs, this.tabs.findIndex(t => t.key == this.tab), this.newTab_upload)
+        this.newTab_upload = false
+      }
     },
     tab() {
-      this.content = this.tabs.find(t => t.key == this.tab).content
-      this.$emit('hover', this.tab)
+      if (this.cm_type == "input" || this.tabs.length > 0) {
+        this.content = this.tabs.find(t => t.key == this.tab).content
+        this.$emit('hover', this.cm_type, this.tab)
+      }
     }
   },
   methods: {
     onChangeInput(content) {
       let index = this.tabs.findIndex(t => t.key == this.tab)
       this.tabs[index].content = content
-      this.$emit('updateInput', index, content)
+      this.$emit('updateContent', this.cm_type, index, content)
     },
     addTab(content) {
       if (!this.loading) {
@@ -69,8 +92,15 @@ export default {
       }
     },
     removeTab() { this.$refs.tab.removeTab(this.tab) },
+    closeTab() {
+      if (this.cm_type == "output") {
+        this.$emit('removeDataset', this.tabs.length - 1)
+        return false
+      }
+      return true
+    },
     uploadSchema() {
-      let extension = this.mode == "xml" ? /\.xsd$/ : /\.json$/
+      let extension = this.input_mode == "xml" ? /\.xsd$/ : /\.json$/
       let tab = this.tabs.find(t => t.key == this.tab)
       
       let file = this.$refs.file.files[0]
@@ -80,7 +110,7 @@ export default {
         reader.onload = (res) => {
           let schema = res.currentTarget.result
 
-          if (this.mode == "xml") this.content = schema
+          if (this.input_mode == "xml") this.content = schema
           else {
             if (!tab.content.length) this.content = schema
             else {
@@ -132,5 +162,10 @@ export default {
 
 .active {
   color: black !important;
+}
+
+.no-tabs {
+  height: 39px;
+  margin-bottom: 4px;
 }
 </style>
