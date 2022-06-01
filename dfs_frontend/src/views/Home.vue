@@ -148,6 +148,7 @@
         <v-container>
           <Tabs
             :key="input_mode"
+            :type="'input'"
             :mode="input_mode" 
             :loading="loading"
             :hover="input_mode=='xml' ? xml_main_schema.key : json_main_schema.key" 
@@ -165,6 +166,18 @@
         <v-container>
           <GrammarError v-if="grammar_errors.length>0" :errors="grammar_errors"/>
           <Codemirror v-else type="output" :mode="output_mode" :text="output" :generate="last_gen_request" @changed="updateOutput"/>
+          <!-- <Tabs
+            :key="input_mode"
+            :type="'output'"
+            :mode="input_mode"
+            :loading="loading"
+            :hover="dataset_current" 
+            :tabs="dataset_tabs"
+            @updateInput="updateInput" 
+            @updateTabs="updateTabs" 
+            @hover="updateMain"
+            @errorUpload="errUpload"
+          /> -->
         </v-container>
       </v-flex>
     </v-row>
@@ -203,7 +216,7 @@ export default {
       filename: "dataset",
 
       // from XML schemas
-      xml_tabs: [{ label: "Schema", key: "schema_1", input: "", closable: false }],
+      xml_tabs: [{ label: "Schema", key: "schema_1", content: "", closable: false }],
       xml_main_schema: {label: "Schema", key: "schema_1"},
       xml_element: {},
       xml_schemas: [{ label: "Schema", key: "schema_1", elements: [] }],
@@ -213,7 +226,7 @@ export default {
       },
       
       // from JSON schemas
-      json_tabs: [{ label: "Schema 1", key: "schema_1", input: "", closable: false }],
+      json_tabs: [{ label: "Schema 1", key: "schema_1", content: "", closable: false }],
       json_main_schema: {label: "Schema 1", key: "schema_1"},
       json_schemas: [{ label: "Schema 1", key: "schema_1" }],
       json_settings: {
@@ -224,7 +237,10 @@ export default {
         extend_propSchema: "OR",
         extend_prefixItems: "OR",
         extend_schemaObj: "OR"
-    },
+      },
+
+      dataset_tabs: [{ label: "Dataset 1", key: "dataset_1", closable: false }],
+      dataset_current: {label: "Dataset 1", key: "dataset_1"},
 
       // modal de settings
       settings: false,
@@ -262,7 +278,7 @@ export default {
 
     window.addEventListener('reset_schemas', (event) => {
       let format = event.detail.storage.format
-      this[format + "_tabs"] = [{ label: "Schema 1", key: "schema_1", input: "", closable: false }]
+      this[format + "_tabs"] = [{ label: "Schema 1", key: "schema_1", content: "", closable: false }]
       this[format + "_main_schema"] = {label: "Schema", key: "schema_1"}
       this[format + "_schemas"] = [{ label: "Schema 1", key: "schema_1" }]
 
@@ -323,7 +339,7 @@ export default {
     updateInput(index, input) {
       let {tabs, schemas, main_schema} = this.varsByInputType()
       let new_label
-
+      
       if (this.input_mode == "javascript") new_label = aux.searchJsonSchemaId(input, tabs[index].key)
       else new_label = "Schema"
 
@@ -335,10 +351,10 @@ export default {
         if (main_schema.key == tabs[index].key) main_schema.label = new_label
       }
 
-      tabs[index].input = input
+      tabs[index].content = input
 
       // dar update à flag de input existente no localStorage
-      let no_input = tabs.every(t => !t.input.length) ? 1 : 0
+      let no_input = tabs.every(t => !t.content.length) ? 1 : 0
       let lsVar = localStorage.getItem("no_input")
       if (lsVar != no_input) localStorage.setItem("no_input", no_input)
     },
@@ -354,7 +370,7 @@ export default {
       if (this.input_mode == "xml") this.xml_schemas = schemas
       else this.json_schemas = schemas
 
-      if (upload) this.updateInput(index, tabs[index].input)
+      if (upload) this.updateInput(index, tabs[index].content)
     },
     askJsonMainSchema() {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
@@ -364,7 +380,7 @@ export default {
         else this.choose_schema = true
       }
       else {
-        let ids = aux.getAllIds(tabs.map(t => t.input))
+        let ids = aux.getAllIds(tabs.map(t => t.content))
 
         if (ids.length == new Set(ids).size) {
           if (tabs.length == 1) this.generate()
@@ -386,12 +402,12 @@ export default {
       }
     },
     async askXmlMainSchema() {
-      let {data} = await axios.post('http://localhost:3000/api/xml_schema/elements', {xsd: this.xml_tabs[0].input})
+      let {data} = await axios.post('http://localhost:3000/api/xml_schema/elements', {xsd: this.xml_tabs[0].content})
       
       if ("message" in data) this.grammar_errors = [aux.translateMsg(data)]
       else if ("elements" in data) {
         if (!data.elements.length) {
-          let lines = this.xml_tabs[0].input.split("\n")
+          let lines = this.xml_tabs[0].content.split("\n")
 
           this.grammar_errors = [{
             message: "A schema não tem nenhum <element> global para gerar um dataset!",
@@ -426,13 +442,15 @@ export default {
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
       settings.output = this.output_format
       setTimeout(() => {
-        if (this.send_req) this.loading = true
-        window.dispatchEvent(new CustomEvent("loading", {detail: { storage: {loading: true} }}))
+        if (this.send_req) {
+          this.loading = true
+          window.dispatchEvent(new CustomEvent("loading", {detail: { storage: {loading: true} }}))
+        }
       }, 3000)
 
       if (this.input_mode == "xml") {
         filename = this.xml_element.label
-        result = await this.sendGenRequest("xml", {xsd: this.xml_tabs[0].input, element: filename, settings})
+        result = await this.sendGenRequest("xml", {xsd: this.xml_tabs[0].content, element: filename, settings})
       }
       else {
         let main_schema, other_schemas = []
@@ -441,7 +459,7 @@ export default {
         else {
           let tabs = aux.removeRepeatedSchemas(_.cloneDeep(this.json_tabs), this.json_main_schema.key)
           main_schema = tabs.find(s => s.key == this.json_main_schema.key)
-          other_schemas = tabs.filter(s => s.key != this.json_main_schema.key && s.input.length > 0)
+          other_schemas = tabs.filter(s => s.key != this.json_main_schema.key && s.content.length > 0)
         }
         
         filename = main_schema.label

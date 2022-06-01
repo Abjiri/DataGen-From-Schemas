@@ -22,7 +22,7 @@ router.post('/', (req, res) => {
 
   try {
     // extrair dados da schema
-    let data = req.body.schemas.map(x => {schema_key = x.key; return jsonParser.parse(x.input)})
+    let data = req.body.schemas.map(x => {schema_key = x.key; return jsonParser.parse(x.content)})
     cleanSettings(req.body.settings)
     //console.log(JSON.stringify(data))
     console.log('schema parsed')

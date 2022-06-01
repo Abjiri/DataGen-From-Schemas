@@ -9,7 +9,7 @@
         <i class="v-icon mdi mdi-upload" style="color: white;" @click="loading ? true : $refs.file.click()"></i>
       </span>
     </vue-tabs-chrome>
-    <Codemirror :key="tab" :type="'input'" :mode="mode" :text="input" @changed="onChangeInput"/>
+    <Codemirror :key="tab" :type="type" :mode="mode" :text="content" @changed="onChangeInput"/>
   </div>
 </template>
 
@@ -23,6 +23,7 @@ export default {
     Codemirror
   },
   props: {
+    type: String,
     mode: String,
     loading: Boolean,
     hover: String,
@@ -30,7 +31,7 @@ export default {
   },
   data() {
     return {
-      input: "",
+      content: "",
       tab: "",
       created_tabs: 1,
       newTab_upload: false
@@ -39,7 +40,7 @@ export default {
   mounted() {
     this.tab = this.hover
     this.created_tabs = this.tabs.length
-    this.input = this.tabs.find(t => t.key == this.tab).input
+    this.content = this.tabs.find(t => t.key == this.tab).content
   },
   watch: {
     hover(key) { this.tab = key },
@@ -48,22 +49,22 @@ export default {
       this.newTab_upload = false
     },
     tab() {
-      this.input = this.tabs.find(t => t.key == this.tab).input
+      this.content = this.tabs.find(t => t.key == this.tab).content
       this.$emit('hover', this.tab)
     }
   },
   methods: {
-    onChangeInput(input) {
+    onChangeInput(content) {
       let index = this.tabs.findIndex(t => t.key == this.tab)
-      this.tabs[index].input = input
-      this.$emit('updateInput', index, input)
+      this.tabs[index].content = content
+      this.$emit('updateInput', index, content)
     },
-    addTab(input) {
+    addTab(content) {
       if (!this.loading) {
         this.created_tabs++
         let item = "schema_" + this.created_tabs
 
-        this.$refs.tab.addTab({ label: "Schema " + this.created_tabs, key: item, input })
+        this.$refs.tab.addTab({ label: "Schema " + this.created_tabs, key: item, content })
         this.tab = item
       }
     },
@@ -79,9 +80,9 @@ export default {
         reader.onload = (res) => {
           let schema = res.currentTarget.result
 
-          if (this.mode == "xml") this.input = schema
+          if (this.mode == "xml") this.content = schema
           else {
-            if (!tab.input.length) this.input = schema
+            if (!tab.content.length) this.content = schema
             else {
               this.newTab_upload = true
               // por algum motivo, ao dar upload para uma tab nova, todos os \n da schema passam a \r\n
