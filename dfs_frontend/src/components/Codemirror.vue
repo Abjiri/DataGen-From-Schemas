@@ -63,8 +63,10 @@ export default {
 
 <style>
 .container { height: 100%; }
-.vue-codemirror { height: 100%; }
-.CodeMirror { height: 98%; }
+.vue-codemirror { height: calc( 100vh - 200px ); }
+.CodeMirror { height: calc( 100vh - 200px ); }
+.CodeMirror-gutter { height: calc( 100vh - 200px ); }
+.CodeMirror-gutters { min-height: calc( 100vh - 200px ) !important; }
 .CodeMirror pre.CodeMirror-line, .CodeMirror pre.CodeMirror-line-like {
   font-size: smaller !important; 
 }

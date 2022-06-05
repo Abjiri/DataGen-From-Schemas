@@ -43,7 +43,7 @@ function getAllIds(schemas) {
 }
 
 function removeRepeatedSchemas(tabs, main_schema_key) {
-    let inputs = tabs.map(t => {return {key: t.key, input: t.input}})
+    let inputs = tabs.map(t => {return {key: t.key, input: t.content}})
     let repeated_inputs = {indexes: [], groups: []}
 
     for (let i = 0; i < inputs.length; i++) {

@@ -49,7 +49,7 @@ router.post('/', (req, res) => {
 
     res.status(201).jsonp({model, dataset})
   } catch (err) {
-    res.status(201).jsonp({...err, schema_key: schema_key})
+    res.status(201).jsonp({...err, schema_key})
   }
 });
 
