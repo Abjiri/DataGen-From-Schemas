@@ -93,6 +93,7 @@ export default {
     },
     removeTab() { this.$refs.tab.removeTab(this.tab) },
     closeTab() {
+      if (this.loading) return false
       if (this.cm_type == "output") {
         this.$emit('removeDataset', this.tabs.length - 1)
         return false

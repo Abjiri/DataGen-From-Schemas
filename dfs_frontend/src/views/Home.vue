@@ -340,7 +340,7 @@ export default {
       else this.json_main_schema = main_schema
     },
     updateContent(cm_type, index, content) {
-      let tabs = cm_type == "output" ? this.dataset_tabs : (this.input_mode == "xml" ? this.xml_schemas : this.json_schemas)
+      let tabs = cm_type == "output" ? this.dataset_tabs : (this.input_mode == "xml" ? this.xml_tabs : this.json_tabs)
       tabs[index].content = content
 
       if (cm_type == "input") {
@@ -506,7 +506,6 @@ export default {
         this.dataset_models[this.dataset_tabs.length-1].model = result.model
       }
       else {
-        this.dataset_tabs.length
         let next_key = parseInt(tab.key.split("_")[1]) + 1
         let new_tab = {label: "Dataset "+next_key, key: "dataset_"+next_key}
 
