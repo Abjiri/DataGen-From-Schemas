@@ -42,14 +42,4 @@ export default {
   max-height: 100vh !important;
   overflow: hidden !important;
 }
-
-.scrollbar-hidden::-webkit-scrollbar {
-  display: none;
-}
-
-/* Hide scrollbar for IE, Edge add Firefox */
-.scrollbar-hidden {
-  -ms-overflow-style: none;
-  scrollbar-width: none; /* Firefox */
-}
 </style>
