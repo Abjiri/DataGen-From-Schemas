@@ -1,5 +1,5 @@
 <template>
-  <v-container class="wrap">
+  <v-container class="height-wrap">
     <!-- modals -->
     <Modal
       title="Erro"
@@ -52,7 +52,7 @@
       @close="show_model=false"
       @save_model="save_model=true"
     >
-      <Codemirror type="output" mode="javascript" :text="model" @changed="onChangeModel"/>
+      <Codemirror type="output" mode="javascript" :text="model" :modal="true" @changed="onChangeModel"/>
     </Modal>
     
     <Modal
@@ -131,7 +131,7 @@
       </v-col>
     </v-row>
 
-    <v-row class="wrap2 mt-0">
+    <v-row class="height-wrap2 mt-0">
       <!-- consola input -->
       <v-flex xs12 md6>
         <v-container>
@@ -548,12 +548,12 @@ export default {
 <style>
 @import '../utils/colors.css';
 
-.wrap {
+.height-wrap {
   height: calc( 100vh - 64px ) !important;
   overflow: hidden !important;
 }
 
-.wrap2 {
+.height-wrap2 {
   height: calc( 100vh - 140px ) !important;
 }
 

@@ -1,5 +1,5 @@
 <template>
-    <codemirror
+    <codemirror 
         ref="text"
         :value="text"
         :options="options"
@@ -24,7 +24,8 @@ export default {
         type: String,
         mode: String,
         text: String,
-        generate: String
+        generate: String,
+        modal: Boolean
     },
     computed: {
         codemirror() { return this.$refs.text.codemirror }
@@ -49,6 +50,12 @@ export default {
             }
         }
     },
+    mounted() {
+        if (this.modal) {
+            this.options.lineNumbers = false
+            setTimeout(() => (this.options.lineNumbers = true), 100)
+        }
+    },
     methods: {
         onChange(newText) { this.$emit('changed', newText) }
     },
@@ -65,8 +72,6 @@ export default {
 .container { height: 100%; }
 .vue-codemirror { height: calc( 100vh - 200px ); }
 .CodeMirror { height: calc( 100vh - 200px ); }
-.CodeMirror-gutter { height: calc( 100vh - 200px ); }
-.CodeMirror-gutters { min-height: calc( 100vh - 200px ) !important; }
 .CodeMirror pre.CodeMirror-line, .CodeMirror pre.CodeMirror-line-like {
   font-size: smaller !important; 
 }
