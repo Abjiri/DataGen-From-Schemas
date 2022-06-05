@@ -1,36 +1,21 @@
 <template>
   <div class="fill-height">
-    <div v-if="no_datasets" class="no-tabs" :style="`background-color: var(--${input_mode}-primary);`"/> 
-
-    <vue-tabs-chrome v-else 
-      class="tabs" 
-      ref="tab" 
-      v-model="tab" 
-      :tabs="tabs"
-      :on-close="closeTab"
-      :style="`background-color: var(--${input_mode}-primary);`"
-    >
-      <span v-if="cm_type=='input' && input_mode!='xml'" slot="after" class="btn-add" @click="loading ? true : addTab('')">
+    <vue-tabs-chrome class="tabs" ref="tab" v-model="tab" :tabs="tabs" :on-close="closeTab" :style="`background-color: var(--${input_mode}-primary);`">
+      <span v-if="input_mode!='xml'" slot="after" class="btn-add" @click="loading ? true : addTab('')">
         <i class="v-icon mdi mdi-plus" style="color: white;"></i>
       </span>
-      <span v-if="cm_type=='input'" slot="after" class="btn-add">
+      <span slot="after" class="btn-add">
         <input type="file" ref="file" :accept="input_mode=='xml' ? '.xsd' : '.json'" @change="uploadSchema" style="display:none">
         <i class="v-icon mdi mdi-upload" style="color: white;" @click="loading ? true : $refs.file.click()"></i>
       </span>
     </vue-tabs-chrome>
 
-    <Codemirror
-      :key="tab" 
-      :type="cm_type" 
-      :mode="cm_type=='input' ? input_mode : output_mode" 
-      :text="content" 
-      @changed="onChangeInput"
-    />
+    <Codemirror :key="tab" type="input" :mode="input_mode" :text="content" @changed="onChangeInput"/>
   </div>
 </template>
 
 <script>
-import VueTabsChrome from "vue-tabs-chrome";
+import VueTabsChrome from "vue-tabs-chrome"
 import Codemirror from './Codemirror'
 
 export default {
@@ -39,14 +24,10 @@ export default {
     Codemirror
   },
   props: {
-    cm_type: String,
     input_mode: String,
-    output_mode: String,
     loading: Boolean,
     hover: String,
-    tabs: Array,
-    generate: String,
-    no_datasets: Boolean
+    tabs: Array
   },
   data() {
     return {
@@ -64,23 +45,20 @@ export default {
   watch: {
     hover(key) { this.tab = key },
     tabs() {
-      if (this.cm_type == "input") {
-        this.$emit('updateTabs', this.cm_type, this.tabs, this.tabs.findIndex(t => t.key == this.tab), this.newTab_upload)
-        this.newTab_upload = false
-      }
+      this.$emit('updateTabs', this.tabs, this.tabs.findIndex(t => t.key == this.tab), this.newTab_upload)
+      this.newTab_upload = false
     },
     tab() {
-      if (this.cm_type == "input" || this.tabs.length > 0) {
-        this.content = this.tabs.find(t => t.key == this.tab).content
-        this.$emit('hover', this.cm_type, this.tab)
-      }
+      this.content = this.tabs.find(t => t.key == this.tab).content
+      this.$emit('hover', this.tab)
     }
   },
   methods: {
+    closeTab() { return !this.loading },
     onChangeInput(content) {
       let index = this.tabs.findIndex(t => t.key == this.tab)
       this.tabs[index].content = content
-      this.$emit('updateContent', this.cm_type, index, content)
+      this.$emit('updateContent', index, content)
     },
     addTab(content) {
       if (!this.loading) {
@@ -90,15 +68,6 @@ export default {
         this.$refs.tab.addTab({ label: "Schema " + this.created_tabs, key: item, content })
         this.tab = item
       }
-    },
-    removeTab() { this.$refs.tab.removeTab(this.tab) },
-    closeTab() {
-      if (this.loading) return false
-      if (this.cm_type == "output") {
-        this.$emit('removeDataset', this.tabs.length - 1)
-        return false
-      }
-      return true
     },
     uploadSchema() {
       let extension = this.input_mode == "xml" ? /\.xsd$/ : /\.json$/
@@ -163,10 +132,5 @@ export default {
 
 .active {
   color: black !important;
-}
-
-.no-tabs {
-  height: 39px;
-  margin-bottom: 4px;
 }
 </style>

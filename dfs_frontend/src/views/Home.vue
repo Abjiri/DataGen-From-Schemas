@@ -44,6 +44,7 @@
     </Modal>
 
     <Modal
+      :key="dataset_tab"
       title="Modelo intermédio gerado na DSL do DataGen"
       more_width
       :model="model"
@@ -51,7 +52,7 @@
       @close="show_model=false"
       @save_model="save_model=true"
     >
-      <Codemirror type="output" mode="javascript" :text="model"/>
+      <Codemirror type="output" mode="javascript" :text="model" @changed="onChangeModel"/>
     </Modal>
     
     <Modal
@@ -86,21 +87,14 @@
           Gerar<v-icon right>mdi-reload</v-icon>
         </v-btn>
 
-        <v-btn
-          depressed
-          fab 
-          small 
-          color="blue-grey lighten-4" 
-          :disabled="loading"
-          @click="openSettings"
-        >
+        <v-btn depressed fab small color="blue-grey lighten-4" :disabled="loading" @click="openSettings">
           <v-icon>mdi-cog</v-icon>
         </v-btn>
       </v-col>
 
       <v-col xs="6" sm="6" md="3" align="end">
         <v-btn
-          v-if="output.length>0"
+          v-if="!no_datasets"
           depressed
           :color='`var(--${input_mode}-primary)`'
           :disabled="loading"
@@ -128,14 +122,9 @@
       </v-col>
 
       <v-col xs="6" sm="6" md="3">
-        <div v-if="output.length>0" class="d-flex justify-end">
+        <div v-if="!no_datasets" class="d-flex justify-end">
           <input class="filename-input" v-model="filename"/>
-          <v-btn
-            depressed 
-            :color='`var(--${input_mode}-primary)`' 
-            :disabled="loading"
-            class="white--text" @click="download"
-          >
+          <v-btn depressed :color='`var(--${input_mode}-primary)`' :disabled="loading" class="white--text" @click="download">
             Download<v-icon right>mdi-download</v-icon>
           </v-btn>
         </div>
@@ -146,11 +135,9 @@
       <!-- consola input -->
       <v-flex xs12 md6>
         <v-container>
-          <Tabs
-            cm_type="input"
+          <InputTabs
             :key="input_mode"
             :input_mode="input_mode" 
-            :output_mode="output_mode"
             :loading="loading"
             :hover="input_mode=='xml' ? xml_main_schema.key : json_main_schema.key" 
             :tabs="input_mode=='xml' ? xml_tabs : json_tabs"
@@ -166,21 +153,12 @@
       <v-flex xs12 md6>
         <v-container>
           <GrammarError v-if="grammar_errors.length>0" :errors="grammar_errors"/>
-          <Tabs v-else
-            cm_type="output"
-            :key="output_key"
-            :input_mode="input_mode"
-            :output_mode="output_mode"
-            :loading="loading"
-            :hover="dataset_current.key" 
-            :tabs="dataset_tabs"
-            :generate="last_gen_request"
-            :no_datasets="no_datasets"
-            @updateContent="updateContent" 
-            @updateTabs="updateTabs" 
-            @hover="updateMain"
-            @removeDataset="removeDataset"
-          />
+            
+          <div v-else class="fill-height">
+            <div v-if="no_datasets" class="no-tabs" :style="`background-color: var(--${input_mode}-primary);`"/> 
+            <vue-tabs-chrome v-else class="tabs" ref="tab" v-model="dataset_tab" :tabs="dataset_tabs" :on-close="closeDataset" :style="`background-color: var(--${input_mode}-primary);`"/>
+            <Codemirror :key="dataset_tab" type="output" :mode="output_mode" :text="dataset" @changed="onChangeDataset"/>
+          </div>
         </v-container>
       </v-flex>
     </v-row>
@@ -190,23 +168,25 @@
 <script>
 import _ from 'lodash'
 import axios from 'axios'
+import VueTabsChrome from "vue-tabs-chrome"
 import SettingsJSON from '@/components/Settings_JSON'
 import SettingsXML from '@/components/Settings_XML'
 import ButtonGroup from '@/components/ButtonGroup'
 import Codemirror from '@/components/Codemirror'
 import GrammarError from '@/components/GrammarError.vue'
 import Modal from '@/components/Modal'
-import Tabs from '@/components/Tabs'
+import InputTabs from '@/components/Input_Tabs'
 import aux from '@/utils/js_aux'
 
 export default {
   components: {
+    VueTabsChrome,
     SettingsJSON,
     SettingsXML,
     ButtonGroup,
     Codemirror,
     Modal,
-    Tabs,
+    InputTabs,
     GrammarError
   },
   data() {
@@ -215,9 +195,6 @@ export default {
       input_mode: "xml",
       output_mode: "xml",
       output_format: "XML",
-      output_key: "",
-      output: "",
-      filename: "dataset",
 
       // from XML schemas
       xml_tabs: [{ label: "Schema", key: "schema_1", content: "", closable: false }],
@@ -243,10 +220,10 @@ export default {
         extend_schemaObj: "OR"
       },
 
-      dataset_tabs: [{ label: "Dataset 1", key: "dataset_1", content: "" }],
-      dataset_current: {label: "Dataset 1", key: "dataset_1"},
-      dataset_models: [{label: "Dataset 1", key: "dataset_1", model: ""}],
-      no_datasets: true,
+      // datasets produzidos
+      dataset_tabs: [{ label: "", key: "dataset_1", dataset: "", model: "", filename: "" }],
+      dataset_tab: "dataset_1",
+      created_datasets: 1,
 
       // modal de settings
       settings: false,
@@ -256,7 +233,6 @@ export default {
       // modal do modelo intermédio
       show_model: false,
       save_model: false,
-      model: "",
       title: "",
       description: "",
       visibility: false,
@@ -293,9 +269,8 @@ export default {
         this.xml_element = {}
       }
 
-      this.dataset_tabs = [{ label: "Dataset 1", key: "dataset_1", content: "" }]
-      this.dataset_current = {label: "Dataset 1", key: "dataset_1"}
-      this.dataset_models = [{label: "Dataset 1", key: "dataset_1", model: ""}]
+      this.dataset_tabs = [{ label: "", key: "dataset_1", dataset: "", model: "", filename: "" }]
+      this.dataset_tab = "dataset_1"
     })
   },
   computed: {
@@ -305,20 +280,17 @@ export default {
         if (this.input_mode == "xml") this.xml_element = value
         else this.json_main_schema = value
       }
-    }
-  },
-  watch: {
-    output() { if (!this.output.length) this.filename = "dataset" },
-    grammar_errors() { if (this.grammar_errors.length > 0) this.output = "" }
+    },
+    dataset() { return this.dataset_tabs.find(t => t.key == this.dataset_tab).dataset },
+    filename() { return this.dataset_tabs.find(t => t.key == this.dataset_tab).filename },
+    model() { return this.dataset_tabs.find(t => t.key == this.dataset_tab).model },
+    no_datasets() { return this.dataset_tabs.length == 1 && !this.dataset_tabs[0].model.length }
   },
   methods: {
-    generateOutputKey() { return this.input_mode + "-" + this.dataset_tabs.length + "-" + this.no_datasets },
     openSettings() { this.result_settings = 0; this.settings = true },
     closeSettings() { this.result_settings = -1; this.settings = false },
     confirmSettings() { this.result_settings = 1; this.settings = false },
-    updateSettingsValidity(input_mode, new_valid) {
-      if (input_mode == this.input_mode) this.valid_settings = new_valid
-    },
+    updateSettingsValidity(input_mode, new_valid) { if (input_mode == this.input_mode) this.valid_settings = new_valid },
     updateSettings(new_settings) {
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
       Object.assign(settings, new_settings)
@@ -331,55 +303,49 @@ export default {
       this.errorMsg = `O ficheiro que escolheu não corresponde a uma schema ${this.input_mode=="xml"?"XML":"JSON"}. A extensão do ficheiro deve ser ${this.input_mode=="xml"?".xsd":".json"}!`
       this.error = true
     },
-    updateMain(cm_type, key) {
-      let schemas = cm_type == "output" ? this.dataset_tabs : (this.input_mode == "xml" ? this.xml_schemas : this.json_schemas)
+    updateMain(key) {
+      let schemas = this.input_mode == "xml" ? this.xml_schemas : this.json_schemas
       let main_schema = schemas.find(s => s.key == key)
 
-      if (cm_type == "output") this.dataset_current = main_schema
-      else if (this.input_mode == "xml") this.xml_main_schema = main_schema
+      if (this.input_mode == "xml") this.xml_main_schema = main_schema
       else this.json_main_schema = main_schema
     },
-    updateContent(cm_type, index, content) {
-      let tabs = cm_type == "output" ? this.dataset_tabs : (this.input_mode == "xml" ? this.xml_tabs : this.json_tabs)
+    updateContent(index, content) {
+      let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
+      let schemas = this.input_mode == "xml" ? this.xml_schemas : this.json_schemas
+      let main_schema = this.input_mode == "xml" ? this.xml_main_schema : this.json_main_schema
+
+      let new_label
+      if (this.input_mode == "javascript") new_label = aux.searchJsonSchemaId(content, tabs[index].key)
+      else new_label = "Schema"
+
+      // dar update ao label da schema para o seu id, se tiver um
+      // ou para o label original da schema (Schema nr), se o user tiver apagado o id
+      if (new_label != tabs[index].label) {
+        tabs[index].label = new_label
+        schemas[index].label = new_label
+        if (main_schema.key == tabs[index].key) main_schema.label = new_label
+      }
       tabs[index].content = content
 
-      if (cm_type == "input") {
-        let schemas = this.input_mode == "xml" ? this.xml_schemas : this.json_schemas
-        let main_schema = this.input_mode == "xml" ? this.xml_main_schema : this.json_main_schema
-        let new_label
-        
-        if (this.input_mode == "javascript") new_label = aux.searchJsonSchemaId(content, tabs[index].key)
-        else new_label = "Schema"
-
-        // dar update ao label da schema para o seu id, se tiver um
-        // ou para o label original da schema (Schema nr), se o user tiver apagado o id
-        if (new_label != tabs[index].label) {
-          tabs[index].label = new_label
-          schemas[index].label = new_label
-          if (main_schema.key == tabs[index].key) main_schema.label = new_label
-        }
-
-        // dar update à flag de input existente no localStorage
-        let no_input = tabs.every(t => !t.content.length) ? 1 : 0
-        let lsVar = localStorage.getItem("no_input")
-        if (lsVar != no_input) localStorage.setItem("no_input", no_input)
-      }
+      // dar update à flag de input existente no localStorage
+      let no_input = tabs.every(t => !t.content.length) ? 1 : 0
+      let lsVar = localStorage.getItem("no_input")
+      if (lsVar != no_input) localStorage.setItem("no_input", no_input)
     },
-    updateTabs(cm_type, new_tabs, index, upload) {
-      let tabs = cm_type == "output" ? this.dataset_tabs : (this.input_mode == "xml" ? this.xml_tabs : this.json_tabs)
+    updateTabs(new_tabs, index, upload) {
+      let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
       tabs = new_tabs
 
-      if (cm_type == "input") {
-        // se tiver 2+ tabs, qualquer uma pode ser fechada; se só tiver 1, não pode
-        if (tabs.length == 1) tabs[0].closable = false
-        if (tabs.length > 1) tabs[0].closable = true
-        
-        let schemas = tabs.map(t => { return {label: t.label, key: t.key} })
-        if (this.input_mode == "xml") this.xml_schemas = schemas
-        else this.json_schemas = schemas
+      // se tiver 2+ tabs, qualquer uma pode ser fechada; se só tiver 1, não pode
+      if (tabs.length == 1) tabs[0].closable = false
+      if (tabs.length > 1) tabs[0].closable = true
+      
+      let schemas = tabs.map(t => { return {label: t.label, key: t.key} })
+      if (this.input_mode == "xml") this.xml_schemas = schemas
+      else this.json_schemas = schemas
 
-        if (upload) this.updateContent(cm_type, index, tabs[index].content)
-      }
+      if (upload) this.updateContent(index, tabs[index].content)
     },
     askJsonMainSchema() {
       let tabs = this.input_mode == "xml" ? this.xml_tabs : this.json_tabs
@@ -482,51 +448,13 @@ export default {
         }
         else {
           this.grammar_errors = []
-          this.model = result.data.model
-          this.output = result.data.dataset
-          this.newDataset(result.data)
+          this.newDataset(result.data, filename)
         }
-
-        this.filename = filename
       }
-
+      
       this.loading = false
       this.send_req = false
-      this.no_datasets = false
-      this.output_key = this.generateOutputKey()
       window.dispatchEvent(new CustomEvent("loading", {detail: { storage: {loading: false} }}))
-    },
-    newDataset(result) {
-      let tab = this.dataset_tabs[this.dataset_tabs.length - 1]
-
-      // falta update label
-      if (!tab.content.length) {
-        tab.content = result.dataset
-        this.dataset_current = {label: tab.label, key: tab.key}
-        this.dataset_models[this.dataset_tabs.length-1].model = result.model
-      }
-      else {
-        let next_key = parseInt(tab.key.split("_")[1]) + 1
-        let new_tab = {label: "Dataset "+next_key, key: "dataset_"+next_key}
-
-        this.dataset_current = new_tab
-        this.dataset_tabs.push({...new_tab, content: result.dataset})
-        this.dataset_models.push({...new_tab, model: result.model})
-      }
-    },
-    removeDataset(index) {
-      if (!index) {
-        this.dataset_tabs[0].content = ""
-        this.dataset_models[0].content = ""
-        this.no_datasets = true
-      }
-      else {
-        this.dataset_tabs.splice(index, 1)
-        this.dataset_models.splice(index, 1)
-        this.dataset_current = index - 1
-      }
-
-      this.output_key = this.generateOutputKey()
     },
     async sendGenRequest(type, body) {
       try {
@@ -538,7 +466,7 @@ export default {
       }
     },
     download() {
-      if (!this.output.length) {
+      if (!this.dataset.length) {
         this.errorMsg = "É necessário gerar um dataset primeiro!"
         this.error = true
       }
@@ -546,7 +474,7 @@ export default {
         let element = document.createElement('a')
         element.style.display = 'none'
 
-        element.setAttribute('href', `data:text/plain;charset=utf-8,` + encodeURIComponent(this.output))
+        element.setAttribute('href', `data:text/plain;charset=utf-8,` + encodeURIComponent(this.dataset))
         element.setAttribute('download', this.filename + "." + (this.last_gen_request == "XML" ? "xml" : "json"))
 
         document.body.appendChild(element)
@@ -577,7 +505,36 @@ export default {
         this.save_model = false
         this.$buefy.toast.open("Modelo guardado!")
       }
-    }
+    },
+    
+    onChangeModel(content) { this.dataset_tabs.find(t => t.key == this.dataset_tab).model = content },
+    onChangeDataset(content) { this.dataset_tabs.find(t => t.key == this.dataset_tab).dataset = content },
+    newDataset(result, filename) {
+      let index = this.dataset_tabs.findIndex(t => t.key == this.dataset_tab)
+      let tab = this.dataset_tabs[index]
+
+      if (!tab.dataset.length) {
+        tab.label = tab.filename = filename
+        tab.dataset = result.dataset
+        tab.model = result.model
+      }
+      else {
+        this.created_datasets++
+        let key = "dataset_" + this.created_datasets
+        this.$refs.tab.addTab({label: filename, key, ...result, filename})
+        this.dataset_tab = key
+      }
+    },
+    closeDataset() {
+      if (this.loading) return false
+      else if (this.dataset_tabs.length == 1) {
+        this.dataset_tabs[0].dataset = ""
+        this.dataset_tabs[0].model = ""
+        this.dataset_tabs[0].filename = ""
+        return false
+      }
+      return true
+    },
   }
 }
 </script>
@@ -644,5 +601,26 @@ export default {
 svg {
   width: 48px;
   height: 48px;
+}
+
+.vue-tabs-chrome {
+  padding-top: 5px;
+}
+
+.tabs-item {
+  color: white;
+}
+
+.tabs-item:hover {
+  color: black;
+}
+
+.active {
+  color: black !important;
+}
+
+.no-tabs {
+  height: 39px;
+  margin-bottom: 4px;
 }
 </style>
