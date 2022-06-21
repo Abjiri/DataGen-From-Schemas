@@ -10,8 +10,8 @@ const jsonConverter = require('../grammars/json_schema/converter/converter')
 const {resolve_refs} = require('../grammars/json_schema/converter/refs')
 
 function cleanSettings(settings) {
-  settings.recursiv.lower = parseInt(settings.recursiv.lower)
-  settings.recursiv.upper = parseInt(settings.recursiv.upper)
+  settings.recursivity.lower = parseInt(settings.recursivity.lower)
+  settings.recursivity.upper = parseInt(settings.recursivity.upper)
   settings.prob_if = parseFloat(parseFloat(settings.prob_if).toFixed(2))/100
   settings.prob_patternProperty = parseFloat(parseFloat(settings.prob_patternProperty).toFixed(2))/100
 }
@@ -40,8 +40,8 @@ router.post('/', (req, res) => {
     console.log('dataset gerado')
 
     // converter dataset para o formato final
-    if (format == "JSON") dataset = JSON.stringify(dslConverter.cleanJson(dataset.dataModel.data), null, 2)
-    if (format == "XML") {
+    if (format == "json") dataset = JSON.stringify(dslConverter.cleanJson(dataset.dataModel.data), null, 2)
+    if (format == "xml") {
       let schema = data[0].subschemas.pop()
       dataset = dslConverter.jsonToXml(dataset.dataModel.data, {root_name: /^anon\d+$/.test(schema.id) ? "dataset" : schema.id.split("/json-schemas/")[1]})
     }

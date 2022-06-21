@@ -205,7 +205,7 @@ export default {
       xml_tab: {label: "Schema", key: "schema_1"},
       xml_element: {},
       xml_settings: {
-        recursiv: {lower: 0, upper: 3},
+        recursivity: {lower: 0, upper: 3},
         unbounded: 10
       },
       
@@ -214,7 +214,7 @@ export default {
       json_schemas: [{ label: "Schema 1", key: "schema_1" }],
       json_tab: {label: "Schema 1", key: "schema_1"},
       json_settings: {
-        recursiv: {lower: 0, upper: 3},
+        recursivity: {lower: 0, upper: 3},
         prob_if: 50,
         prob_patternProperty: 80,
         random_props: false,
@@ -383,7 +383,7 @@ export default {
       }
     },
     async askXmlMainSchema() {
-      let {data} = await axios.post('http://localhost:3000/api/xml_schema/elements', {xsd: this.xml_tabs[0].content})
+      let {data} = await axios.post('http://localhost:3000/api/xml_schema/elements', {schema: this.xml_tabs[0].content})
       
       if ("message" in data) this.grammar_errors = [aux.translateMsg(data)]
       else if ("elements" in data) {
@@ -424,7 +424,7 @@ export default {
       let result, filename = ""
       
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
-      settings.output = this.output_format
+      settings.output = this.output_format.toLowerCase()
       setTimeout(() => {
         if (this.send_req) {
           this.loading = true
@@ -434,7 +434,7 @@ export default {
 
       if (this.input_mode == "xml") {
         filename = this.xml_element.label
-        result = await this.sendGenRequest("xml", {xsd: this.xml_tabs[0].content, element: filename, settings})
+        result = await this.sendGenRequest("xml", {schema: this.xml_tabs[0].content, element: filename, settings})
       }
       else {
         let other_schemas = []
@@ -446,6 +446,7 @@ export default {
         let main_schema = this.json_tabs.find(t => t.key == this.json_tab.key)
         filename = main_schema.label
         result = await this.sendGenRequest("json", {schemas: [main_schema, ...other_schemas], settings})
+        console.log(result)
       }
       
       if (result !== undefined) {
