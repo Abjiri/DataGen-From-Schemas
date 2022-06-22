@@ -218,9 +218,9 @@ export default {
         prob_if: 50,
         prob_patternProperty: 80,
         random_props: false,
-        extend_propSchema: "OR",
+        extend_objectProperties: "OR",
         extend_prefixItems: "OR",
-        extend_schemaObj: "OR"
+        extend_schemaProperties: "OR"
       },
 
       // datasets produzidos

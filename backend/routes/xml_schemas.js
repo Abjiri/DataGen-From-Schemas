@@ -9,21 +9,25 @@ const dslConverter = require('../grammars/datagen_dsl/conversions')
 const xmlConverter = require('../grammars/xml_schema/converter/converter');
 
 const ws = "‏‏‎ ‎"
+const settings_str = `"settings": {\n${ws}${ws}"recursivity": {"lower": ?, "upper": ?},\n${ws}${ws}"unbounded": ?\n}`
 
-function cleanSettings(settings) {
-  settings.unbounded = parseInt(settings.unbounded)
-  settings.recursivity.lower = parseInt(settings.recursivity.lower)
-  settings.recursivity.upper = parseInt(settings.recursivity.upper)
+function cleanSettings(settings, frontend) {
+  if (frontend) {
+    settings.unbounded = parseInt(settings.unbounded)
+    settings.recursivity.lower = parseInt(settings.recursivity.lower)
+    settings.recursivity.upper = parseInt(settings.recursivity.upper)
+  }
 
   if (!(Number.isInteger(settings.unbounded) && settings.unbounded >= 0)) return "O valor 'unbounded' das definições deve ser um inteiro não-negativo!"
   if (!(Number.isInteger(settings.recursivity.lower) && settings.recursivity.lower >= 0)) return "O valor 'recursivity.lower' das definições deve ser um inteiro não-negativo!"
   if (!(Number.isInteger(settings.recursivity.upper) && settings.recursivity.upper >= 0)) return "O valor 'recursivity.upper' das definições deve ser um inteiro não-negativo!"
   if (settings.recursivity.upper < settings.recursivity.lower) return "O valor 'recursivity.lower' deve ser inferior ou igual ao 'recursivity.upper'!"
+
   return true
 }
 
 function generate(req) {
-  let clean = cleanSettings(req.body.settings)
+  let clean = cleanSettings(req.body.settings, true)
   if (typeof clean == "string") return {message: clean}
 
   // extrair dados da schema
@@ -61,7 +65,7 @@ function generate(req) {
   return {model, dataset}
 }
 
-// POST front-end para gerar um dataset a partir de um XML schema
+// POST front-end para gerar um dataset a partir de uma schema XML
 router.post('/', (req, res) => {
   try {
     res.status(201).jsonp(generate(req))
@@ -79,7 +83,7 @@ router.post('/elements', (req, res) => {
   }
 })
 
-// POST back-end para gerar um dataset a partir de um XML schema
+// POST back-end para gerar um dataset a partir de uma schema XML
 router.post('/:output', (req, res) => {
   if (req.params.output != "xml" && req.params.output != "json") return res.sendStatus(404)
 
@@ -89,23 +93,23 @@ router.post('/:output', (req, res) => {
     if (typeof req.body.schema != "string") return res.status(500).send("A schema deve ser enviada em string!")
     if (typeof req.body.element != "string") return res.status(500).send("O nome do elemento-raiz a gerar deve ser uma string!")
 
-    if (!("unbounded" in settings && "recursivity" in settings && "lower" in settings.recursivity && "upper" in settings.recursivity))
-      return res.status(500).send(`As definições definidas no corpo do pedido não estão corretas! Devem ter a seguinte estrutura:\n\n"settings": {\n${ws}${ws}"recursivity": {"lower": ?, "upper": ?},\n${ws}${ws}"unbounded": ?\n}`)
+    if (!(typeof settings == 'object' && !Array.isArray(settings) && settings !== null && "unbounded" in settings && "recursivity" in settings && "lower" in settings.recursivity && "upper" in settings.recursivity))
+      return res.status(500).send(`As definições enviadas no corpo do pedido não estão corretas! Devem ser enviadas num objeto com a seguinte estrutura:\n\n${settings_str}`)
     
-    let clean = cleanSettings(req.body.settings)
+    let clean = cleanSettings(req.body.settings, false)
     if (typeof clean == "string") return res.status(500).send(clean)
 
     try {
       req.body.settings.output = req.params.output
-      let result = generate(req, res)
+      let result = generate(req)
 
       if ("message" in result) return res.status(500).send(result.message)
       res.status(201).jsonp(result)
     } catch (err) {
-      res.status(500).jsonp(err)
+      res.status(500).send(err.message)
     }
   }
-  else res.status(500).send(`O corpo do pedido deve ter apenas três propriedades: 'schema', 'element' e 'settings', onde 'element' é o elemento de raiz da schema que se pretende gerar.\nAs definições devem ter a seguinte estrutura:\n\n"settings": {\n${ws}${ws}"recursivity": {"lower": ?, "upper": ?},\n${ws}${ws}"unbounded": ?\n}`)
+  else res.status(500).send(`O corpo do pedido deve ter apenas três propriedades: 'schema', 'element' e 'settings', onde 'element' é o elemento de raiz da schema que se pretende gerar.\nAs definições devem ser enviadas num objeto com a seguinte estrutura:\n\n${settings_str}`)
 });
 
 module.exports = router;

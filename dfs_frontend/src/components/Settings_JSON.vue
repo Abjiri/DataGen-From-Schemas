@@ -62,7 +62,7 @@
                 </v-tooltip>
                 <v-select class="select"
                     :rules="[rules.required]"
-                    v-model="new_settings.extend_propSchema"
+                    v-model="new_settings.extend_objectProperties"
                     :items="options1"
                     item-text="label"
                     item-value="key"
@@ -95,7 +95,7 @@
                 </v-tooltip>
                 <v-select class="select"
                     :rules="[rules.required]"
-                    v-model="new_settings.extend_schemaObj"
+                    v-model="new_settings.extend_schemaProperties"
                     :items="options1"
                     item-text="label"
                     item-value="key"
@@ -173,9 +173,9 @@ export default {
                 prob_if: 50,
                 prob_patternProperty: 80,
                 random_props: false,
-                extend_propSchema: "OR",
+                extend_objectProperties: "OR",
                 extend_prefixItems: "OR",
-                extend_schemaObj: "OR"
+                extend_schemaProperties: "OR"
             },
             options1: [{key: "OR", label: "Extensão"}, {key: "OW", label: "Sobrescrição"}],
             options2: [{key: "OR", label: "Extensão"}, {key: "OWP", label: "Sobrescrição parcial"}, {key: "OWT", label: "Sobrescrição total"}, {key: "AP", label: "Concatenação"}],
