@@ -1,5 +1,6 @@
 var express = require('express');
 var router = express.Router();
+const {translateMsg} = require('../utils/utils')
 const fs = require('fs')
 
 const dslParser = require('../grammars/datagen_dsl/parser')
@@ -103,10 +104,10 @@ router.post('/:output', (req, res) => {
       req.body.settings.output = req.params.output
       let result = generate(req)
 
-      if ("message" in result) return res.status(500).send(result.message)
+      if ("message" in result) return res.status(500).send(translateMsg(result))
       res.status(201).jsonp(result)
     } catch (err) {
-      res.status(500).send(err.message)
+      res.status(500).send(translateMsg(err))
     }
   }
   else res.status(500).send(`O corpo do pedido deve ter apenas três propriedades: 'schema', 'element' e 'settings', onde 'element' é o elemento de raiz da schema que se pretende gerar.\nAs definições devem ser enviadas num objeto com a seguinte estrutura:\n\n${settings_str}`)
