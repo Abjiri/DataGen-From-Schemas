@@ -8,6 +8,7 @@ const dslConverter = require('../grammars/datagen_dsl/conversions')
 const jsonConverter = require('../grammars/json_schema/converter/converter')
 
 const {resolve_refs} = require('../grammars/json_schema/converter/refs')
+const {translateMsg} = require('../utils/utils')
 
 const ws = "‏‏‎ ‎"
 const settings_str = `"settings": {\n${ws}${ws}"recursivity": {"lower": ?, "upper": ?},\n${ws}${ws}"prob_if": ?,\n${ws}${ws}"prob_patternProperty": ?,\n${ws}${ws}"random_props": ?,\n${ws}${ws}"extend_objectProperties": ?,\n${ws}${ws}"prefixItems": ?,\n${ws}${ws}"extend_schemaProperties": ?\n}`
@@ -104,9 +105,8 @@ router.post('/:output', (req, res) => {
     if (typeof clean == "string") return res.status(500).send(clean)
 
     let schema_key = ""
+    let schemas = [JSON.stringify(req.body.main_schema, null, 2), ...req.body.other_schemas.map(x => JSON.stringify(x, null, 2))]
     try {
-      let schemas = [JSON.stringify(req.body.main_schema), ...req.body.other_schemas.map(x => JSON.stringify(x))]
-      
       // extrair dados da schema
       let data = schemas.map((x,i) => {schema_key = i; return jsonParser.parse(x)})
       console.log('schema parsed')
@@ -115,7 +115,7 @@ router.post('/:output', (req, res) => {
       if ("message" in result) return res.status(500).send(result.message)
       res.status(201).jsonp(result)
     } catch (err) {
-      res.status(500).send(`Erro na ${!schema_key ? "schema principal" : `${schema_key}º schema das restantes`}:\n` + err.message)
+      res.status(500).send(`Erro na ${!schema_key ? "schema principal" : `${schema_key}º schema das restantes`}:\n` + translateMsg(err, schemas[schema_key]))
     }
   }
   else res.status(500).send(`O corpo do pedido deve ter apenas três propriedades: 'main_schema', 'other_schemas' e 'settings'.\nDevem ser enviadas num objeto com a seguinte estrutura:\n\n${settings_str}`)

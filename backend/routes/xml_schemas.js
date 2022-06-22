@@ -104,10 +104,10 @@ router.post('/:output', (req, res) => {
       req.body.settings.output = req.params.output
       let result = generate(req)
 
-      if ("message" in result) return res.status(500).send(translateMsg(result))
+      if ("message" in result) return res.status(500).send(translateMsg(result, null))
       res.status(201).jsonp(result)
     } catch (err) {
-      res.status(500).send(translateMsg(err))
+      res.status(500).send(translateMsg(err, null))
     }
   }
   else res.status(500).send(`O corpo do pedido deve ter apenas três propriedades: 'schema', 'element' e 'settings', onde 'element' é o elemento de raiz da schema que se pretende gerar.\nAs definições devem ser enviadas num objeto com a seguinte estrutura:\n\n${settings_str}`)
