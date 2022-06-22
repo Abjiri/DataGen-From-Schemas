@@ -91,6 +91,7 @@ router.post('/:output', (req, res) => {
   if (req.params.output != "xml" && req.params.output != "json") return res.sendStatus(404)
 
   if (Object.keys(req.body).length == 3 && "main_schema" in req.body && "other_schemas" in req.body && "settings" in req.body) {
+    req.body.settings.output = req.params.output
     let settings = req.body.settings
 
     if (!isObject(req.body.main_schema)) return res.status(500).send("A schema principal deve ser enviada em forma de objeto JSON!")
@@ -102,19 +103,19 @@ router.post('/:output', (req, res) => {
     let clean = cleanSettings(req.body.settings, false)
     if (typeof clean == "string") return res.status(500).send(clean)
 
+    let schema_key = ""
     try {
-      req.body.settings.output = req.params.output
       let schemas = [JSON.stringify(req.body.main_schema), ...req.body.other_schemas.map(x => JSON.stringify(x))]
       
       // extrair dados da schema
-      let data = schemas.map(x => jsonParser.parse(x))
+      let data = schemas.map((x,i) => {schema_key = i; return jsonParser.parse(x)})
       console.log('schema parsed')
 
       let result = generate(req, data)
       if ("message" in result) return res.status(500).send(result.message)
       res.status(201).jsonp(result)
     } catch (err) {
-      res.status(500).send(err.message)
+      res.status(500).send(`Erro na ${!schema_key ? "schema principal" : `${schema_key}º schema das restantes`}:\n` + err.message)
     }
   }
   else res.status(500).send(`O corpo do pedido deve ter apenas três propriedades: 'main_schema', 'other_schemas' e 'settings'.\nDevem ser enviadas num objeto com a seguinte estrutura:\n\n${settings_str}`)
