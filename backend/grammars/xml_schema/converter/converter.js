@@ -292,7 +292,7 @@ function parseExtensionSC(el, depth) {
    }
 
    if (parsed.content.length > 0) str += indent(depth+1)
-   return `${str}DFXS_EXTENSION__SC: ${parsed.content}\n${indent(depth)}}`
+   return `${str}DFXS_SIMPLE_CONTENT: ${parsed.content}\n${indent(depth)}}`
 }
 
 function parseGroup(el, depth, keys) {

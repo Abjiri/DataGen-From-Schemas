@@ -1,0 +1,11 @@
+<!LANGUAGE pt>
+{
+	DFXS_1__shoeSize: {
+		DFXS_ATTR__sizing: '{{random("US","European","UK","Japan")}}',
+		DFXS_ATTR__D: '{{stringOfSize(21)}}',
+		DFXS_ATTR__a2: '{{boolean()}}',
+		DFXS_ATTR__a3: '{{integer(-2147483648, 2147483647)}}',
+		DFXS_ATTR__X: '{{integer(-99999, 99999)}}',
+		DFXS_SIMPLE_CONTENT: '{{integer(-99999, 99999)}}'
+	}
+}
