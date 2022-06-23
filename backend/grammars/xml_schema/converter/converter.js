@@ -283,7 +283,7 @@ function parseExtensionSC(el, depth) {
    let parsed = {attrs: "", content: ""}
 
    parsed.attrs = parseAttributeGroup(el, depth+1)
-   parsed.content = parseType(el.attrs.base, depth)
+   parsed.content = parseType(el.attrs.base, depth+1)
 
    let str = "{\n"
    if (parsed.attrs.length > 0) {
