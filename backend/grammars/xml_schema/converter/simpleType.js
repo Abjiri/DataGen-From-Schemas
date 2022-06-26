@@ -7,21 +7,17 @@ let indent = depth => '\t'.repeat(depth)
 // Funções de tradução de tipos embutidos ----------
 
 function parseStringType(c, base, has) { 
-   let length = 0
+   let min = null, max = null
 
-   if (has("length")) length = c.length
-   else {
-      let max = null, min = null
+   if (has("length")) {min = c.length; max = c.length}
+   if (has("maxLength")) max = c.maxLength
+   if (has("minLength")) min = c.minLength
 
-      if (has("maxLength")) max = c.maxLength
-      if (has("minLength")) min = c.minLength
+   if (max === null && min == null) {min = 10; max = 50}
+   else if (min == null) min = max > 1 ? 1 : 0
+   else if (max == null) max = min + 50
 
-      if (max === null && min == null) {min = 10; max = 50}
-      else if (min == null) min = max > 1 ? 1 : 0
-      else if (max == null) max = min + 50
-
-      length = randomize(min, max)
-   }
+   let length = min == max ? min : `${min},${max}`
    
    if (base == "hexBinary") return `{{hexBinary(${length})}}`
    if (["normalizedString","string","token"].includes(base)) return `{{stringOfSize(${length})}}`
@@ -221,6 +217,29 @@ function parseDateTimeType(c, base, list, has) {
          }
 
          return parts
+      },
+      durationString: (d) => {
+         let i = 0, str = "P", units = ["Y","M","D","H","M",".","S"], maxPossible = [0, 12, 30, 24, 59, 59, 999]
+
+         for (let j = 0; j < 3; j++) {
+            let next = d.shift()
+            if (next != 0) str += next + units[i]
+            i++
+         }
+
+         if (d.reduce((acc,cur) => acc += cur, 0) != 0) {
+            str += "T"
+            for (let j = 0; j < 3; j++) {
+               let next = d.shift()
+               if (next != 0) str += next + units[i]
+               i++
+            }
+            
+            if (!d[0]) str = str.slice(0,-1) + units[i]
+            else str += d[0] + units[i]
+         }
+
+         return str
       }
    }
 
@@ -261,7 +280,7 @@ function parseDateTimeType(c, base, list, has) {
          else min = [0,0,0,0,0,0,0]
       }
 
-      return `{{xsd_duration(${JSON.stringify(min)},${JSON.stringify(max)},${JSON.stringify(list)})}}`
+      return `{{xsd_duration("${aux.durationString(min)}","${aux.durationString(max)}",${JSON.stringify(list)})}}`
    }
 }
  
@@ -344,20 +363,22 @@ function parseList(st, depth) {
 
    if (st.content.length == 1) {
       let elem = parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min})
-      for (let i = 0; i < randomize(min,max); i++) str += elem + " "
-      return "'" + str.slice(0,-1) + "'.string()"
+
+      str = `gen => {\n${indent(depth)}let elems = []\n`
+      str += `${indent(depth)}for (let i = 0; i < Math.floor(Math.random()*(${max}-${min}))+${min}; i++) elems.push(${elem.startsWith("{{") ? `gen.${elem.slice(2,-2)}` : `"${elem}"`})\n`
+      str += `${indent(depth--)}return elems.join(" ")\n${indent(depth)}}`
+      return str
    }
    else {
-      str = `gen => {\n${indent(depth)}let elems = []\n`
-      let type_len = st.content.length - 1
+      let types = st.content.map(x => parseRestriction(x.content, x.built_in_base, {max: 1, min: 1}))
+      types.map((t,i) => types[i] = t.startsWith("{{") ? `gen.${t.slice(2,-2)}` : `"${t}"`)
 
-      for (let i = 0; i < randomize(min,max); i++) {
-         let type_ind = randomize(0, type_len)
-         let elem = parseRestriction(st.content[type_ind].content, st.content[type_ind].built_in_base, {max: 1, min: 1})
-         str += `${indent(depth)}elems.push(${elem.startsWith("{{") ? `gen.${elem.slice(2,-2)}` : `"${elem}"`})\n`
-      }
-      
-      return str + `${indent(depth--)}return elems.join(" ")\n${indent(depth--)}}`
+      str = `gen => {\n${indent(depth)}let elems = []\n`
+      str += `${indent(depth++)}for (let i = 0; i < Math.floor(Math.random()*(${max}-${min}))+${min}; i++) {\n`
+      str += `${indent(depth)}let values = [${types.join(", ")}]\n`
+      str += `${indent(depth)}let next = values[Math.floor(Math.random()*(values.length))]\n`
+      str += `${indent(depth--)}elems.push(next)\n${indent(depth)}}\n`
+      return str + `${indent(depth--)}return elems.join(" ")\n${indent(depth)}}`
    }
 }
 
@@ -379,7 +400,7 @@ function parseSimpleType(st, ids, depth) {
       let parsed = parseRestriction(content, st.built_in_base, {max: 1, min: 1})
       str = "'" + parsed + "'"
    }
-
+   
    str = str.replace(/{XSD_ID}/g, () => `id${++ids}`)
    return {str, ids}
 }

@@ -102,8 +102,11 @@
         if (args.length == 3) join += ",null"
         if (args.length == 5) join = `${args[0]},${args[1]},${args[2]},{start: ${args[3]}, end: ${args[4]}}`
       }
-      if (key == "stringOfSize") {
+      if (key == "stringOfSize" || key == "hexBinary") {
         if (args.length == 1) join += ",null"
+      }
+      if (key == "xsd_string") {
+        if (args.length == 2) join += ",null"
       }
       if (key == "xsd_gDay") {
         if (args.length == 2) {
@@ -964,16 +967,16 @@ gen_moustaches
       data: fillArray("gen", null, "stringOfSize", [fst, snd])
     }
   }
-  / "xsd_string(" ws base:xsd_string_base ws "," ws len:natural_or_local ws ")" {
+  / "xsd_string(" ws base:xsd_string_base ws "," ws min:natural_or_local ws max:("," ws trd:natural_or_local ws { return trd })? ")" {
     return {
       model: {type: "string", required: true},
-      data: fillArray("gen", null, "xsd_string", [base, len])
+      data: fillArray("gen", null, "xsd_string", [base, min, max])
     }
   }
-  / "hexBinary(" ws len:natural_or_local ws ")" {
+  / "hexBinary(" ws min:natural_or_local ws max:("," ws snd:natural_or_local ws { return snd })? ")" {
     return {
       model: {type: "string", required: true},
-      data: fillArray("gen", null, "hexBinary", [len])
+      data: fillArray("gen", null, "hexBinary", [min, max])
     }
   }
   / "xsd_gDay(" ws args:(min:gDay ws "," ws max:gDay ws {return {min, max}})? ")" {

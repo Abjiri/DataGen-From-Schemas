@@ -302,7 +302,6 @@ function multipleOf(num, i) {
 function stringOfSize(min, max, i) {
     min = Array.isArray(min) ? min[i] : min
     if (max !== null) max = Array.isArray(max) ? max[i] : max
-
     let length = max === null ? min : randomize(min, max)
 
     let str = ""
@@ -310,8 +309,10 @@ function stringOfSize(min, max, i) {
     return str.slice(0, length)
 }
 
-function xsd_string(base, length, i) {
-    length = Array.isArray(length) ? length[i] : length
+function xsd_string(base, min, max, i) {
+    min = Array.isArray(min) ? min[i] : min
+    if (max !== null) max = Array.isArray(max) ? max[i] : max
+    let length = max === null ? min : randomize(min, max)
 
     //[".",":","-","_"]
     let alphabet = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","z","y","z","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
@@ -329,8 +330,10 @@ function xsd_string(base, length, i) {
     return str
 }
 
-function hexBinary(length, i) {
-    length = Array.isArray(length) ? length[i] : length
+function hexBinary(min, max, i) {
+    min = Array.isArray(min) ? min[i] : min
+    if (max !== null) max = Array.isArray(max) ? max[i] : max
+    let length = max === null ? min : randomize(min, max)
 
     let hexChars = [...Array(60).keys()].map(i => i + 20)
     hexChars = hexChars.concat(["2","3","4","5","6","7"].map(x => ["A","B","C","D","E","F"].map(y => x+y)).flat())
