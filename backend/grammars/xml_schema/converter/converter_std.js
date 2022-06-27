@@ -205,7 +205,7 @@ function parseComplexType(el, depth) {
          case "simpleContent": return parseExtensionSC(content[i].content[0], depth)
          case "group": parsed.content += parseGroup(content[i], depth+1, {}).str.slice(0, -2); break;
          case "all": parsed.content += parseAll(content[i], depth+2, {}).str; break;
-         case "sequence": parsed.content += parseSequence(content[i], depth+1, {}).str; break;
+         case "sequence": parsed.content += parseSequence(content[i], depth, {}).str; break;
          case "choice": parsed.content += parseChoice(content[i], depth+1, {}).str; break;
       }
 
@@ -314,7 +314,7 @@ function parseGroup(el, depth, keys) {
             
             if (parsed.str.length > 0) {
                // ajustar a formatação e remover o \n no fim para meter uma vírgula antes
-               parsed.str = parsed.str.replace(/\n\t+/g, "\n" + "\t".repeat(depth+2)).replace(/\t+}/, "\t".repeat(depth+1) + "}")
+               parsed.str = parsed.str.replace(/\n\t+/g, "\n" + indent(depth+2)).replace(/\t+}/, indent(depth+1) + "}")
                parsed.str = `${indent(depth)}DFXS_TEMP__${++temp_structs}: {\n${parsed.str}\n${indent(depth)}},`
             }
             break;

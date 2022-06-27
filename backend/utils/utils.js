@@ -33,7 +33,7 @@ function checkRecursivity(xsd_content, complexTypes) {
    // element e group
    for (let i = 0; i < xsd_content.length; i++) {
       let el = xsd_content[i]
-      if (recursiveElement(el.attrs.name, el.element, "ref", el.content)) recursiv[el.element].push(el.attrs.name)
+      if ("content" in el && recursiveElement(el.attrs.name, el.element, "ref", el.content)) recursiv[el.element].push(el.attrs.name)
    }
 
    return Object.keys(recursiv).reduce((a,c) => a || recursiv[c].length > 0, false)

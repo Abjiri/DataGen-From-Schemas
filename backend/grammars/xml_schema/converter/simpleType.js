@@ -1,8 +1,18 @@
 // Funções auxiliares ----------
 
-let randomize = (min,max) => Math.floor(Math.random() * ((max+1) - min) + min)
 let indent = depth => '\t'.repeat(depth)
 
+function convertDSLToFunction(str) {
+   if (/^{{time/.test(str) && str.includes(".")) {
+      str = str.split(".").map(x => x.slice(2,-2))
+      return `gen.${str[0]}+"."+gen.${str[1]}`
+   }
+   if (/^-/.test(str)) {
+      str = str.split("{{")
+      return `"${str[0]}"+gen.${str[1].slice(0,-2)}`
+   }
+   if (/^{{/.test(str)) return `gen.${str.slice(2,-2)}`
+}
 
 // Funções de tradução de tipos embutidos ----------
 
@@ -365,13 +375,13 @@ function parseList(st, depth) {
       let elem = parseRestriction(st.content[0].content, st.content[0].built_in_base, {max, min})
 
       str = `gen => {\n${indent(depth)}let elems = []\n`
-      str += `${indent(depth)}for (let i = 0; i < Math.floor(Math.random()*(${max}-${min}))+${min}; i++) elems.push(${elem.startsWith("{{") ? `gen.${elem.slice(2,-2)}` : `"${elem}"`})\n`
+      str += `${indent(depth)}for (let i = 0; i < Math.floor(Math.random()*(${max}-${min}))+${min}; i++) elems.push(${convertDSLToFunction(elem)})\n`
       str += `${indent(depth--)}return elems.join(" ")\n${indent(depth)}}`
       return str
    }
    else {
       let types = st.content.map(x => parseRestriction(x.content, x.built_in_base, {max: 1, min: 1}))
-      types.map((t,i) => types[i] = t.startsWith("{{") ? `gen.${t.slice(2,-2)}` : `"${t}"`)
+      types.map((t,i) => types[i] = convertDSLToFunction(t))
 
       str = `gen => {\n${indent(depth)}let elems = []\n`
       str += `${indent(depth++)}for (let i = 0; i < Math.floor(Math.random()*(${max}-${min}))+${min}; i++) {\n`
@@ -382,6 +392,23 @@ function parseList(st, depth) {
    }
 }
 
+function parseComplexUnion(types, depth) {
+   let functions = []
+   types.map((x,i) => {
+      if (/^gen =>/.test(x)) {
+         types[i] = x.replace(/^gen/, `let f${i} = ()`).replace(/\n(\t*)/g, (m) => m+"\t").replace(/\t+}$/, `${indent(depth+1)}}`)
+         functions.push(i)
+      }
+      else types[i] = convertDSLToFunction(x.slice(1,-1)) // tirar os apóstrofes da interpolação
+   })
+
+   let str = `gen => {\n`
+   types.filter((x,i) => {if (functions.includes(i)) return x}).map(x => str += `${indent(depth+1)}${x}\n`)
+   str += `${indent(depth+1)}let options = [${types.map((x,i) => !functions.includes(i) ? x : `f${i}()`).join(", ")}]\n`
+   str += `${indent(depth+1)}return options[Math.floor(Math.random()*options.length)]\n${indent(depth)}}`
+   return str
+}
+
 function parseSimpleType(st, ids, depth) {
    let str
    
@@ -390,8 +417,10 @@ function parseSimpleType(st, ids, depth) {
 
    // derivação por união
    else if ("union" in st) {
-      st.union = st.union.map(x => parseSimpleType(x, ids, depth).str)
-      str = st.union[randomize(0, st.union.length-1)]
+      let types = st.union.map(x => parseSimpleType(x, ids, depth).str)
+
+      if (!st.union.some(x => "list" in x)) str = `gen => { return gen.random(${types.map(x => convertDSLToFunction(x.slice(1,-1))).join(", ")}) }`
+      else str = parseComplexUnion(types, depth)
    }
 
    // derivação por restrição
