@@ -1,12 +1,14 @@
 var express = require('express');
 var router = express.Router();
-const {translateMsg} = require('../utils/utils')
+const {translateMsg, checkRecursivity} = require('../utils/utils')
+let fs = require('fs')
 
 const dslParser = require('../grammars/datagen_dsl/parser')
 const xmlParser = require('../grammars/xml_schema/parser/parser')
 
 const dslConverter = require('../grammars/datagen_dsl/conversions')
-const xmlConverter = require('../grammars/xml_schema/converter/converter');
+const xmlConverterStd = require('../grammars/xml_schema/converter/converter_std')
+const xmlConverterRec = require('../grammars/xml_schema/converter/converter_rec')
 
 const ws = "‏‏‎ ‎"
 const settings_str = `"settings": {\n${ws}${ws}"recursivity": {"lower": ?, "upper": ?},\n${ws}${ws}"unbounded": ?\n}`
@@ -43,9 +45,16 @@ function generate(req) {
     }
   }
 
+  let model, recursivSchema = checkRecursivity(data.xsd.content, data.complexTypes)
+
   // criar modelo DSL a partir dos dados da schemas
-  let model = xmlConverter.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.element, req.body.settings)
+  if (!recursivSchema) model = xmlConverterRec.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.element, req.body.settings)
+  else model = xmlConverterStd.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.element, req.body.settings)
   console.log('modelo criado')
+  fs.writeFile('modelo.txt', model, (err) => {
+      // In case of a error throw err.
+      if (err) throw err;
+  })
   
   // gerar dataset
   let dataset = dslParser.parse(model)

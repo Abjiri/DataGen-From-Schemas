@@ -51,7 +51,7 @@ function getTypeInfo(type) {
    return {type, complex, base, prefix}
 }
 
-function normalizeName(name, end_prefix) {
+function normalizeName(name, end_prefix, prefixed) {
    let prefix = "DFXS_"
 
    if (/\.|\-/.test(name)) {
@@ -59,13 +59,12 @@ function normalizeName(name, end_prefix) {
       name = name.replace(/\./g, "__DOT__").replace(/\-/g, "__HYPHEN__")
    }
 
-   return prefix + end_prefix + name + ": "
+   return ((!prefixed && prefix == "DFXS_") ? "" : (prefix + end_prefix)) + name + ": "
 }
 
-
 function convert(xsd, st, ct, main_elem, user_settings) {
-   let str = "<!LANGUAGE pt>\n{\n"
    let depth = 1
+   let str = `<!LANGUAGE pt>\n{\n${indent(depth)}DFXS__FROM_XML_SCHEMA: true,\n`
    
    // variáveis globais
    default_prefix = xsd.prefix
@@ -74,19 +73,14 @@ function convert(xsd, st, ct, main_elem, user_settings) {
    complexTypes = ct
    SETTINGS = user_settings
    ids = 0
+   temp_structs = 0
 
    let elements = xsd.content.filter(x => x.element == "element")
    if (!elements.length) str += indent(depth) + "DFXS_EMPTY_XML: true\n"
    else {
-      let {elem_str, _} = parseElement(elements.find(x => x.attrs.name == main_elem), depth, {}, true)
-
-      if (elem_str.length > 0) {
-         str += indent(depth) + elem_str
-         //if (i < elements.length-1) str += ","
-         str += "\n"
-      }
+      let parsed = parseElement(elements.find(x => x.attrs.name == main_elem), depth, {}, true)
+      if (parsed.elem_str.length > 0) str += indent(depth) + parsed.elem_str + "\n"
    }
-
 
    str += "}"
    str = str.replace(/{XSD_IDREF}/g, `id{{integer(1,${ids})}}`)
@@ -95,53 +89,56 @@ function convert(xsd, st, ct, main_elem, user_settings) {
 
 // schemaElem indica se é o <element> é uma coleção ou não
 function parseElement(el, depth, keys, schemaElem) {
-   if ("ref" in el.attrs) return parseRef(el, depth, keys)
+    if ("ref" in el.attrs) return parseRef(el, depth, keys)
 
-   let elem_str = ""
-   let name = el.attrs.name
+    let elem_str = "", name = el.attrs.name
+    let minOccurs = null, maxOccurs = null
 
-   // função auxiliar para verificar se o elemento referencia um tipo complexo
-   let complexTypeRef = attrs => "type" in attrs && xsd_content.some(x => x.element == "complexType" && x.attrs.name == attrs.type)
+    // função auxiliar para verificar se o elemento referencia um tipo complexo
+    let complexTypeRef = attrs => "type" in attrs && xsd_content.some(x => x.element == "complexType" && x.attrs.name == attrs.type)
 
-   // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
-   // numerar as suas ocorrências para não dar overwrite na geração do DataGen
-   // é desnecessário para elementos de schema, que são únicos, mas é para simplificar
-   if (!(name in keys)) keys[name] = 1
+    // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
+    // numerar as suas ocorrências para não dar overwrite na geração do DataGen
+    // é desnecessário para elementos de schema, que são únicos, mas é para simplificar
+    if (!(name in keys)) keys[name] = 1
+    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
-   if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
-   let occurs = schemaElem ? 1 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
+    if (schemaElem) minOccurs = maxOccurs = 1
+    else {
+        minOccurs = el.attrs.minOccurs
+        maxOccurs = el.attrs.maxOccurs
+    }
 
-   // atualizar o mapa de recursividade deste elemento
-   if (name in recursiv.element) recursiv.element[name]++
-   else recursiv.element[name] = 1
+    // atualizar o mapa de recursividade deste elemento
+    if (name in recursiv.element) recursiv.element[name]++
+    else recursiv.element[name] = 1
 
-   // se o elemento tiver um tipo complexo por referência
-   if (complexTypeRef(el.attrs)) {
-      if (el.attrs.type in recursiv.complexType) recursiv.complexType[el.attrs.type]++
-      else recursiv.complexType[el.attrs.type] = 1
+    // se o elemento tiver um tipo complexo por referência
+    if (complexTypeRef(el.attrs)) {
+        if (el.attrs.type in recursiv.complexType) recursiv.complexType[el.attrs.type]++
+        else recursiv.complexType[el.attrs.type] = 1
 
-      if (recursiv.complexType[el.attrs.type] > SETTINGS.recursivity.upper) occurs = 0
-   }
+        if (recursiv.complexType[el.attrs.type] > SETTINGS.recursivity.upper) minOccurs = 0
+    }
    
-   for (let i = 0; i < (recursiv.element[name] > SETTINGS.recursivity.upper ? 0 : occurs); i++) {
-      // converte o valor do elemento para string DSL
-      let parsed = parseElementAux(el, depth)
+    let repeat = !(minOccurs == 1 && maxOccurs == 1)
+    let normName = normalizeName(name, "ELEM__", false)
+    let parsed = parseElementAux(el, depth)
 
-      if (!("ref" in el.attrs)) {
-         // completa a string DSL com a chave e formatação
-         if (!parsed.length) parsed = "{ DFXS_EMPTY_XML: true }"
-         elem_str += normalizeName(name, keys[name]++ + "__") + parsed + (i < occurs-1 ? `,\n${indent(depth)}` : "")
-      }
-      else {
-         elem_str = parsed.elem_str
-         keys = parsed.keys
-      }
-   }
+    if (repeat) elem_str += `DFXS_FLATTEN__${++temp_structs}: [ 'repeat(${minOccurs}${minOccurs==maxOccurs ? "" : `,${maxOccurs}`})': {\n${indent(depth+1)}`
 
-   recursiv.element[name]--
-   if (complexTypeRef(el.attrs)) recursiv.complexType[el.attrs.type]--
-   
-   return {elem_str, occurs, keys}
+    if (!("ref" in el.attrs)) elem_str += !parsed.length ? "{ DFXS_EMPTY_XML: true }" : (normName + parsed)
+    else {
+        elem_str += parsed.elem_str
+        keys = parsed.keys
+    }
+
+    if (repeat) elem_str += `\n${indent(depth)}} ]`
+
+    recursiv.element[name]--
+    if (complexTypeRef(el.attrs)) recursiv.complexType[el.attrs.type]--
+    
+    return {elem_str, occurs: maxOccurs, keys}
 }
 
 function parseElementAux(el, depth) {
@@ -239,7 +236,7 @@ function parseComplexType(el, depth) {
 
 function parseAttribute(el, depth) {
    let attrs = el.attrs
-   let str = normalizeName(attrs.name, "ATTR__"), value = ""
+   let str = normalizeName(attrs.name, "ATTR__", true), value = ""
 
    // parsing dos atributos
    if (attrs.use == "prohibited") return ""
