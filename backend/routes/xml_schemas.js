@@ -48,7 +48,7 @@ function generate(req) {
   let model, recursivSchema = checkRecursivity(data.xsd.content, data.complexTypes)
 
   // criar modelo DSL a partir dos dados da schemas
-  if (!recursivSchema) model = xmlConverterRec.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.element, req.body.settings)
+  if (recursivSchema) model = xmlConverterRec.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.element, req.body.settings)
   else model = xmlConverterStd.convert(data.xsd, data.simpleTypes, data.complexTypes, req.body.element, req.body.settings)
   console.log('modelo criado')
   fs.writeFile('modelo.txt', model, (err) => {

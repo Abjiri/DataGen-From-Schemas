@@ -205,7 +205,7 @@ function parseComplexType(el, depth) {
          case "simpleContent": return parseExtensionSC(content[i].content[0], depth)
          case "group": parsed.content += parseGroup(content[i], depth+1, {}).str.slice(0, -2); break;
          case "all": parsed.content += parseAll(content[i], depth+2, {}).str; break;
-         case "sequence": parsed.content += parseSequence(content[i], depth+1, {}).str.slice(0, -1); break;
+         case "sequence": parsed.content += parseSequence(content[i], depth+1, {}).str; break;
          case "choice": parsed.content += parseChoice(content[i], depth+1, {}).str; break;
       }
 
@@ -332,14 +332,11 @@ function parseGroup(el, depth, keys) {
 
 function parseAll(el, depth, keys) {
    let elements = el.content.filter(x => x.element == "element")
-   let elements_str = [], nr_elems = 0
+   let elements_str = [], nr_elems = 0, min = el.attrs.minOccurs, max = el.attrs.maxOccurs
 
    elements.forEach(x => {
-      // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
-      if (!(x.attrs.name in keys)) keys[x.attrs.name] = 1
-
       // dar parse a cada elemento
-      let parsed = parseElement(x, depth, keys, false)
+      let parsed = parseElement(x, depth+1, keys, false)
 
       if (parsed.elem_str.length > 0) {
          // contar o nr de elementos total (tendo em conta max/minOccurs de cada um)
@@ -347,35 +344,37 @@ function parseAll(el, depth, keys) {
          keys = parsed.keys
 
          // dar parse a todos os elementos e guardar as respetivas strings num array
-         elements_str.push(`\n${indent(depth)}${parsed.elem_str},`)
+         elements_str.push(`\n${indent(depth+1)}${parsed.elem_str},`)
       }
    })
 
+   let str = "", base_depth = depth - (!min ? 0 : 1) 
+   if (!min) str = `${indent(depth-1)}if (Math.random() < 0.3) { missing(100) {empty: true} }\n${indent(depth-1)}else {\n`
+
    // usar a primitiva at_least para randomizar a ordem dos elementos
-   let str = `${indent(depth-1)}at_least(${nr_elems}) {`
+   str += `${indent(base_depth)}at_least(${nr_elems}) {`
    if (elements_str.length > 0) str += elements_str.join("").slice(0, -1)
-   else str += `\n${indent(depth)}empty: true` // se o conteúdo for vazio, colocar uma propriedade filler para usar o missing(100)
-   str += `\n${indent(depth-1)}}`
+   else str += `\n${indent(base_depth+1)}empty: true` // se o conteúdo for vazio, colocar uma propriedade filler para usar o missing(100)
+   str += `\n${indent(base_depth)}}`
 
-   // se minOccurs = 0, dar uma probabilidade de 30% de o elemento não aparecer no XML
-   if (!elements_str.length || !el.attrs.minOccurs && Math.random() < 0.3) str = str.replace(/at_least\(\d+\)/, "missing(100)")
-
+   if (!min) str += `\n${indent(base_depth-1)}}`
    return {str, keys}
 }
 
 function parseSequence(el, depth, keys) {
-   let str = ""
+   // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
-   // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
-   for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {
-      let parsed = parseCT_child_content(el.element, str, el.content, depth, keys)
+   let str = "", min = el.attrs.minOccurs, max = el.attrs.maxOccurs, repeat = !(min == 1 && max == 1)
+   let parsed = parseCT_child_content(el.element, str, el.content, depth+1, keys)
 
-      str = parsed.str
-      keys = parsed.keys
-   }
+   if (repeat) str += `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n`
+   str += parsed.str.slice(0, -2)
+   keys = parsed.keys
+   if (repeat) str += `\n${indent(depth)}} ]`
+   console.log(str)
 
-   return {str: str.slice(0, -1), keys}
+   return {str, keys}
 }
 
 function parseChoice(el, depth, keys) {
@@ -429,7 +428,7 @@ function parseCT_child_content(parent, str, content, depth, keys) {
             if (parent == "choice") {
                // para uma sequence dentro de uma choice, queremos escolher a sequência inteira e não apenas um dos seus elementos
                // por isso, cria-se um objeto na DSL com uma chave especial que posteriormente é removido na tradução para XML
-               parsed.str = "\t" + parsed.str.replace(/\n\t/g, "\n\t\t").slice(0, -1)
+               parsed.str = "\t" + parsed.str.replace(/\n\t/g, "\n\t\t")
                str += `${indent(depth)}DFXS_TEMP__${++temp_structs}: {\n${parsed.str}\n${indent(depth)}},\n`
             }
             else str += parsed.str + "\n"
