@@ -362,7 +362,6 @@ function parseAll(el, depth, keys) {
 }
 
 function parseSequence(el, depth, keys) {
-   // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
    let str = "", min = el.attrs.minOccurs, max = el.attrs.maxOccurs, repeat = !(min == 1 && max == 1)
@@ -372,30 +371,23 @@ function parseSequence(el, depth, keys) {
    str += parsed.str.slice(0, -2)
    keys = parsed.keys
    if (repeat) str += `\n${indent(depth)}} ]`
-   console.log(str)
 
    return {str, keys}
 }
 
 function parseChoice(el, depth, keys) {
-   let str = ""
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
-   // escolher um dos filhos um nº aleatório de vezes, entre os limites dos atributos max/minOccurs
-   for (let i = 0; i < randomize(el.attrs.minOccurs, el.attrs.maxOccurs); i++) {
-      // usar a primitiva or para fazer exclusividade mútua
-      let new_str = `${indent(depth++)}or() {\n`
+   let str = "", min = el.attrs.minOccurs, max = el.attrs.maxOccurs
+   let repeat = !(min == 1 && max == 1), base_depth = depth + (repeat ? 1 : 0)
+   if (repeat) str += `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n`
+   
+   // usar a primitiva or para fazer exclusividade mútua
+   let parsed = parseCT_child_content(el.element, `${indent(base_depth)}or() {\n`, el.content, base_depth+1, keys)
+   str += parsed.str.slice(0, -2) + `\n${indent(base_depth)}}`
 
-      let parsed = parseCT_child_content(el.element, new_str, el.content, depth, keys)
-      keys = parsed.keys
-
-      if (parsed.str != new_str) {
-         new_str = parsed.str.slice(0, -2) + `\n${indent(--depth)}},\n`
-         str += new_str
-      }
-   }
-
-   return {str: str.slice(0, -2), keys}
+   if (repeat) str += `\n${indent(depth)}} ]`
+   return {str, keys}
 }
 
 function parseCT_child_content(parent, str, content, depth, keys) {
