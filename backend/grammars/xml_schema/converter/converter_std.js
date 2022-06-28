@@ -203,9 +203,9 @@ function parseComplexType(el, depth) {
    for (let i = 0; i < content_len; i++) {
       switch (content[i].element) {
          case "simpleContent": return parseExtensionSC(content[i].content[0], depth)
-         case "group": parsed.content += parseGroup(content[i], depth+1, {}).str.slice(0, -2); break;
+         case "group": parsed.content += parseGroup(content[i], depth+1, {}).str; break;
          case "all": parsed.content += parseAll(content[i], depth+2, {}).str; break;
-         case "sequence": parsed.content += parseSequence(content[i], depth, {}).str; break;
+         case "sequence": parsed.content += parseSequence(content[i], depth+1, {}).str; break;
          case "choice": parsed.content += parseChoice(content[i], depth+1, {}).str; break;
       }
 
@@ -294,45 +294,32 @@ function parseExtensionSC(el, depth) {
 
 function parseGroup(el, depth, keys) {
    if ("ref" in el.attrs) return parseRef(el, depth, keys)
-
-   let str = ""
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
-   // atualizar o mapa de recursividade deste grupo
-   if (el.attrs.name in recursiv.group) recursiv.group[el.attrs.name]++
-   else recursiv.group[el.attrs.name] = 1
-
-   let occurs = recursiv.group[el.attrs.name] > SETTINGS.recursivity.upper ? 0 : randomize(el.attrs.minOccurs, el.attrs.maxOccurs)
-
-   // repetir os filhos um nr aleatório de vezes, entre os limites dos atributos max/minOccurs
-   for (let i = 0; i < occurs; i++) {
-      let parsed
-
-      switch (el.content[0].element) {
-         case "all":
-            parsed = parseAll(el.content[0], depth+2, keys)
-            
-            if (parsed.str.length > 0) {
-               // ajustar a formatação e remover o \n no fim para meter uma vírgula antes
-               parsed.str = parsed.str.replace(/\n\t+/g, "\n" + indent(depth+2)).replace(/\t+}/, indent(depth+1) + "}")
-               parsed.str = `${indent(depth)}DFXS_TEMP__${++temp_structs}: {\n${parsed.str}\n${indent(depth)}},`
-            }
-            break;
-         case "choice": parsed = parseChoice(el.content[0], depth, keys); parsed.str += ","; break;
-         case "sequence": parsed = parseSequence(el.content[0], depth, keys); break;
-      }
-
-      if (parsed.str.length > 0) str += parsed.str + "\n"
-      keys = parsed.keys
-   }
+   let str = "", parsed, min = el.attrs.minOccurs, max = el.attrs.maxOccurs
+   let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
    
-   recursiv.group[el.attrs.name]--
+   switch (el.content[0].element) {
+      case "all":
+         parsed = parseAll(el.content[0], base_depth+2, keys)
+         
+         if (parsed.str.length > 0) {
+            parsed.str = parsed.str.replace(/\n\t+/g, "\n" + indent(base_depth+2)).replace(/\t+}/, indent(base_depth+1) + "}") // ajustar a formatação
+            parsed.str = `${indent(base_depth)}DFXS_TEMP__${++temp_structs}: {\n${parsed.str}\n${indent(base_depth)}}`
+         }
+         break;
+      case "choice": parsed = parseChoice(el.content[0], base_depth, keys); break;
+      case "sequence": parsed = parseSequence(el.content[0], base_depth-1, keys); break;
+   }
+   if (parsed.str.length > 0) str = parsed.str
+
+   if (repeat) str = `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${str}\n${indent(depth)}} ]`
    return {str, keys}
 }
 
 function parseAll(el, depth, keys) {
    let elements = el.content.filter(x => x.element == "element")
-   let elements_str = [], nr_elems = 0, min = el.attrs.minOccurs, max = el.attrs.maxOccurs
+   let elements_str = [], nr_elems = 0, min = el.attrs.minOccurs
 
    elements.forEach(x => {
       // dar parse a cada elemento
@@ -363,14 +350,12 @@ function parseAll(el, depth, keys) {
 
 function parseSequence(el, depth, keys) {
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
+   
+   let min = el.attrs.minOccurs, max = el.attrs.maxOccurs
+   let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
 
-   let str = "", min = el.attrs.minOccurs, max = el.attrs.maxOccurs, repeat = !(min == 1 && max == 1)
-   let parsed = parseCT_child_content(el.element, str, el.content, depth+1, keys)
-
-   if (repeat) str += `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n`
-   str += parsed.str.slice(0, -2)
-   keys = parsed.keys
-   if (repeat) str += `\n${indent(depth)}} ]`
+   let str = parseCT_child_content(el.element, "", el.content, base_depth, keys).slice(0, -2)
+   if (repeat) str = `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${str}\n${indent(depth)}} ]`
 
    return {str, keys}
 }
@@ -378,38 +363,29 @@ function parseSequence(el, depth, keys) {
 function parseChoice(el, depth, keys) {
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
-   let str = "", min = el.attrs.minOccurs, max = el.attrs.maxOccurs
-   let repeat = !(min == 1 && max == 1), base_depth = depth + (repeat ? 1 : 0)
-   if (repeat) str += `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n`
-   
-   // usar a primitiva or para fazer exclusividade mútua
-   let parsed = parseCT_child_content(el.element, `${indent(base_depth)}or() {\n`, el.content, base_depth+1, keys)
-   str += parsed.str.slice(0, -2) + `\n${indent(base_depth)}}`
+   let min = el.attrs.minOccurs, max = el.attrs.maxOccurs
+   let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
 
-   if (repeat) str += `\n${indent(depth)}} ]`
+   // usar a primitiva or para fazer exclusividade mútua
+   let str = parseCT_child_content(el.element, `${indent(base_depth)}or() {\n`, el.content, base_depth+1, keys).slice(0, -2) + `\n${indent(base_depth)}}`
+   if (repeat) str = `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${str}\n${indent(depth)}} ]`
+
    return {str, keys}
 }
 
 function parseCT_child_content(parent, str, content, depth, keys) {
-   // a var choice é para indicar se o último elemento filtrado foi uma choice
-   let choice
-   
    content.forEach(x => {
       let parsed
-      choice = false
 
-      // na string de um <element>, é preciso por tabs e vírgula
+      // na string de um <element>, é preciso por indentação
       if (x.element == "element") {
-         // se ainda não tiver sido gerado nenhum destes elementos, colocar a sua chave no mapa
-         if (!(x.attrs.name in keys)) keys[x.attrs.name] = 1
-
          parsed = parseElement(x, depth, keys, false)
          if (parsed.elem_str.length > 0) str += `${indent(depth)}${parsed.elem_str},\n`
       }
 
       if (x.element == "group") {
          parsed = parseGroup(x, depth, keys)
-         if (parsed.str.length > 0) str += parsed.str
+         if (parsed.str.length > 0) str += parsed.str + ",\n"
       }
 
       // a string de uma <sequence> já vem formatada
@@ -423,7 +399,7 @@ function parseCT_child_content(parent, str, content, depth, keys) {
                parsed.str = "\t" + parsed.str.replace(/\n\t/g, "\n\t\t")
                str += `${indent(depth)}DFXS_TEMP__${++temp_structs}: {\n${parsed.str}\n${indent(depth)}},\n`
             }
-            else str += parsed.str + "\n"
+            else str += parsed.str + ",\n"
          }
       }
 
@@ -431,18 +407,15 @@ function parseCT_child_content(parent, str, content, depth, keys) {
       if (x.element == "choice") {
          parsed = parseChoice(x, depth, keys)
          if (parsed.str.length > 0) str += parsed.str + ",\n"
-         choice = true
       }
 
       if (x.element == "all") {
          parsed = parseAll(x, depth, keys)
          if (parsed.str.length > 0) str += parsed.str + ",\n"
       }
-
-      keys = parsed.keys
    })
 
-   return {str, choice, keys}
+   return str
 }
 
 
