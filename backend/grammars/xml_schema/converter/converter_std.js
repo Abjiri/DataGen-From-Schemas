@@ -208,28 +208,31 @@ function parseComplexType(el, depth) {
 }
 
 function parseAttribute(el, depth) {
-   let attrs = el.attrs
-   let str = normalizeName(attrs.name, "ATTR__", true), value = ""
+   let str = normalizeName(el.attrs.name, "ATTR__", true), value = ""
 
    // parsing dos atributos
-   if (attrs.use == "prohibited") return ""
-   if ("fixed" in attrs) value = attrs.fixed
-   if ("default" in attrs && Math.random() > 0.4) value = attrs.default
+   if (el.attrs.use == "prohibited") return ""
+   if ("fixed" in el.attrs) value = el.attrs.fixed
+   if ("default" in el.attrs) value = el.attrs.default
 
    // se tiver um valor predefinido, verifica se tem "/' dentro para encapsular com o outro
    if (value.length > 0) {
       let qm = chooseQM(value)
-      return indent(depth) + str + qm + value + qm
+      value = qm + value + qm
+
+      if ("default" in el.attrs) str = `if (Math.random() < 0.6) { ${str}${value} }\n${indent(depth)}else { ${str}`
+   }
+   
+   if (!value.length || "default" in el.attrs) {
+      if ("type" in el.attrs) value = parseType(el.attrs.type, depth)
+      else {
+         value = parseSimpleType(el.content[0], ids, depth)
+         ids = value.ids
+         value = value.str
+      }
    }
 
-   if ("type" in attrs) value = parseType(attrs.type, depth)
-   else {
-      value = parseSimpleType(el.content[0], ids, depth)
-      ids = value.ids
-      value = value.str
-   }
-
-   return indent(depth) + str + value
+   return indent(depth) + str + value + ("default" in el.attrs ? " }" : "")
 }
 
 function parseAttributeGroup(el, depth) {
