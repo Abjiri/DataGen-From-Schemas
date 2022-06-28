@@ -19,6 +19,14 @@ const built_in_types = () => {
    return types
 }
 
+// assegurar que todos os elementos têm 1 ocorrência, se não for especificado
+function default_occurs(attrs) {
+   if (!("minOccurs" in attrs || "maxOccurs" in attrs)) {
+      attrs.minOccurs = 1
+      attrs.maxOccurs = 1
+   }
+}
+
 // determinar o nome e prefixo de schema do tipo em questão e o nome da sua base embutida
 /* operacional apenas para tipos da schema local */
 function getTypeInfo(type) {
@@ -82,7 +90,7 @@ function convert(xsd, st, ct, main_elem, user_settings) {
 
 // schemaElem indica se é o <element> é uma coleção ou não
 function parseElement(el, depth, schemaElem) {
-   if ("ref" in el.attrs) return parseRef(el, depth)
+   default_occurs(el.attrs)
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
    let str = "", name = normalizeName(el.attrs.name, "ELEM__", false)
@@ -135,18 +143,6 @@ function parseElementAux(el, name, depth, schemaElem) {
       if (schemaElem) str = `DFXS_TEMP__: {\n${indent(base_depth)}${str}\n${indent(depth)}}`
    }
    return {str, exception}
-}
-
-function parseRef(el, depth) {
-   let ref_el = xsd_content.find(x => x.element == el.element && x.attrs.name == el.attrs.ref)
-
-   ref_el.attrs = {...ref_el.attrs, ...el.attrs}
-   delete ref_el.attrs.ref
-
-   switch (el.element) {
-      case "element": return parseElement(ref_el, depth, false)
-      case "group": return parseGroup(ref_el, depth)
-   }
 }
 
 function parseType(type, depth) {
@@ -269,7 +265,7 @@ function parseExtensionSC(el, depth) {
 }
 
 function parseGroup(el, depth) {
-   if ("ref" in el.attrs) return parseRef(el, depth)
+   default_occurs(el.attrs)
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
    let str = "", parsed, min = el.attrs.minOccurs, max = el.attrs.maxOccurs
@@ -285,7 +281,7 @@ function parseGroup(el, depth) {
          }
          break;
       case "choice": parsed = parseChoice(el.content[0], base_depth); break;
-      case "sequence": parsed = parseSequence(el.content[0], base_depth-1); break;
+      case "sequence": parsed = parseSequence(el.content[0], base_depth); break;
    }
    if (parsed.length > 0) str = parsed
 
@@ -300,9 +296,9 @@ function parseAll(el, depth) {
    elements.forEach(x => {
       let parsed = parseElement(x, depth+1, false) // dar parse a cada elemento
 
-      if (parsed.str.length > 0) {
+      if (parsed.length > 0) {
          nr_elems += x.attrs.maxOccurs // contar o nr de elementos total (tendo em conta maxOccurs de cada um)
-         elements_str.push(`\n${indent(depth+1)}${parsed.str},`) // dar parse a todos os elementos e guardar as respetivas strings num array
+         elements_str.push(`\n${indent(depth+1)}${parsed},`) // dar parse a todos os elementos e guardar as respetivas strings num array
       }
    })
 
@@ -320,19 +316,20 @@ function parseAll(el, depth) {
 }
 
 function parseSequence(el, depth) {
+   default_occurs(el.attrs)
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
    
    let min = el.attrs.minOccurs, max = el.attrs.maxOccurs
    let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
 
    let str = parseCT_child_content(el.element, "", el.content, base_depth).slice(0, -2)
-   console.log(str)
    if (repeat) str = `${indent(depth)}DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${str}\n${indent(depth)}} ]`
 
    return str
 }
 
 function parseChoice(el, depth) {
+   default_occurs(el.attrs)
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
    let min = el.attrs.minOccurs, max = el.attrs.maxOccurs
