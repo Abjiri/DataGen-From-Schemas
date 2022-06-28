@@ -85,39 +85,56 @@ function parseElement(el, depth, schemaElem) {
    if ("ref" in el.attrs) return parseRef(el, depth)
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
-   let str = "", parsed = parseElementAux(el, depth), min = null, max = null
+   let str = "", name = normalizeName(el.attrs.name, "ELEM__", false)
+   let parsed = parseElementAux(el, name, depth, schemaElem), min = null, max = null
+
    if (schemaElem) min = max = 1
    else {
       min = el.attrs.minOccurs
       max = el.attrs.maxOccurs
    }
 
-   if (!("ref" in el.attrs)) str = !parsed.length ? "{ DFXS_EMPTY_XML: true }" : (normalizeName(el.attrs.name, "ELEM__", false) + parsed)
+   if (!parsed.str.length) str = "{ DFXS_EMPTY_XML: true }"
+   else if (!("ref" in el.attrs)) str = (parsed.exception ? "" : name) + parsed.str
    else str = parsed.str
 
    if (min!=1 || max!=1) str = `DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${indent(depth+1)}${str}\n${indent(depth)}} ]`   
    return str
 }
 
-function parseElementAux(el, depth) {
+function parseElementAux(el, name, depth, schemaElem) {
+   let str = "", exception = false, base_depth = depth + (schemaElem ? 1 : 0)
+   let ct = el.content.length > 0 && el.content[0].element == "complexType"
+   
    // parsing dos atributos -----
-   /* if ("abstract" in attrs) */
-   if ("nillable" in el.attrs) {
-      // se "nillable" for true, dar uma probabilidade de 30% de o conteúdo do elemento no XML ser nil
-      if (el.attrs.nillable && Math.random() < 0.3) return "{ DFXS_ATTR__nil: true }"
+   // se "nillable" for true, dar uma probabilidade de 30% de o conteúdo do elemento no XML ser nil
+   if ("nillable" in el.attrs && el.attrs.nillable) {
+      str = `if (Math.random() < 0.3) { ${name}{ DFXS_ATTR__nil: true } }\n${indent(base_depth)}else {${ct ? "\n"+indent(base_depth+1) : " "}${name}`
+      exception = true
    }
    if ("fixed" in el.attrs) return '"' + el.attrs.fixed + '"'
-   if ("default" in el.attrs && Math.random() > 0.4) return '"' + el.attrs.default + '"'
-   if ("type" in el.attrs) return parseType(el.attrs.type, depth)
+   if ("default" in el.attrs) {
+      str = `if (Math.random() < 0.6) { ${name}"${el.attrs.default}" }\n${indent(base_depth)}else {${ct ? "\n"+indent(base_depth+1) : " "}${name}`
+      exception = true
+   }
+   if ("type" in el.attrs) str += parseType(el.attrs.type, exception ? base_depth : depth)
 
    // parsing do conteúdo -----
-   let type = el.content[0]
-   if (type.element == "simpleType") {
-      let parsed = parseSimpleType(type, ids, depth) // a parte relevante do simpleType é o elemento filho (list / restriction / union)
-      ids = parsed.ids
-      return parsed.str
+   if (el.content.length > 0) {
+      let type = el.content[0]
+      if (type.element == "simpleType") {
+         let parsed = parseSimpleType(type, ids, exception ? base_depth : depth) // a parte relevante do simpleType é o elemento filho (list / restriction / union)
+         ids = parsed.ids
+         str += parsed.str
+      }
+      if (type.element == "complexType") str += parseComplexType(type, exception ? base_depth+1 : depth)
    }
-   else return parseComplexType(type, depth)
+
+   if (exception) {
+      str += (ct ? "\n"+indent(base_depth) : " ") + "}"
+      if (schemaElem) str = `DFXS_TEMP__: {\n${indent(base_depth)}${str}\n${indent(depth)}}`
+   }
+   return {str, exception}
 }
 
 function parseRef(el, depth) {
