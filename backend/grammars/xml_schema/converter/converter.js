@@ -4,13 +4,16 @@ let default_prefix = null
 let xsd_content = []
 let simpleTypes = {}
 let complexTypes = {}
+let recursiv = {}
 let SETTINGS = {}
 let ids = 0
 
-// Tabs de indentação
+// tabs de indentação
 const indent = depth => "\t".repeat(depth)
-// Escolher uma QM que não seja usada na própria string
+// escolher uma QM que não seja usada na própria string
 const chooseQM = str => str.includes('"') ? "'" : '"'
+// nomes dos elementos recursivos da schema de um certo tipo
+const recursiveEls = el => Object.keys(recursiv[el])
 
 // criar array com os nomes do tipos embutidos da XML Schema
 const built_in_types = () => {
@@ -25,6 +28,35 @@ function default_occurs(attrs) {
       attrs.minOccurs = 1
       attrs.maxOccurs = 1
    }
+}
+
+// identificar os elementos recursivos da schema
+function checkRecursivity(xsd_content, complexTypes) {
+   let recursiv = {element: {}, complexType: {}, group: {}}
+
+   // complexType
+   for (let t in complexTypes) {
+      if (recursiveElement(complexTypes[t].attrs.name, "element", "type", complexTypes[t].content)) recursiv.complexType[complexTypes[t].attrs.name] = 0
+   }
+
+   // element e group
+   for (let i = 0; i < xsd_content.length; i++) {
+      let el = xsd_content[i]
+      if ("content" in el && recursiveElement(el.attrs.name, el.element, "ref", el.content)) recursiv[el.element][el.attrs.name] = 0
+   }
+
+   return recursiv
+}
+
+// verificar se um elemento concreto da schema é recursivo
+function recursiveElement(name, element, attr, content) {
+   for (let i = 0; i < content.length; i++) {
+       if (content[i].element == element && attr in content[i].attrs && content[i].attrs[attr] == name) return true
+       if (content[i].element != "simpleType" && Array.isArray(content[i].content) && content[i].content.length > 0) {
+           if (recursiveElement(name, element, attr, content[i].content)) return true
+       }
+   }
+   return false
 }
 
 // determinar o nome e prefixo de schema do tipo em questão e o nome da sua base embutida
@@ -73,6 +105,7 @@ function convert(xsd, st, ct, main_elem, user_settings) {
    simpleTypes = st
    complexTypes = ct
    SETTINGS = user_settings
+   recursiv = checkRecursivity(xsd_content, ct)
    ids = 0
 
    let elements = xsd.content.filter(x => x.element == "element")
@@ -90,19 +123,38 @@ function convert(xsd, st, ct, main_elem, user_settings) {
 
 // schemaElem indica se é o <element> é uma coleção ou não
 function parseElement(el, depth, schemaElem) {
+   if ("ref" in el.attrs) return parseRef(el, depth)
+
    default_occurs(el.attrs)
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
+   // atualizar o mapa de recursividade, se for o caso
+   let recursiv_el = null
+   if (recursiveEls("element").includes(el.attrs.name)) recursiv_el = {ref: recursiv.element, key: el.attrs.name}
+   else if ("type" in el.attrs && xsd_content.some(x => x.element == "complexType" && x.attrs.name == el.attrs.type)) {
+      if (recursiveEls("complexType").includes(el.attrs.type)) recursiv_el = {ref: recursiv.complexType, key: el.attrs.type}
+   }
+
+   if (recursiv_el !== null) {
+      // se este novo elemento recursivo ultrapassar a recursividade máxima, não produzir
+      if (recursiv_el.ref[recursiv_el.key] == SETTINGS.recursivity.upper) return ""
+      else {
+         // se o elemento recursivo ainda não tiver cumprido a recursividade mínima, obrigar que seja produzido
+         if (recursiv_el.ref[recursiv_el.key] < SETTINGS.recursivity.lower && !el.attrs.minOccurs) el.attrs.minOccurs = 1
+         recursiv_el.ref[recursiv_el.key]++ 
+      }     
+   }
+
+   let min = el.attrs.minOccurs, max = el.attrs.maxOccurs
+   let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
+
    let str = "", name = normalizeName(el.attrs.name, "ELEM__", false)
-   let parsed = parseElementAux(el, name, depth, schemaElem), min = null, max = null
+   let parsed = parseElementAux(el, name, base_depth, schemaElem)
 
-   min = el.attrs.minOccurs
-   max = el.attrs.maxOccurs
-
-   if (!parsed.str.length) str = "{ DFXS_EMPTY_XML: true }"
-   else str = (parsed.exception ? "" : name) + parsed.str
-
-   if (min!=1 || max!=1) str = `DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${indent(depth+1)}${str}\n${indent(depth)}} ]`   
+   str = !parsed.str.length ? "{ DFXS_EMPTY_XML: true }" : ((parsed.exception ? "" : name) + parsed.str)
+   if (repeat) str = `DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${indent(base_depth)}${str}\n${indent(base_depth-1)}} ]`   
+   
+   if (recursiv_el !== null) recursiv_el.ref[recursiv_el.key]--
    return str
 }
 
@@ -141,6 +193,17 @@ function parseElementAux(el, name, depth, schemaElem) {
    return {str, exception}
 }
 
+function parseRef(el, depth) {
+   let ref_el = xsd_content.find(x => x.element == el.element && x.attrs.name == el.attrs.ref)
+   ref_el.attrs = {...ref_el.attrs, ...el.attrs}
+   delete ref_el.attrs.ref
+
+   switch (el.element) {
+      case "element": return parseElement(ref_el, depth, false)
+      case "group": return parseGroup(ref_el, depth)
+   }
+}
+
 function parseType(type, depth) {
    type = getTypeInfo(type)
 
@@ -169,7 +232,7 @@ function parseComplexType(el, depth) {
       switch (content[i].element) {
          case "simpleContent": return parseExtensionSC(content[i].content[0], depth)
          case "group": parsed.content += parseGroup(content[i], depth+1); break;
-         case "all": parsed.content += parseAll(content[i], depth+2); break;
+         case "all": parsed.content += parseAll(content[i], depth+1); break;
          case "sequence": parsed.content += parseSequence(content[i], depth+1); break;
          case "choice": parsed.content += parseChoice(content[i], depth+1); break;
       }
@@ -261,8 +324,24 @@ function parseExtensionSC(el, depth) {
 }
 
 function parseGroup(el, depth) {
+   if ("ref" in el.attrs) return parseRef(el, depth)
+
    default_occurs(el.attrs)
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
+
+   // atualizar o mapa de recursividade, se for o caso
+   let recursiv_el = null
+   if (recursiveEls("group").includes(el.attrs.name)) recursiv_el = {ref: recursiv.group, key: el.attrs.name}
+
+   if (recursiv_el !== null) {
+      // se este novo elemento recursivo ultrapassar a recursividade máxima, não produzir
+      if (recursiv_el.ref[recursiv_el.key] == SETTINGS.recursivity.upper) return ""
+      else {
+         // se o elemento recursivo ainda não tiver cumprido a recursividade mínima, obrigar que seja produzido
+         if (recursiv_el.ref[recursiv_el.key] < SETTINGS.recursivity.lower && !el.attrs.minOccurs) el.attrs.minOccurs = 1
+         recursiv_el.ref[recursiv_el.key]++ 
+      }     
+   }
 
    let str = "", parsed, min = el.attrs.minOccurs, max = el.attrs.maxOccurs
    let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
@@ -279,33 +358,32 @@ function parseGroup(el, depth) {
       case "choice": parsed = parseChoice(el.content[0], base_depth); break;
       case "sequence": parsed = parseSequence(el.content[0], base_depth); break;
    }
-   if (parsed.length > 0) str = parsed
 
+   if (parsed.length > 0) str = parsed
    if (repeat) str = `${indent(depth)}DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${str}\n${indent(depth)}} ]`
+
+   if (recursiv_el !== null) recursiv_el.ref[recursiv_el.key]--
    return str
 }
 
 function parseAll(el, depth) {
    let elements = el.content.filter(x => x.element == "element")
    let elements_str = [], nr_elems = 0, min = el.attrs.minOccurs
+   let str = "", base_depth = depth + (!min ? 1 : 0)
 
    elements.forEach(x => {
-      let parsed = parseElement(x, depth+1, false) // dar parse a cada elemento
-
+      let parsed = parseElement(x, base_depth+1, false) // dar parse a cada elemento
       if (parsed.length > 0) {
          nr_elems += x.attrs.maxOccurs // contar o nr de elementos total (tendo em conta maxOccurs de cada um)
-         elements_str.push(`\n${indent(depth+1)}${parsed},`) // dar parse a todos os elementos e guardar as respetivas strings num array
+         elements_str.push(`\n${indent(base_depth+1)}${parsed},`) // dar parse a todos os elementos e guardar as respetivas strings num array
       }
    })
+   if (!elements_str.length) return ""
 
-   let str = "", base_depth = depth - (!min ? 0 : 1) 
-   if (!min) str = `${indent(depth-1)}if (Math.random() < 0.3) { missing(100) {empty: true} }\n${indent(depth-1)}else {\n`
+   if (!min) str = `${indent(base_depth-1)}if (Math.random() < 0.3) { missing(100) {empty: true} }\n${indent(base_depth-1)}else {\n`
 
    // usar a primitiva at_least para randomizar a ordem dos elementos
-   str += `${indent(base_depth)}at_least(${nr_elems}) {`
-   if (elements_str.length > 0) str += elements_str.join("").slice(0, -1)
-   else str += `\n${indent(base_depth+1)}empty: true` // se o conteúdo for vazio, colocar uma propriedade filler para usar o missing(100)
-   str += `\n${indent(base_depth)}}`
+   str += `${indent(base_depth)}at_least(${nr_elems}) {${elements_str.join("").slice(0, -1)}\n${indent(base_depth)}}`
 
    if (!min) str += `\n${indent(base_depth-1)}}`
    return str
@@ -330,11 +408,12 @@ function parseChoice(el, depth) {
 
    let min = el.attrs.minOccurs, max = el.attrs.maxOccurs
    let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
+   let str = "", or_str = `${indent(base_depth)}or() {\n`
 
    // usar a primitiva or para fazer exclusividade mútua
-   let str = parseCT_child_content(el.element, `${indent(base_depth)}or() {\n`, el.content, base_depth+1).slice(0, -2) + `\n${indent(base_depth)}}`
+   str = parseCT_child_content(el.element, or_str, el.content, base_depth+1).slice(0, -2) + `\n${indent(base_depth)}}`
+   if (/\t+or\(\) \n/.test(str)) return ""
    if (repeat) str = `${indent(depth)}DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${str}\n${indent(depth)}} ]`
-
    return str
 }
 
