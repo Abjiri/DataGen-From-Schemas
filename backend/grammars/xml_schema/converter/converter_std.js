@@ -96,15 +96,11 @@ function parseElement(el, depth, schemaElem) {
    let str = "", name = normalizeName(el.attrs.name, "ELEM__", false)
    let parsed = parseElementAux(el, name, depth, schemaElem), min = null, max = null
 
-   if (schemaElem) min = max = 1
-   else {
-      min = el.attrs.minOccurs
-      max = el.attrs.maxOccurs
-   }
+   min = el.attrs.minOccurs
+   max = el.attrs.maxOccurs
 
    if (!parsed.str.length) str = "{ DFXS_EMPTY_XML: true }"
-   else if (!("ref" in el.attrs)) str = (parsed.exception ? "" : name) + parsed.str
-   else str = parsed.str
+   else str = (parsed.exception ? "" : name) + parsed.str
 
    if (min!=1 || max!=1) str = `DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${indent(depth+1)}${str}\n${indent(depth)}} ]`   
    return str
@@ -120,7 +116,7 @@ function parseElementAux(el, name, depth, schemaElem) {
       str = `if (Math.random() < 0.3) { ${name}{ DFXS_ATTR__nil: true } }\n${indent(base_depth)}else {${ct ? "\n"+indent(base_depth+1) : " "}${name}`
       exception = true
    }
-   if ("fixed" in el.attrs) return '"' + el.attrs.fixed + '"'
+   if ("fixed" in el.attrs) return {str: '"' + el.attrs.fixed + '"', exception}
    if ("default" in el.attrs) {
       str = `if (Math.random() < 0.6) { ${name}"${el.attrs.default}" }\n${indent(base_depth)}else {${ct ? "\n"+indent(base_depth+1) : " "}${name}`
       exception = true
@@ -345,7 +341,7 @@ function parseChoice(el, depth) {
 function parseCT_child_content(parent, str, content, depth) {
    content.forEach(x => {
       let parsed
-
+      
       // na string de um <element>, é preciso por indentação
       if (x.element == "element") {
          parsed = parseElement(x, depth, false)
@@ -381,7 +377,7 @@ function parseCT_child_content(parent, str, content, depth) {
          if (parsed.length > 0) str += parsed + ",\n"
       }
    })
-
+   
    return str
 }
 
