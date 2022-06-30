@@ -427,7 +427,6 @@ export default {
     async generate() {
       this.send_req = true
       this.choose_schema = false
-      this.tab_format = this.output_mode
       let result, filename = ""
       
       let settings = this.input_mode == "xml" ? this.xml_settings : this.json_settings
@@ -453,7 +452,6 @@ export default {
         let main_schema = this.json_tabs.find(t => t.key == this.json_tab.key)
         filename = main_schema.label
         result = await this.sendGenRequest("json", {schemas: [main_schema, ...other_schemas], settings})
-        console.log(result)
       }
       
       if (result !== undefined) {
@@ -469,6 +467,7 @@ export default {
         }
         else {
           this.grammar_errors = []
+          this.tab_format = this.output_mode
           this.newDataset(result.data, filename)
         }
       }
