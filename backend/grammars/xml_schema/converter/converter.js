@@ -165,12 +165,12 @@ function parseElementAux(el, name, depth, schemaElem) {
    // parsing dos atributos -----
    // se "nillable" for true, dar uma probabilidade de 30% de o conteúdo do elemento no XML ser nil
    if ("nillable" in el.attrs && el.attrs.nillable) {
-      str = `if (Math.random() < 0.3) { ${name}{ DFXS_ATTR__nil: true } }\n${indent(base_depth)}else {${ct ? "\n"+indent(base_depth+1) : " "}${name}`
+      str = `if (Math.random() < ${SETTINGS.prob_nil}) { ${name}{ DFXS_ATTR__nil: true } }\n${indent(base_depth)}else {${ct ? "\n"+indent(base_depth+1) : " "}${name}`
       exception = true
    }
    if ("fixed" in el.attrs) return {str: '"' + el.attrs.fixed + '"', exception}
    if ("default" in el.attrs) {
-      str = `if (Math.random() < 0.6) { ${name}"${el.attrs.default}" }\n${indent(base_depth)}else {${ct ? "\n"+indent(base_depth+1) : " "}${name}`
+      str = `if (Math.random() < ${SETTINGS.prob_default}) { ${name}"${el.attrs.default}" }\n${indent(base_depth)}else {${ct ? "\n"+indent(base_depth+1) : " "}${name}`
       exception = true
    }
    if ("type" in el.attrs) str += parseType(el.attrs.type, exception ? base_depth : depth)
@@ -275,7 +275,7 @@ function parseAttribute(el, depth) {
       let qm = chooseQM(value)
       value = qm + value + qm
 
-      if ("default" in el.attrs) str = `if (Math.random() < 0.6) { ${str}${value} }\n${indent(depth)}else { ${str}`
+      if ("default" in el.attrs) str = `if (Math.random() < ${SETTINGS.prob_default}) { ${str}${value} }\n${indent(depth)}else { ${str}`
    }
    
    if (!value.length || "default" in el.attrs) {
@@ -380,7 +380,7 @@ function parseAll(el, depth) {
    })
    if (!elements_str.length) return ""
 
-   if (!min) str = `${indent(base_depth-1)}if (Math.random() < 0.3) { missing(100) {empty: true} }\n${indent(base_depth-1)}else {\n`
+   if (!min) str = `${indent(base_depth-1)}if (Math.random() < ${SETTINGS.prob_noAll}) { missing(100) {empty: true} }\n${indent(base_depth-1)}else {\n`
 
    // usar a primitiva at_least para randomizar a ordem dos elementos
    str += `${indent(base_depth)}at_least(${nr_elems}) {${elements_str.join("").slice(0, -1)}\n${indent(base_depth)}}`

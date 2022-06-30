@@ -35,9 +35,9 @@
       title="Definições do processo de geração"
       options
       settings
+      more_width
       :valid_settings="valid_settings"
       :visible="settings"
-      :more_width="input_mode!='xml'"
       @close="closeSettings"
       @confirm="confirmSettings"
     >
@@ -207,7 +207,10 @@ export default {
       xml_schema_changes_since_last_gen: false,
       xml_settings: {
         recursivity: {lower: 0, upper: 3},
-        unbounded: 10
+        unbounded: 10,
+        prob_default: 60,
+        prob_nil: 30,
+        prob_noAll: 30
       },
       
       // from JSON schemas
