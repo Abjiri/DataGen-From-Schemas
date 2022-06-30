@@ -6,6 +6,7 @@ let simpleTypes = {}
 let complexTypes = {}
 let recursiv = {}
 let SETTINGS = {}
+let temp_structs = 0
 let ids = 0
 
 // tabs de indentação
@@ -96,7 +97,7 @@ function normalizeName(name, end_prefix, prefixed) {
 }
 
 function convert(xsd, st, ct, main_elem, user_settings) {
-   let depth = 1, temp_structs = 1
+   let depth = 1, new_temp_structs = 1
    let str = `<!LANGUAGE pt>\n{\n${indent(depth)}DFXS__FROM_XML_SCHEMA: true,\n`
    
    // variáveis globais
@@ -106,6 +107,7 @@ function convert(xsd, st, ct, main_elem, user_settings) {
    complexTypes = ct
    SETTINGS = user_settings
    recursiv = checkRecursivity(xsd_content, ct)
+   temp_structs = 0
    ids = 0
 
    let elements = xsd.content.filter(x => x.element == "element")
@@ -116,7 +118,7 @@ function convert(xsd, st, ct, main_elem, user_settings) {
    }
 
    str += "}"
-   str = str.replace(/DFXS_(TEMP|FLATTEN)__/g, (m) => m + temp_structs++)
+   str = str.replace(/DFXS_(TEMP|FLATTEN)__\d+/g, (m) => m.replace(/\d+$/, "") + new_temp_structs++)
    str = str.replace(/{XSD_IDREF}/g, `id{{integer(1,${ids})}}`)
    return str
 }
@@ -152,7 +154,7 @@ function parseElement(el, depth, schemaElem) {
    let parsed = parseElementAux(el, name, base_depth, schemaElem)
 
    str = !parsed.str.length ? "{ DFXS_EMPTY_XML: true }" : ((parsed.exception ? "" : name) + parsed.str)
-   if (repeat) str = `DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${indent(base_depth)}${str}\n${indent(base_depth-1)}} ]`   
+   if (repeat) str = `DFXS_FLATTEN__${++temp_structs}: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${indent(base_depth)}${str}\n${indent(base_depth-1)}} ]`   
    
    if (recursiv_el !== null) recursiv_el.ref[recursiv_el.key]--
    return str
@@ -188,7 +190,7 @@ function parseElementAux(el, name, depth, schemaElem) {
 
    if (exception) {
       str += (ct ? "\n"+indent(base_depth) : " ") + "}"
-      if (schemaElem) str = `DFXS_TEMP__: {\n${indent(base_depth)}${str}\n${indent(depth)}}`
+      if (schemaElem) str = `DFXS_TEMP__${++temp_structs}: {\n${indent(base_depth)}${str}\n${indent(depth)}}`
    }
    return {str, exception}
 }
@@ -343,24 +345,23 @@ function parseGroup(el, depth) {
       }     
    }
 
-   let str = "", parsed, min = el.attrs.minOccurs, max = el.attrs.maxOccurs
-   let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
+   let str = "", parsed, min = el.attrs.minOccurs, max = el.attrs.maxOccurs, repeat = min!=1 || max!=1
    
    switch (el.content[0].element) {
       case "all":
-         parsed = parseAll(el.content[0], base_depth+2)
+         parsed = parseAll(el.content[0], depth+3)
          
          if (parsed.length > 0) {
-            parsed = parsed.replace(/\n\t+/g, "\n" + indent(base_depth+2)).replace(/\t+}/, indent(base_depth+1) + "}") // ajustar a formatação
-            parsed = `${indent(base_depth)}DFXS_TEMP__: {\n${parsed}\n${indent(base_depth)}}`
+            parsed = parsed.replace(/\n\t+/g, "\n" + indent(depth+3)).replace(/\t+}/, indent(depth+2) + "}") // ajustar a formatação
+            parsed = `${indent(depth+1)}DFXS_TEMP__${++temp_structs}: {\n${parsed}\n${indent(depth+1)}}`
          }
          break;
-      case "choice": parsed = parseChoice(el.content[0], base_depth); break;
-      case "sequence": parsed = parseSequence(el.content[0], base_depth); break;
+      case "choice": parsed = parseChoice(el.content[0], depth+1); break;
+      case "sequence": parsed = parseSequence(el.content[0], depth+1); break;
    }
 
    if (parsed.length > 0) str = parsed
-   if (repeat) str = `${indent(depth)}DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${str}\n${indent(depth)}} ]`
+   str = `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ ${repeat ? `'repeat(${min}${min==max ? "" : `,${max}`})': ` : ""}{\n${str}\n${indent(depth)}} ]`
 
    if (recursiv_el !== null) recursiv_el.ref[recursiv_el.key]--
    return str
@@ -392,13 +393,11 @@ function parseAll(el, depth) {
 function parseSequence(el, depth) {
    default_occurs(el.attrs)
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
-   
-   let min = el.attrs.minOccurs, max = el.attrs.maxOccurs
-   let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
 
-   let str = parseCT_child_content(el.element, "", el.content, base_depth).slice(0, -2)
-   if (repeat) str = `${indent(depth)}DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${str}\n${indent(depth)}} ]`
+   let min = el.attrs.minOccurs, max = el.attrs.maxOccurs, repeat = min!=1 || max!=1
 
+   let str = parseCT_child_content(el.element, "", el.content, depth+1).slice(0, -2)
+   str = `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ ${repeat ? `'repeat(${min}${min==max ? "" : `,${max}`})': ` : ""}{\n${str}\n${indent(depth)}} ]`
    return str
 }
 
@@ -406,14 +405,13 @@ function parseChoice(el, depth) {
    default_occurs(el.attrs)
    if (el.attrs.maxOccurs == "unbounded") el.attrs.maxOccurs = SETTINGS.unbounded
 
-   let min = el.attrs.minOccurs, max = el.attrs.maxOccurs
-   let repeat = min!=1 || max!=1, base_depth = depth + (repeat ? 1 : 0)
-   let str = "", or_str = `${indent(base_depth)}or() {\n`
+   let min = el.attrs.minOccurs, max = el.attrs.maxOccurs, repeat = min!=1 || max!=1
+   let str = "", or_str = `${indent(depth+1)}or() {\n`
 
    // usar a primitiva or para fazer exclusividade mútua
-   str = parseCT_child_content(el.element, or_str, el.content, base_depth+1).slice(0, -2) + `\n${indent(base_depth)}}`
+   str = parseCT_child_content(el.element, or_str, el.content, depth+2).slice(0, -2) + `\n${indent(depth+1)}}`
    if (/\t+or\(\) \n/.test(str)) return ""
-   if (repeat) str = `${indent(depth)}DFXS_FLATTEN__: [ 'repeat(${min}${min==max ? "" : `,${max}`})': {\n${str}\n${indent(depth)}} ]`
+   str = `${indent(depth)}DFXS_FLATTEN__${++temp_structs}: [ ${repeat ? `'repeat(${min}${min==max ? "" : `,${max}`})': ` : ""}{\n${str}\n${indent(depth)}} ]`
    return str
 }
 
@@ -440,7 +438,7 @@ function parseCT_child_content(parent, str, content, depth) {
                // para uma sequence dentro de uma choice, queremos escolher a sequência inteira e não apenas um dos seus elementos
                // por isso, cria-se um objeto na DSL com uma chave especial que posteriormente é removido na tradução para XML
                parsed = "\t" + parsed.replace(/\n\t/g, "\n\t\t")
-               str += `${indent(depth)}DFXS_TEMP__: {\n${parsed}\n${indent(depth)}},\n`
+               str += `${indent(depth)}DFXS_TEMP__${++temp_structs}: {\n${parsed}\n${indent(depth)}},\n`
             }
             else str += parsed + ",\n"
          }
