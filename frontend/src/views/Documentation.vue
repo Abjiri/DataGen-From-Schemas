@@ -578,6 +578,65 @@ Isto é redundante se o valor de retorno já for uma <i>string</i>, mas pode ser
             <div class="col-md-2">
                 <div class="cell">
                     <div class="propertyname">
+                        language 
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="type">
+                        <code>String</code>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="cell">
+                    Nenhum
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="cell">
+                    <div class="description">
+                        Gera a abreviatura de uma língua aleatória.<br/>
+                        Exemplo: language() = "pt"<br/>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row margin-0">
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="propertyname">
+                        language 
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="type">
+                        <code>String</code>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="cell">
+                    Len:: <code>Integer</code>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="cell">
+                    <div class="description">
+                        Gera a abreviatura de uma língua aleatória, com comprimento Len. As abreviaturas consideradas têm todas 2 ou 5 caracteres, por isso Len deve ser um destes valores. Caso contrário, o argumento é ignorado e é retornada uma abreviatura aleatória.<br/>
+                        Exemplo1: language(2) = "fr"<br/>
+                        Exemplo2: language(5) = "it-ch"<br/>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row margin-0">
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="propertyname">
                         letter 
                     </div>
                 </div>
@@ -620,7 +679,7 @@ Isto é redundante se o valor de retorno já for uma <i>string</i>, mas pode ser
             </div>
             <div class="col-md-3">
                 <div class="cell">
-                        Type:: <code>String</code>
+                    Type:: <code>String</code>
                 </div>
             </div>
             <div class="col-md-5">
@@ -1058,6 +1117,128 @@ Isto é redundante se o valor de retorno já for uma <i>string</i>, mas pode ser
                         Exemplo1: time("hh:mm:ss", 12, false, "13:30:00", "15:15:15") = "02:18:08 PM" <br/>
                         Exemplo2: time("hh:mm:ss", 24, true, "13:30:00", "15:15:15") = "14h 43min 03s" <br/>
                         Exemplo3: time("hh:mm", 24, true, "13:30:00", "15:15:15") = "13h 39min"
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row margin-0">
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="propertyname">
+                        xsd_date
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="type">
+                        <code>String</code>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="cell">
+                        Min:: <code>String</code>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="cell">
+                    <div class="description">
+                        Gera um valor do tipo de dados <code>date</code>, nativo de <i>XML Schema</i>, correspondente a uma data.<br/>
+                        O argumento corresponde ao limite inferior do valor deve ser gerado, e deve estar no formato em questão: "YYYY-MM-DD".<br/>
+                        Exemplo: xsd_date("1999-08-26") = "2009-09-15"
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row margin-0">
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="propertyname">
+                        xsd_date
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="type">
+                        <code>String</code>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="cell">
+                        Min:: <code>String</code>,<br>
+                        Max:: <code>String</code>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="cell">
+                    <div class="description">
+                        Gera um valor do tipo de dados <code>date</code>, nativo de <i>XML Schema</i>, correspondente a uma data.<br/>
+                        Os argumentos correspondem aos limites entre os quais o valor deve ser gerado, e devem estar no formato em questão: "YYYY-MM-DD".<br/>
+                        Exemplo: xsd_date("2012-06-30", "2020-03-12") = "2018-05-29"
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row margin-0">
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="propertyname">
+                        xsd_dateTime
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="type">
+                        <code>String</code>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="cell">
+                        Min:: <code>String</code>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="cell">
+                    <div class="description">
+                        Gera um valor do tipo de dados <code>dateTime</code>, nativo de <i>XML Schema</i>, correspondente a uma data e hora.<br/>
+                        O argumento corresponde ao limite inferior do valor deve ser gerado, e deve estar no formato em questão: "YYYY-MM-DDThh:mm:ss".<br/>
+                        Exemplo: xsd_dateTime("1950-01-06T12:12:12") = "1987-11-13T04:56:56"
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row margin-0">
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="propertyname">
+                        xsd_dateTime
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="cell">
+                    <div class="type">
+                        <code>String</code>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="cell">
+                        Min:: <code>String</code>,<br>
+                        Max:: <code>String</code>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="cell">
+                    <div class="description">
+                        Gera um valor do tipo de dados <code>dateTime</code>, nativo de <i>XML Schema</i>, correspondente a uma data e hora.<br/>
+                        Os argumentos correspondem aos limites entre os quais o valor deve ser gerado, e devem estar no formato em questão: "YYYY-MM-DDThh:mm:ss".<br/>
+                        Exemplo: xsd_dateTime("2020-01-06T20:30:00","2020-01-07T05:00:00") = "2020-01-06T23:07:10"
                     </div>
                 </div>
             </div>
