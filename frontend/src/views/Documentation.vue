@@ -620,7 +620,7 @@ Isto é redundante se o valor de retorno já for uma <i>string</i>, mas pode ser
             </div>
             <div class="col-md-3">
                 <div class="cell">
-                    Len:: <code>Integer</code>
+                    *Len:: <code>Integer</code>
                 </div>
             </div>
             <div class="col-md-5">
