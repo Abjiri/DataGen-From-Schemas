@@ -2180,7 +2180,7 @@ Isto é redundante se o valor de retorno já for uma <i>string</i>, mas pode ser
             <div class="col-md-2">
                 <div class="cell">
                     <div class="type">
-                        <code>Object</code>
+                        <code>String</code>
                     </div>
                 </div>
             </div>
@@ -2238,7 +2238,7 @@ Isto é redundante se o valor de retorno já for uma <i>string</i>, mas pode ser
             <div class="col-md-2">
                 <div class="cell">
                     <div class="type">
-                        <code>Object</code>
+                        <code>String</code>
                     </div>
                 </div>
             </div>
@@ -2802,7 +2802,7 @@ Isto é redundante se o valor de retorno já for uma <i>string</i>, mas pode ser
             <div class="col-md-2">
                 <div class="cell">
                     <div class="type">
-                        <code>Object</code>
+                        <code>String</code>
                     </div>
                 </div>
             </div>
