@@ -95,10 +95,7 @@ function normalizeName(name, end_prefix, prefixed) {
    return ((!prefixed && prefix == "DFXS_") ? "" : (prefix + end_prefix)) + name + ": "
 }
 
-function convert(xsd, st, ct, datagen_lang, main_elem, user_settings) {
-   let depth = 1, new_temp_structs = 1
-   let str = `<!LANGUAGE ${datagen_lang}>\n{\n${indent(depth)}DFXS__FROM_XML_SCHEMA: true,\n`
-   
+function convert(xsd, st, ct, main_elem, user_settings) {
    // variáveis globais
    default_prefix = xsd.prefix
    xsd_content = xsd.content
@@ -107,6 +104,9 @@ function convert(xsd, st, ct, datagen_lang, main_elem, user_settings) {
    SETTINGS = user_settings
    recursiv = checkRecursivity(xsd_content, ct)
    temp_structs = 0
+
+   let depth = 1, new_temp_structs = 1
+   let str = `<!LANGUAGE ${SETTINGS.datagen_language}>\n{\n${indent(depth)}DFXS__FROM_XML_SCHEMA: true,\n`
 
    let elements = xsd.content.filter(x => x.element == "element")
    if (!elements.length) str += indent(depth) + "DFXS_EMPTY_XML: true\n"

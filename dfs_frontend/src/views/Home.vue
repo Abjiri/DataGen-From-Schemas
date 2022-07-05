@@ -210,7 +210,8 @@ export default {
         unbounded: 10,
         prob_default: 60,
         prob_nil: 30,
-        prob_noAll: 30
+        prob_noAll: 30,
+        datagen_language: "pt"
       },
       
       // from JSON schemas
@@ -224,7 +225,8 @@ export default {
         random_props: false,
         extend_objectProperties: "OR",
         extend_prefixItems: "OR",
-        extend_schemaProperties: "OR"
+        extend_schemaProperties: "OR",
+        datagen_language: "pt"
       },
 
       // datasets produzidos

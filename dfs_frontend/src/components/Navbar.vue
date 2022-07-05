@@ -22,6 +22,7 @@
                 <p>Estas rotas retornam um objeto JSON com o dataset no formato indicado, dado em forma de string, e o respetivo modelo da DSL do DataGen, gerados a partir de uma schema XML.</p>
                 <p>O corpo do pedido deve ter apenas três propriedades: <b>schema</b>, <b>element</b> e <b>settings</b>, sendo que a <b>schema</b> deve estar em forma de string e <b>element</b> é o elemento-raiz da schema que se pretende gerar. As definições devem ser enviadas num objeto com as seguintes propriedades:</p>
                 <ul style="font-size: 14px">
+                    <li><b>datagen_language</b> - língua dos resultados de funções (com suporte de datasets) do DataGen; deve ser "pt" (português) ou "en" (inglês).</li>
                     <li><b>recursivity</b> - objeto com os limites de recursividade, deve possuir as seguintes propriedades:
                         <ul>
                             <li><b>lower</b> - limite inferior de recursividade; deve ser um inteiro não-negativo.</li>
@@ -42,6 +43,7 @@
                 <p>Estas rotas retornam um objeto JSON com o dataset no formato indicado, dado em forma de string, e o respetivo modelo da DSL do DataGen, gerados a partir de uma schema JSON.</p>
                 <p>O corpo do pedido deve ter apenas três propriedades: <b>main_schema</b>, <b>other_schemas</b> e <b>settings</b>, sendo que <b>main_schema</b> é a schema a partir da qual se pretende gerar o dataset, <b>other_schemas</b> é um array com as restantes schemas e tanto a <b>main_schema</b> como as restantes devem estar em forma de objeto JSON. As definições devem ser enviadas num objeto com as seguintes propriedades:</p>
                 <ul style="font-size: 14px">
+                    <li><b>datagen_language</b> - língua dos resultados de funções (com suporte de datasets) do DataGen; deve ser "pt" (português) ou "en" (inglês).</li>
                     <li><b>recursivity</b> - objeto com os limites de recursividade, deve possuir as seguintes propriedades:
                         <ul>
                             <li><b>lower</b> - limite inferior de recursividade; deve ser um inteiro não-negativo.</li>

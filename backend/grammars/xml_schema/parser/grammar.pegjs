@@ -551,7 +551,7 @@
   }
 }
 
-DSL_text = ws l:datagen_lang? dec:XML_declaration xsd:schema comments { return {xml_declaration: dec, xsd, simpleTypes, complexTypes, unbounded_min, datagen_lang: l!==null ? l : "pt"} }
+DSL_text = ws dec:XML_declaration xsd:schema comments { return {xml_declaration: dec, xsd, simpleTypes, complexTypes, unbounded_min} }
 
 ws "whitespace" = [ \t\n\r]*
 ws2 = [ \t\n\r]+
@@ -1157,7 +1157,6 @@ close_comment = "-->"
 
 // ----- Tipo DataGen -----
 
-datagen_lang = "<!--datagen:language=" lang:("pt" / "en") "-->" ws {return lang}
 datagen_comment = "<!--datagen:" func:datagen_func args:datagen_args? "-->" ws {return {element: "datagen", ...func, args: args!==null ? args : "()"}}
 datagen_func = datagen_boolean / datagen_integer / datagen_float / datagen_string
 
