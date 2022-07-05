@@ -512,7 +512,7 @@ module.exports = /*
         peg$c329 = peg$classExpectation([["0", "9"], ["a", "f"]], false, true),
         peg$c330 = "_datagen",
         peg$c331 = peg$literalExpectation("_datagen", false),
-        peg$c332 = function(key, func, args) {return {key, value: {...func, args: args!==null ? args : "()"}}},
+        peg$c332 = function(key, func, args) {return {key, value: {...func, args: args!==null ? args.replace(/'/g, '"') : "()"}}},
         peg$c333 = function(func) {return {func, type: "boolean"}},
         peg$c334 = "index",
         peg$c335 = peg$literalExpectation("index", false),

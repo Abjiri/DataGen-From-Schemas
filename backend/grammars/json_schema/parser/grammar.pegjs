@@ -298,7 +298,7 @@ HEXDIG = [0-9a-f]i
 
 // ---------- Keyword datagen ----------
 
-datagen_keyword = QM key:"_datagen" QM name_separator QM func:datagen_func args:datagen_args? QM {return {key, value: {...func, args: args!==null ? args : "()"}}}
+datagen_keyword = QM key:"_datagen" QM name_separator QM func:datagen_func args:datagen_args? QM {return {key, value: {...func, args: args!==null ? args.replace(/'/g, '"') : "()"}}}
 
 datagen_func = datagen_boolean / datagen_integer / datagen_float / datagen_string
 

@@ -39,7 +39,7 @@ pretenda.</p>
             <li><i>Array</i></li>
             <li>Boleano</li>
             <li>null</li>
-            <li>Objeto DSL</li>
+            <li id="moustaches">Objeto DSL</li>
             <li>Função "Moustache"</li>
         </ul>
     </div>
@@ -97,7 +97,7 @@ Isto é redundante se o valor de retorno já for uma <i>string</i>, mas pode ser
                 :options="cmOption"
             />
             <br/>
-        <p>De seguida, estão explícitas todas as funções de interpolação que se encontram atualmente disponíveis (os argumentos que têm um asterisco podem ser referenciados localmente através da chave <code>this</code>).</p>
+        <p id="gen_moustaches">De seguida, estão explícitas todas as funções de interpolação que se encontram atualmente disponíveis (os argumentos que têm um asterisco podem ser referenciados localmente através da chave <code>this</code>).</p>
     </div>
     <br>
     <h5>Funções de geração espontânea:</h5>
@@ -1573,7 +1573,7 @@ Isto é redundante se o valor de retorno já for uma <i>string</i>, mas pode ser
                 <div class="cell">
                     <div class="description">
                         Gera uma string do tipo de dados textual nativo de <i>XML Schema</i> indicado, com um comprimento entre Min e Max.<br/>
-                        O primeiro argumento tem de ser um dos seguintes tipos: <code>ENTITY</code>, <code>Name</code>, <code>NCName</code>, <code>NMTOKEN</code>, <code>normalizedString</code>, <code>NOTATION</code>, <code>QName</code>, <code>string</code> ou <code>token</code>.<br/>
+                        <span id="dataset_moustaches">O primeiro argumento tem de ser um dos seguintes tipos: <code>ENTITY</code>, <code>Name</code>, <code>NCName</code>, <code>NMTOKEN</code>, <code>normalizedString</code>, <code>NOTATION</code>, <code>QName</code>, <code>string</code> ou <code>token</code>.</span><br/>
                         Exemplo: xsd_string("normalizedString", 10, 15) = "pkqPGRh lZK4"
                     </div>
                 </div>

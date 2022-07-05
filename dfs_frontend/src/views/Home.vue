@@ -46,7 +46,7 @@
     </Modal>
 
     <Modal
-      :key="dataset_tab"
+      :key="created_datasets"
       title="Modelo intermédio gerado na DSL do DataGen"
       more_width
       :model="model"
@@ -232,7 +232,7 @@ export default {
       // datasets produzidos
       dataset_tabs: [{ label: "", key: "dataset_1", dataset: "", model: "", filename: "", format: "" }],
       dataset_tab: "dataset_1",
-      created_datasets: 1,
+      created_datasets: 0,
 
       // modal de settings
       settings: false,
@@ -281,6 +281,9 @@ export default {
 
       this.dataset_tabs = [{ label: "", key: "dataset_1", dataset: "", model: "", filename: "", format: "" }]
       this.dataset_tab = "dataset_1"
+      this.created_datasets = 0
+
+      this.grammar_errors = []
     })
   },
   computed: {
@@ -535,6 +538,7 @@ export default {
     newDataset(result, filename) {
       let index = this.dataset_tabs.findIndex(t => t.key == this.dataset_tab)
       let tab = this.dataset_tabs[index]
+      let key = "dataset_" + ++this.created_datasets
 
       if (!tab.dataset.length) {
         tab.label = tab.filename = filename
@@ -543,8 +547,6 @@ export default {
         tab.format = this.output_mode
       }
       else {
-        this.created_datasets++
-        let key = "dataset_" + this.created_datasets
         this.$refs.tab.addTab({label: filename, key, ...result, filename, format: this.output_mode})
         this.dataset_tab = key
       }
