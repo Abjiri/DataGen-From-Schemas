@@ -72,7 +72,7 @@
                                 </li>
                             </ul>
                             <br>
-                            <v-img src="../assets/example_xml.png" contain @click="zoom('../assets/example_xml.png')"/>
+                            <v-img src="../assets/example_xml.png" contain @click="pic_dialog=true"/>
                         </v-card-text>
                     </v-card>
                 </v-tab-item>
@@ -104,7 +104,7 @@
                                 </li>
                             </ul>
                             <br>
-                            <v-img src="../assets/example_json.png" contain @click="zoom('../assets/example_json.png')"/>
+                            <v-img src="../assets/example_json.png" contain @click="pic_dialog=true"/>
                         </v-card-text>
                     </v-card>
                 </v-tab-item>
@@ -250,6 +250,9 @@ export default {
     props: {
         format: String
     },
+    watch: {
+        datagen_tab() {console.log(this.datagen_tab)}
+    },
     data() {
         return {
             get token() { return localStorage.getItem("token") },
@@ -261,7 +264,6 @@ export default {
             pic_dialog: false,
             api_tab: "xml",
             datagen_tab: "xml",
-            zoomed_pic: "",
 
             get no_input() { return localStorage.getItem("no_input") },
             new_format: "",
@@ -276,10 +278,6 @@ export default {
     },
     methods: {
         color(type) { return `var(--${this.format.toLowerCase()}-${type})` },
-        zoom(src) {
-            this.zoomed_pic = src
-            this.pic_dialog = true
-        },
         update(format) {
             if (this.no_input == true) { this.emitChange(format) }
             else {
