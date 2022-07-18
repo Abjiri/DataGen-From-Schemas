@@ -6191,15 +6191,6 @@ module.exports = /*
             s1 = peg$FAILED;
             if (peg$silentFails === 0) { peg$fail(peg$c38); }
           }
-          if (s1 === peg$FAILED) {
-            if (input.substr(peg$currPos, 10) === peg$c115) {
-              s1 = peg$c115;
-              peg$currPos += 10;
-            } else {
-              s1 = peg$FAILED;
-              if (peg$silentFails === 0) { peg$fail(peg$c116); }
-            }
-          }
         }
       }
       if (s1 !== peg$FAILED) {
@@ -6221,6 +6212,15 @@ module.exports = /*
       } else {
         s1 = peg$FAILED;
         if (peg$silentFails === 0) { peg$fail(peg$c340); }
+      }
+      if (s1 === peg$FAILED) {
+        if (input.substr(peg$currPos, 10) === peg$c115) {
+          s1 = peg$c115;
+          peg$currPos += 10;
+        } else {
+          s1 = peg$FAILED;
+          if (peg$silentFails === 0) { peg$fail(peg$c116); }
+        }
       }
       if (s1 !== peg$FAILED) {
         peg$savedPos = s0;

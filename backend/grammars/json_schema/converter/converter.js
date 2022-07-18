@@ -96,8 +96,10 @@ function parseType(json, depth, arr_offset) {
         let keys = Object.keys(json.type[type])
         if (keys.length == 1 || (type == "number" && keys.length == 2 && keys.includes("integer"))) return predefinedValue(json.type[type].default)
     }
-    if ("_datagen" in json) {
-        if (type == json._datagen.type || (type == "number" && json._datagen.type == "integer")) return "'{{" + json._datagen.func + json._datagen.args + "}}'"
+    if ("_datagen" in json.type[type]) {
+        let datagen = json.type[type]._datagen
+        if ("integer" in json.type[type]) datagen.args = "(" + lcm_two_numbers(1, parseFloat(datagen.args.slice(1,-1))) + ")"
+        return "'{{" + datagen.func + datagen.args + "}}'"
     }
 
     if (type == "object") value = parseObjectType(clone(json.type.object), false, depth)

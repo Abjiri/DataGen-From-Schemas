@@ -303,8 +303,8 @@ datagen_keyword = QM key:"_datagen" QM name_separator QM func:datagen_func args:
 datagen_func = datagen_boolean / datagen_integer / datagen_float / datagen_string
 
 datagen_boolean = func:"boolean" {return {func, type: "boolean"}}
-datagen_integer = func:("index"/"integerOfSize"/"integer"/"multipleOf") {return {func, type: "integer"}}
-datagen_float = func:"float" {return {func, type: "number"}}
+datagen_integer = func:("index"/"integerOfSize"/"integer") {return {func, type: "integer"}}
+datagen_float = func:("float"/"multipleOf") {return {func, type: "number"}}
 datagen_string = func:("date"/"formattedInteger"/"formattedFloat"/"guid"/"hexBinary"/"language"/"letter"/"lorem"/"objectID"/"pattern"/"position"/"pt_phone_number"/"stringOfSize"/"time"/"xsd_dateTime"/"xsd_date"/"xsd_duration"/"xsd_gDay"/"xsd_gMonthDay"/"xsd_gMonth"/"xsd_gYearMonth"/"xsd_gYear"/"xsd_string"/"actor"/"animal"/"brand"/"buzzword"/"capital"/"car_brand"/"continent"/"country"/"cultural_center"/"firstName"/"fullName"/"gov_entity"/"hacker"/"job"/"month"/"musician"/"nationality"/"political_party_abbr"/"political_party_name"/"pt_businessman"/"pt_city"/"pt_county"/"pt_district"/"pt_entity_abbr"/"pt_entity_name"/"pt_parish"/"pt_politician"/"pt_public_figure"/"pt_top100_celebrity"/"religion"/"soccer_club"/"soccer_player"/"sport"/"surname"/"top100_celebrity"/"weekday"/"writer") {return {func, type: "string"}}
 
 datagen_args = "(" datagen_args_content? datagen_args_close ws {return text()}
