@@ -351,7 +351,6 @@ export default {
         else this.json_tab = value
       }
     },
-    json_tab_content() { return this.json_tabs.find(t => t.key == this.json_tab.key).content },
     output_key() { return this.tab_format + "_" + this.dataset_tab },
     dataset() { return this.dataset_tabs.find(t => t.key == this.dataset_tab).dataset },
     filename() { return this.dataset_tabs.find(t => t.key == this.dataset_tab).filename },

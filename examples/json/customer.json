@@ -2,8 +2,9 @@
   "$id": "https://datagen.di.uminho.pt/schemas/customer",
   "type": "object",
   "properties": {
-    "first_name": { "type": "string" },
-    "last_name": { "type": "string" },
+    "first_name": { "type": "string", "_datagen": "firstName" },
+    "last_name": { "type": "string", "_datagen": "surname" },
+    "contact": { "type": "integer", "_datagen": "integerOfSize(9)" },
     "shipping_address": { "$ref": "/schemas/address" },
     "billing_address": { "$ref": "/schemas/address" }
   },

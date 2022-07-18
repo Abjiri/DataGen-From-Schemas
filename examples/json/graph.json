@@ -1,18 +1,18 @@
 {
-	"$id": "https://datagen.di.uminho.pt/schemas/grafo",
+	"$id": "https://datagen.di.uminho.pt/schemas/graph",
     "type": "object",
     "properties": {
-    	"nodos": {
+    	"nodes": {
             "type": "array",
             "minItems": 100,
             "maxItems": 100,
-            "items": { "$ref": "/schemas/nodo" }
+            "items": { "$ref": "/schemas/node" }
         },
-        "ligacoes": {
+        "links": {
             "type": "array",
             "minItems": 2000,
             "maxItems": 2000,
-            "items": { "$ref": "/schemas/ligacao" }
+            "items": { "$ref": "/schemas/link" }
         }
     }
 }

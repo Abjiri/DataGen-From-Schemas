@@ -3,9 +3,9 @@
   "type": "object",
   "properties": {
     "street_address": { "type": "string" },
-    "city": { "type": "string" },
-    "state": { "type": "string" }
+    "parish": { "type": "string", "_datagen": "pt_parish" },
+    "city": { "type": "string", "_datagen": "pt_city" }
   },
   "additionalProperties": false,
-  "required": ["street_address", "city", "state"]
+  "required": ["street_address", "parish", "city"]
 }
