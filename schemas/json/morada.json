@@ -1,0 +1,11 @@
+{
+  "$id": "https://datagen.di.uminho.pt/schemas/morada",
+  "type": "object",
+  "properties": {
+    "rua": { "type": "string" },
+    "freguesia": { "type": "string", "_datagen": "pt_parish" },
+    "cidade": { "type": "string", "_datagen": "pt_city" }
+  },
+  "additionalProperties": false,
+  "required": ["rua", "freguesia", "cidade"]
+}

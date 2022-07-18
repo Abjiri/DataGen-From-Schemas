@@ -1,0 +1,11 @@
+{
+  "$id": "https://datagen.di.uminho.pt/schemas/produto",
+  "type": "object",
+  "properties": {
+    "codigo": { "type": "integer", "_datagen": "integerOfSize(10)" },
+    "nome": { "type": "string" },
+    "preco": { "type": "number" },
+    "stock": { "type": "integer" }
+  },
+  "required": ["codigo", "nome", "preco", "stock"]
+}

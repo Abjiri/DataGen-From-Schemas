@@ -563,7 +563,7 @@ function parseArrayType(json, depth) {
     else {
         let convertItem = x => {
             if (x == "null") return x
-            if (/^'(#\/|(https:\/\/datagen.di.uminho.pt)?\/json-schemas)/.test(x)) return x.replace(/{{/g, "' + gen.").replace(/}}/g, " + '")
+            if (/^'(#\/|(https:\/\/datagen.di.uminho.pt)?\/schemas)/.test(x)) return x.replace(/{{/g, "' + gen.").replace(/}}/g, " + '")
             if (/^'{{/.test(x)) return "gen." + x.slice(3,-3)
             if (/^gen => { return/.test(x)) return x.split("return ")[1].slice(0,-2)
             if (/^gen => { \/\/numeric/.test(x)) return x.split("gen => { //numeric")[1].replace(/\n/g, "\n\t\t")

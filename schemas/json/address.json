@@ -1,5 +1,5 @@
 {
-  "$id": "https://datagen.di.uminho.pt/json-schemas/address",
+  "$id": "https://datagen.di.uminho.pt/schemas/address",
   "type": "object",
   "properties": {
     "street_address": { "type": "string" },

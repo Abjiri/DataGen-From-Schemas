@@ -54,7 +54,7 @@
       @close="show_model=false"
       @save_model="save_model=true"
     >
-      <Codemirror type="output" mode="javascript" :text="model" :modal="true" @changed="onChangeModel"/>
+      <Codemirror :key="dataset_tab" type="output" mode="javascript" :text="model" :modal="true" @changed="onChangeModel"/>
     </Modal>
     
     <Modal
@@ -540,7 +540,7 @@ export default {
       let tab = this.dataset_tabs[index]
       let key = "dataset_" + ++this.created_datasets
 
-      if (!tab.dataset.length) {
+      if (this.no_datasets || !tab.dataset.length) {
         tab.label = tab.filename = filename
         tab.dataset = result.dataset
         tab.model = result.model
@@ -571,6 +571,7 @@ export default {
 
 .height-wrap {
   height: calc( 100vh - 64px ) !important;
+  max-width: 100%;
   overflow: hidden !important;
 }
 

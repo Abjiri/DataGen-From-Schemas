@@ -1,0 +1,11 @@
+{
+  	"$id": "https://datagen.di.uminho.pt/schemas/nodo",
+  	"type": "object",
+  	"properties": {
+    	"id": { "type": "integer", "_datagen": "index" },
+    	"nome": { "type": "string" },
+    	"valor": { "type": "integer" }
+  	},
+    "additionalProperties": false,
+    "required": ["id", "nome", "valor"]
+}

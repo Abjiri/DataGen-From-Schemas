@@ -51,7 +51,7 @@
                                 <li>é possível personalizar o conteúdo de elementos <b>&#60;attribute&#62;</b> ou <b>&#60;element&#62;</b>;</li>
                                 <li>o tipo-base do elemento em questão deve ser obrigatoriamente um tipo simples (<b>simpleType</b>). Não é possível usar funções de interpolação em elementos com tipos complexos (<b>complexType</b>);</li>
                                 <li>a função utilizada substitui o conteúdo do elemento (definido através do atributo <b>type</b> ou de um elemento-filho <b>simpleType</b>), mas os seus atributos continuam em vigência - atributos como <b>nillable</b>, <b>fixed</b>, <b>default</b> e <b>use</b> serão considerados na mesma durante a geração do modelo de dados;</li>
-                                <li>a função pretendida deve aparecer <b>em comentário</b> <u>dentro do elemento em questão</u>, antes de qualquer elemento-filho;</li>
+                                <li>a função pretendida deve aparecer <b>em comentário</b> <u>dentro do elemento em questão</u>, <b>antes de qualquer elemento-filho</b>;</li>
                                 <li>deve aparecer no seguinte formato: <code>&#60;!--datagen:[nome_função][argumentos]--&#62;</code>, por exemplo:
                                     <ul>
                                         <li><code>&#60;!--datagen:firstName()--&#62;</code></li>
