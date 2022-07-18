@@ -46,6 +46,42 @@
     </Modal>
 
     <Modal
+      title="Estruturação de uma schema complexa"
+      more_width
+      :visible="tips"
+      @close="tips=false"
+    >
+      <h3>Identificação de schemas (<a href="https://json-schema.org/understanding-json-schema/structuring.html#id" target="_blank">$id</a>)</h3>
+      <ul>
+        <li><b>URI absoluto:</b> <code>https://datagen.di.uminho.pt/schemas/<span style="color:red">{nome_schema}</span></code></li>
+        <li><b>URI relativo:</b> <code>/schemas/<span style="color:red">{nome_schema}</span></code></li>
+      </ul>
+      <br>
+      <h3>Referenciação de schemas ($ref)</h3>
+      <ul>
+        <li>
+          <b>Schema com $id:</b> 
+          <ul>
+            <li><b>URI absoluto:</b> <code>https://datagen.di.uminho.pt/schemas/<span style="color:red">{id_schema}</span></code></li>
+            <li><b>URI relativo:</b> <code>/schemas/<span style="color:red">{id_schema}</span></code></li>
+          </ul>
+        </li>
+        <li>
+          <b><a href="https://json-schema.org/understanding-json-schema/structuring.html#json-pointer" target="_blank">Apontador JSON</a> ou âncora (<a href="https://json-schema.org/understanding-json-schema/structuring.html#anchor" target="_blank">$anchor</a>):</b> 
+          <ul>
+            <li><b>URI absoluto:</b> <code>https://datagen.di.uminho.pt/schemas/<span style="color:red">{id_schema}</span>#<span style="color:red">{apontador/nome_âncora}</span></code></li>
+            <li><b>URI relativo:</b> 
+              <ul>
+                <li><u>Schema local</u>: <code>#<span style="color:red">{apontador/nome_âncora}</span></code></li>
+                <li><u>Qualquer schema</u>: <code>/schemas/<span style="color:red">{id_schema}</span>#<span style="color:red">{apontador/nome_âncora}</span></code></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </Modal>
+
+    <Modal
       :key="created_datasets"
       title="Modelo intermédio gerado na DSL do DataGen"
       more_width
@@ -89,8 +125,28 @@
           Gerar<v-icon right>mdi-reload</v-icon>
         </v-btn>
 
-        <v-btn depressed fab small color="blue-grey lighten-4" :disabled="loading" @click="openSettings">
+        <v-btn
+          depressed
+          fab
+          small
+          style="margin-right: 10px;"
+          color="blue-grey lighten-4"
+          :disabled="loading"
+          @click="openSettings"
+        >
           <v-icon>mdi-cog</v-icon>
+        </v-btn>
+
+        <v-btn
+          v-if="input_mode=='javascript'"
+          depressed 
+          fab 
+          small 
+          color="var(--json-primary)" 
+          :disabled="loading" 
+          @click="tips=true"
+        >
+          <v-icon color="white">mdi-exclamation-thick</v-icon>
         </v-btn>
       </v-col>
 
@@ -248,6 +304,7 @@ export default {
       valid: true,
       required: v => !!v || "Valor obrigatório.",
 
+      tips: false,
       loading: false,
       send_req: false,
 
@@ -294,6 +351,7 @@ export default {
         else this.json_tab = value
       }
     },
+    json_tab_content() { return this.json_tabs.find(t => t.key == this.json_tab.key).content },
     output_key() { return this.tab_format + "_" + this.dataset_tab },
     dataset() { return this.dataset_tabs.find(t => t.key == this.dataset_tab).dataset },
     filename() { return this.dataset_tabs.find(t => t.key == this.dataset_tab).filename },

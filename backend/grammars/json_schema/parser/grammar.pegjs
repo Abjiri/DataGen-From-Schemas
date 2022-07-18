@@ -265,11 +265,11 @@ int "integer"
 string "string" = QM str:$char* QM {return str}
 pattern_string = QM str:$[^"]* QM {return str}
 anchor "anchor" = QM value:anchor_value QM {return value}
-schema_id = QM "https://datagen.di.uminho.pt"? id:$("/schemas" ("/" [^/"]+)+) QM {return id}
-schema_ref "$ref" = QM "https://datagen.di.uminho.pt"? ref:$("#" ref_segment / ("/schemas/" [^/"]+ ref_segment)) QM {if (current_key == "propertyNames") propertyNames_refs.push(ref); return ref}
+schema_id = QM "https://datagen.di.uminho.pt"? id:$("/schemas" ("/" [^/#"]+)+) QM {return id}
+schema_ref "$ref" = QM "https://datagen.di.uminho.pt"? ref:$(("/schemas/" [^/#"]+)? ref_segment / "/schemas/" [^/#"]+) QM {if (current_key == "propertyNames") propertyNames_refs.push(ref); return ref}
 
 anchor_value = $([a-zA-Z][a-zA-Z0-9\-\_\:\.]*)
-ref_segment = "#" anchor_value / ("/" [^/#"]+)*
+ref_segment = "#" (anchor_value / ("/" [^/#"]+)*)
 
 char
   = unescaped
