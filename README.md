@@ -25,9 +25,9 @@
   <p align="center">
     A dataset generator from JSON and XML schemas that produces data in JSON or XML, from either type of schema, taking advantage of its previous version's data generation from its own Domain Specific Language (DSL) models. 
     <br />
-    <a href="https://github.com/wurzy/DataGen/tree/main/backend">Back-End</a>
+    <a href="https://github.com/Abjiri/DataGen-From-Schemas/tree/main/backend">Back-End</a>
     ·
-    <a href="https://github.com/wurzy/DataGen/tree/main/dfs_frontend">Front-End</a>
+    <a href="https://github.com/Abjiri/DataGen-From-Schemas/tree/main/dfs_frontend">Front-End</a>
   </p>
 </p>
 
