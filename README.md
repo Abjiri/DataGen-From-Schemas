@@ -61,11 +61,11 @@
 
 **DataGen From Schemas** is an application that makes it possible to automatically generate representative synthetic datasets from JSON and XML schemas, in order to facilitate tasks such as the thorough testing of software applications and scientific endeavors in relevant areas, namely Data Science.
 
-Its prior version is an online open-source application that allows the quick prototyping of datasets through its own Domain Specific Language (DSL) of specification of data models. **DataGen** is able to parse these models and generate synthetic datasets according to the structural and semantic restrictions stipulated, automating the whole process of data generation with spontaneous values created in runtime and/or from a library of support datasets. **DataGen** is available online for public use in [https://datagen.di.uminho.pt/](https://datagen.di.uminho.pt/) and its source files can be consulted [here](https://github.com/wurzy/DataGen).
+Its prior version is an online open-source application that allows the quick prototyping of datasets through its own Domain Specific Language (DSL) of specification of data models. **DataGen** is able to parse these models and generate synthetic datasets according to the structural and semantic restrictions stipulated, automating the whole process of data generation with spontaneous values created in runtime and/or from a library of support datasets. DataGen is available online for public use in [https://datagen.di.uminho.pt/](https://datagen.di.uminho.pt/) and its source files can be consulted [here](https://github.com/wurzy/DataGen).
 
 The objective of this new product, DataGen From Schemas, is to expand DataGen's use cases and raise the datasets specification's abstraction level, making it possible to generate synthetic datasets directly from schemas. This new platform builds upon its prior version and acts as its complement, operating jointly and sharing the same data layer, in order to assure the compatibility of both platforms and the portability of the created DSL models between them. Its purpose is to parse schema files and generate corresponding DSL models, effectively translating the JSON/XML specification to a DataGen model, then using the original application as a middleware to generate the final datasets.
 
-<!-- DataGen From Schemas is available online for public use, try it now: [https://datagen-from-schemas.di.uminho.pt/](https://github.com/wurzy/DataGen) -->
+DataGen From Schemas will be available online for public use soon.<!-- , try it now: [https://datagen.di.uminho.pt/](https://datagen.di.uminho.pt/) -->
 
 ### Built With
 
@@ -73,7 +73,7 @@ The front end of the application is built mainly using:
 * [Vuetify](https://vuetifyjs.com/)
 * [Vue](https://vuejs.org/)
 
-The back end is using the following frameworks and tools:
+The back end is built using the following frameworks and tools:
 * [MongoDB](https://www.mongodb.com/)
 * [Node.js](https://nodejs.org/en/)
 * [PEG.js](https://pegjs.org/)
@@ -83,7 +83,7 @@ The back end is using the following frameworks and tools:
 <!-- GETTING STARTED -->
 ## Getting Started
 
-**DataGen From Schemas** is integrated in the original application, since both components work together and are encapsulated by the same **Docker** instance. Its final build is available in **DataGen**'s [https://github.com/wurzy/DataGen](repository).
+**DataGen From Schemas** is integrated in the original application, since both components work together and are encapsulated by the same **Docker** instance. Its final build is available in **DataGen**'s [repository](https://github.com/wurzy/DataGen).
 
 The present repository was used to develop **DataGen From Schemas** in a secure and isolated environment, without affecting its previous version. As such, this repository has a copy of both programs' builds, adapted to run on **localhost**, for faster response and compilation times.
 
