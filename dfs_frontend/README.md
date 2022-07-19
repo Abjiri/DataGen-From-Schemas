@@ -1,4 +1,4 @@
-# DataGen From Schemas front end
+# DataGen From Schemas's front end
 
 ## Project setup
 ```
