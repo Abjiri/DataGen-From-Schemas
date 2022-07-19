@@ -49,8 +49,8 @@
         <li><a href="#installation">Installation</a></li>
       </ul>
     </li>
-    <li><a href="#contact">Contacts</a></li>
-    <li><a href="#contact">Useful Links</a></li>
+    <li><a href="#contacts">Contacts</a></li>
+    <li><a href="#useful-links">Useful Links</a></li>
   </ol>
 </details>
 
@@ -85,7 +85,7 @@ The back end is built using the following frameworks and tools:
 
 **DataGen From Schemas** is integrated in the original application, since both components work together and are encapsulated by the same **Docker** instance. Its final build is available in **DataGen**'s [repository](https://github.com/wurzy/DataGen).
 
-The present repository was used to develop **DataGen From Schemas** in a secure and isolated environment, without affecting its previous version. As such, this repository has a copy of both programs' builds, adapted to run on **localhost**, for faster response and compilation times.
+The present repository was used to develop DataGen From Schemas in a secure and isolated environment, without affecting its previous version. As such, this repository has a copy of both programs' builds, adapted to run on **localhost**, for faster response and compilation times.
 
 The installation process of the application is simple, assuming you meet the requirements.
 
@@ -98,17 +98,12 @@ The installation process of the application is simple, assuming you meet the req
 2. Navigate to the repository.
 3. Start the back end server.
    ```sh
-   $ cd .\\backend\\
+   $ cd .\backend\
    $ npm start
    ```
 3. Start the front end server.
    ```sh
-   $ cd .\\dfs_frontend\\
-   $ npm run serve
-   ```
-3. **[Not Required]** Start DataGen's front end server, if you want to test its newer version's automatically generated DSL models directly.
-   ```sh
-   $ cd .\\frontend\\
+   $ cd .\dfs_frontend\
    $ npm run serve
    ```
 4. Open http://localhost:8080/ (default port in the front end server configuration)
@@ -119,12 +114,15 @@ The installation process of the application is simple, assuming you meet the req
 <!-- CONTACT -->
 ## Contacts
 
-* Hugo Cardoso - [LinkedIn](https://www.linkedin.com/in/hugo-cardoso-b868a474/) - [GitHub](https://github.com/Abjiri)
+* Hugo Cardoso - [LinkedIn](https://www.linkedin.com/in/hugo-cardoso99/) - [GitHub](https://github.com/Abjiri)
 
 And the supervisor of the project:
 
 * José Ramalho - [LinkedIn](https://pt.linkedin.com/in/josé-carlos-ramalho-ab5535a) - [GitHub](https://github.com/jcramalho)
 
+
+
+<!-- LINKS -->
 ## Useful Links
 
 Localhost Build Link: [https://github.com/Abjiri/DataGen-From-Schemas](https://github.com/Abjiri/DataGen-From-Schemas)
