@@ -1,4 +1,4 @@
-# app
+# DataGen's front end
 
 ## Project setup
 ```
