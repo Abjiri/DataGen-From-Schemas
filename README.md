@@ -129,9 +129,9 @@ Localhost Build Link: [https://github.com/Abjiri/DataGen-From-Schemas](https://g
 
 Live Build Link: [https://github.com/wurzy/DataGen](https://github.com/wurzy/DataGen)
 
-Official University of Minho Repository Entry: **awaiting publication**<!-- [http://repositorium.sdum.uminho.pt/handle/1822/73506](http://repositorium.sdum.uminho.pt/handle/1822/73506) -->
+Official University of Minho Repository Entry: **awaiting publication**.<!-- [http://repositorium.sdum.uminho.pt/handle/1822/73506](http://repositorium.sdum.uminho.pt/handle/1822/73506) -->
 
-Official OASIcs paper (Volume 104, SLATE 2022): **awaiting publication (expected: 2022-08-06)**<!-- [https://drops.dagstuhl.de/opus/volltexte/2021/14423/](https://drops.dagstuhl.de/opus/volltexte/2021/14423/) -->
+Official OASIcs paper (Volume 104, SLATE 2022): **awaiting publication (expected: 2022-08-06)**.<!-- [https://drops.dagstuhl.de/opus/volltexte/2021/14423/](https://drops.dagstuhl.de/opus/volltexte/2021/14423/) -->
 
 DataGen From Schemas will be available online for public use soon.<!-- , try it now: [https://datagen.di.uminho.pt/](https://datagen.di.uminho.pt/) -->
 
