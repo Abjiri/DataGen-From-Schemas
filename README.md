@@ -83,7 +83,7 @@ The back end is built using the following frameworks and tools:
 <!-- GETTING STARTED -->
 ## Getting Started
 
-**DataGen From Schemas** is integrated in the original application, since both components work together and are encapsulated by the same **Docker** instance. Its final build is available in **DataGen**'s [repository](https://github.com/wurzy/DataGen).
+**DataGen From Schemas** is integrated in the original application, since both components work together and are encapsulated by the same **Docker** instance. Its final build is available in **DataGen**'s [repository](https://github.com/wurzy/DataGen/tree/main/dfs_frontend).
 
 The present repository was used to develop DataGen From Schemas in a secure and isolated environment, without affecting its previous version. As such, this repository has a copy of both programs' builds, adapted to run on **localhost**, for faster response and compilation times.
 
