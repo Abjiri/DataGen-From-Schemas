@@ -28,10 +28,7 @@ function convert(json, user_settings) {
 function parseJSON(json, depth, arr_offset) {
     // processar refs que tenham sido substítuidas dentro de chaves de composição de schemas
     if ("undef" in json.type) structureUndefType(json)
-
-    let str = parseType(json, depth, arr_offset)
-    if (depth==1 && str[0] != "{") str = "{\n" + indent(depth) + `DFJS_NOT_OBJECT: ${str}\n}`
-    return str
+    return parseType(json, depth, arr_offset)
 }
 
 // processa as chaves de composição de schemas pela ordem que aparecem no objeto
@@ -373,7 +370,7 @@ function parseObjectType(json, only_req, depth) {
     // converter o objeto final para string da DSL
     Object.keys(obj).map(k => str += `${indent(depth)}${k}: ${obj[k]},\n`)
 
-    if (str == "{\n") str = "{\n" + indent(depth) + "DFJS_EMPTY_JSON: true\n" + indent(depth-1) + "}"
+    if (str == "{\n") str = "{\n" + indent(depth) + "DFJS_EMPTY_OBJECT: true\n" + indent(depth-1) + "}"
     else str = `${str.slice(0, -2)}\n${indent(depth-1)}}`
     return str
 }
