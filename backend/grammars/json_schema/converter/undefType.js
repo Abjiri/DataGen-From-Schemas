@@ -107,10 +107,10 @@ function structureGeneric(schema, subschema, key, nesting) {
   }
 
   if (!("type" in schema)) schema.type = {}
-  let schema_originalTypes = Object.keys(schema.type), recursiv_call = true
+  let schema_originalTypes = Object.keys(schema.type), recursive_call = true
 
   if ("type" in subschema) {
-    recursiv_call = false
+    recursive_call = false
     if (Object.keys(subschema.type).includes("undef")) structureUndefType(subschema)
   }
   else {
@@ -129,7 +129,7 @@ function structureGeneric(schema, subschema, key, nesting) {
     }
   }
   
-  if (!nesting && recursiv_call) {
+  if (!nesting && recursive_call) {
     for (let type in subschema.type) {
       if (!(type in schema.type)) schema.type[type] = {}
 
