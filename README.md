@@ -131,7 +131,7 @@ Live Build Link: [https://github.com/wurzy/DataGen](https://github.com/wurzy/Dat
 
 Official University of Minho Repository Entry: **awaiting publication**.<!-- [http://repositorium.sdum.uminho.pt/handle/1822/73506](http://repositorium.sdum.uminho.pt/handle/1822/73506) -->
 
-Official OASIcs paper (Volume 104, SLATE 2022): **awaiting publication (expected: 2022-08-06)**.<!-- [https://drops.dagstuhl.de/opus/volltexte/2021/14423/](https://drops.dagstuhl.de/opus/volltexte/2021/14423/) -->
+Official OASIcs paper (Volume 104, SLATE 2022): https://drops.dagstuhl.de/opus/volltexte/2022/16751/
 
 DataGen From Schemas will be available online for public use soon.<!-- , try it now: [https://datagen.di.uminho.pt/](https://datagen.di.uminho.pt/) -->
 
