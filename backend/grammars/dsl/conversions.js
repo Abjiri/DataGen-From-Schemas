@@ -60,7 +60,7 @@ function cleanJson2(json, dataset, flatten_map, depth) {
             let temp_dataset = {}
 
             json[prop].map(obj => {
-                let res = cleanJsonFromXsd(obj, temp_dataset, keys_map, depth+1)
+                let res = cleanJson2(obj, temp_dataset, keys_map, depth+1)
                 keys_map = res.flatten_map
             })
             
@@ -92,7 +92,7 @@ function cleanJson2(json, dataset, flatten_map, depth) {
                 if (typeof json[prop] == "object" && json[prop] != null) {
                     dataset[prop_name] = {}
 
-                    let res = cleanJsonFromXsd(json[prop], dataset[prop_name], null, depth+1)
+                    let res = cleanJson2(json[prop], dataset[prop_name], null, depth+1)
                     dataset[prop_name] = res.temp.length > 0 ? res.dataset[res.temp] : res.dataset
                 }
                 else dataset[prop_name] = json[prop]

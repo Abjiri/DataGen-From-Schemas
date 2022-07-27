@@ -159,8 +159,11 @@ function parseNumericType(json, depth) {
     let integer = "integer" in json && json.integer
     let notInteger = "integer" in json && !json.integer
 
-    if (multipleOf === undefined) multipleOf = notInteger ? [0.4] : [1]
+    if (multipleOf === undefined) multipleOf = notInteger ? [0.43] : [1]
     else if (integer) multipleOf.push(1)
+
+    if (notMultipleOf !== undefined) multipleOf = multipleOf.filter(x => notMultipleOf.indexOf(x) == -1)
+    if (!multipleOf.length) multipleOf = notInteger ? [0.43] : [1]
 
     let any_frac = multipleOf.reduce((a,c) => a || (c%1 != 0), false)
     let max = null, min = null
@@ -231,7 +234,7 @@ function parseStringType(json) {
             case "regex": return `'{{regex()}}'`
 
             case "email": case "idn-email":
-                return `gen => { return gen.stringOfSize(5,20).replace(/[^a-zA-Z]/g, '').toLowerCase() + "@" + gen.random("gmail","yahoo","hotmail","outlook") + ".com" }`
+                return `'{{pattern("[a-z]{5,20}@(gmail|yahoo|hotmail|outlook)\\.com")}}'`
 
             case "hostname": case "idn-hostname":
                 return `gen => { return Array.apply(null, Array(gen.random(...gen.range(1,5)))).map(x => gen.stringOfSize(3,10).replace(/[^a-zA-Z]/g, '').toLowerCase()).join(".") }`
