@@ -1,5 +1,5 @@
 {
-	"$id": "https://datagen.di.uminho.pt/schemas/graph",
+    "$id": "https://datagen.di.uminho.pt/schemas/graph",
     "type": "object",
     "properties": {
     	"nodes": {
