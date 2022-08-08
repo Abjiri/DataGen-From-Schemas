@@ -5,7 +5,7 @@
     	"id": { "type": "integer", "_datagen": "index" },
     	"name": { "type": "string" },
     	"value": { "type": "integer" }
-  	},
+    },
     "additionalProperties": false,
     "required": ["id", "name", "value"]
 }
