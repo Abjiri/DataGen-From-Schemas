@@ -4,8 +4,8 @@
   "properties": {
     "code": { "type": "integer", "_datagen": "integerOfSize(10)" },
     "name": { "type": "string" },
-    "price": { "type": "number" },
-    "stock": { "type": "integer" }
+    "price": { "type": "number", "minimum": 0.01, "maximum": 1500 },
+    "stock": { "type": "integer", "minimum": 0, "maximum": 500 }
   },
   "required": ["code", "name", "price", "stock"]
 }
