@@ -4,7 +4,7 @@
   "properties": {
     "code": { "type": "integer", "_datagen": "integerOfSize(10)" },
     "name": { "type": "string" },
-    "price": { "type": "number", "_datagen": "formattedFloat(0.01, 1500, 2, 1, "0.0,00$")" },
+    "price": { "type": "string", "_datagen": "formattedFloat(0.01, 1500, 2, 1, "0.0,00$")" },
     "stock": { "type": "integer", "minimum": 0, "maximum": 500 }
   },
   "required": ["code", "name", "price", "stock"]
