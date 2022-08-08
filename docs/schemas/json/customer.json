@@ -4,7 +4,7 @@
   "properties": {
     "first_name": { "type": "string", "_datagen": "firstName" },
     "last_name": { "type": "string", "_datagen": "surname" },
-    "contact": { "type": "integer", "_datagen": "pattern('^\([0-9]{3}\)[0-9]{3}-[0-9]{4}$')" },
+    "contact": { "type": "integer", "_datagen": "pattern('^[0-9]{3}-[0-9]{3}-[0-9]{4}$')" },
     "shipping_address": { "$ref": "/schemas/address" },
     "billing_address": { "$ref": "/schemas/address" }
   },
